@@ -49,8 +49,14 @@ Common options for `ollama_chat.py` go after the `chat` or `duel` subcommand:
 | `--host` | Ollama server base URL | `http://localhost:11434` |
 | `--think` | Request thinking and display the separate thinking field when returned | Off |
 | `--max-tokens` | Per-response generation budget | 300, or 2048 with `--think` |
+| `--timeout` | Per-request timeout, in seconds | 900 |
+| `--save-json` | Write the finished transcript to this JSON file | Off |
+| `--temperature` | Sampling temperature passed to Ollama | Server default |
+| `--num-ctx` | Context window size passed to Ollama | Server default |
 
-Chat accepts `--model` (default `qwen3:4b`) and `--system`. Duel requires `--topic` and accepts `--turns` (default 6), `--model-a`, `--model-b` (both default `qwen3:4b`), `--name-a`, `--name-b`, `--system-a`, and `--system-b`.
+Chat accepts `--model` (default `qwen3:4b`) and `--system`. Duel requires `--topic` and accepts `--turns` (default 6), `--model-a`, `--model-b` (both default `qwen3:4b`), `--name-a`, `--name-b`, `--system-a`, and `--system-b`. In duel mode, `--temperature` and `--num-ctx` apply to both participants; for per-participant values, use `ollama_duel.py` with a JSON config instead.
+
+For `chat`, `--save-json` writes the message list (`role`/`content` pairs) when you quit. For `duel`, it writes one entry per reply (`speaker`, `model`, `text`) — including whatever was generated before a Ctrl-C or an Ollama error stopped the duel early.
 
 ## Run a JSON scenario
 
@@ -100,14 +106,20 @@ The JSON must be an object with exactly two entries in `models`. Each entry requ
 | --- | --- | --- |
 | `host` | Top level | Server URL; defaults to `http://localhost:11434` |
 | `topic` | Top level | Opening prompt for the first participant |
-| `turns` | Top level | Total replies; defaults to 6 |
+| `turns` | Top level | Total replies; defaults to 6; must be a positive integer |
 | `log_file` | Top level | Optional path for an appended transcript |
+| `save_json` | Top level | Optional path to write the structured transcript (`speaker`/`model`/`text` per reply) as JSON when the duel ends, including after an early stop |
+| `timeout` | Top level | Per-request timeout in seconds; defaults to 900 |
 | `think` | Top level or model entry | Request and display thinking; defaults to false |
 | `max_tokens` | Top level or model entry | Passed as Ollama's `num_predict`; defaults to 300, or 2048 when thinking is enabled |
 | `temperature` | Top level or model entry | Passed to Ollama if specified |
 | `num_ctx` | Top level or model entry | Context-window setting passed to Ollama if specified |
 
-Model-level `think`, `max_tokens`, `temperature`, and `num_ctx` override their top-level values. The CLI supports `--topic`, `--turns`, `--host`, `--log-file`, `--think`, and `--no-think`; these override the corresponding configuration values. The two thinking flags apply to both participants. Change model identifiers and generation budgets in JSON; `ollama_duel.py` has no `--model` or `--max-tokens` option.
+Model-level `think`, `max_tokens`, `temperature`, and `num_ctx` override their top-level values. The CLI supports `--topic`, `--turns`, `--host`, `--log-file`, `--save-json`, `--timeout`, `--think`, and `--no-think`; these override the corresponding configuration values. The two thinking flags apply to both participants. Change model identifiers and generation budgets in JSON; `ollama_duel.py` has no `--model` or `--max-tokens` option.
+
+Invalid settings (an unrecognized key, wrong type, a `turns`/`max_tokens`/`num_ctx` less than 1, or a negative `temperature`) are rejected with an error naming the offending key before any request is sent — a typo like `"temprature"` fails loudly instead of silently falling back to a default.
+
+If Ollama becomes unreachable or returns an error mid-duel, the duel stops the way Ctrl-C does: it prints the error, keeps whatever replies were already generated, and still writes the log file's end marker and `save_json` transcript.
 
 ### Included scenarios
 
@@ -119,7 +131,7 @@ Model-level `think`, `max_tokens`, `temperature`, and `num_ctx` override their t
 | `duel-coder-vs-gemma.json` | Pragmatic and enthusiastic developers debate AI coding assistants |
 | `duel-coder-vs-gemma2.json` | Alternate configuration for the same developer debate |
 | `program_writing.json` | Two programmers take turns proposing and improving a single Python program |
-| `adventure_novel.json` | Despite the filename, its current prompt requests a murder/crime novel |
+| `murder_crime_novel_uncensored.json` | An abusive optimist and skeptic build a murder/crime novel, using an uncensored model |
 | `ai_driven_crime_novel.json` | An optimistic investigator and cynical detective build a murder mystery |
 | `salesperson_vs_customer.json` | A salesperson and customer negotiate a car purchase |
 | `devops_interview.json` | A hiring manager interviews a DevOps candidate, one question at a time |
@@ -127,6 +139,15 @@ Model-level `think`, `max_tokens`, `temperature`, and `num_ctx` override their t
 | `code_review_duel.json` | A security-paranoid reviewer vs. a ship-it pragmatist on the same snippet |
 | `socratic_debugging.json` | Two programmers take turns proposing and stress-testing bug hypotheses |
 | `first_contact.json` | A human diplomat and an alien envoy negotiate first contact |
+| `scope_negotiation.json` | A product manager and engineer negotiate scope against a tight deadline |
+| `incident_response.json` | An on-call engineer and SRE lead triage a live production outage |
+| `architecture_review.json` | Two engineers argue microservices vs. a monolith for a new system |
+| `trolley_problem_ethics.json` | A utilitarian and a deontologist debate a self-driving-car dilemma |
+| `ai_consciousness_debate.json` | A materialist and a skeptic debate whether an LLM could be conscious |
+| `text_adventure_dungeon.json` | A Dungeon Master and an adventurer build a fantasy dungeon crawl together |
+| `roast_battle.json` | Two comedians trade escalating, good-natured roasts |
+| `sports_commentary_duel.json` | Two rival commentators call a fictional, escalating championship finish |
+| `angry_customer_support.json` | A frustrated customer and a support rep work toward a resolution |
 
 ## Conversation behavior and logs
 
@@ -155,4 +176,12 @@ For the full command-line help:
 python ollama_chat.py chat --help
 python ollama_chat.py duel --help
 python ollama_duel.py --help
+```
+
+## Running the tests
+
+The `tests/` directory has stdlib-only `unittest` coverage for the shared helpers (`ollama_common.py`), config loading and validation (`ollama_duel.py`), and CLI argument handling (`ollama_chat.py`) — no live Ollama server required; network calls are mocked. It also checks that every included scenario JSON file loads and validates.
+
+```shell
+python -m unittest discover -s tests
 ```

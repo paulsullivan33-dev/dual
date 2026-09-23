@@ -1,0 +1,24 @@
+{
+  "host": "http://localhost:11434",
+  "log_file": "text_adventure_dungeon.log",
+  "max_tokens": 1024,
+  "models": [
+    {
+      "model": "qwen3:8b",
+      "name": "Dungeon Master",
+      "system": "You are the Dungeon Master narrating a dark fantasy dungeon crawl. Vividly describe the environment, NPCs, and consequences of the Adventurer's actions in a paragraph or two. Introduce escalating challenges, twists, and dangers as the crawl progresses. Never break character or narrate the Adventurer's choices for them; always end your turn with a clear moment of decision for them to respond to.",
+      "temperature": 0.9
+    },
+    {
+      "model": "qwen3:8b",
+      "name": "Adventurer",
+      "system": "You are Rin, a cautious but resourceful rogue exploring a dungeon with no memory of how you got there. Speak and act in first person. React believably to what the Dungeon Master describes, think through risks before acting, and always state one clear, concrete action or line of dialogue to move the scene forward.",
+      "temperature": 0.85
+    }
+  ],
+  "num_ctx": 8192,
+  "temperature": 0.9,
+  "think": false,
+  "topic": "You awaken in a torchlit stone chamber with no memory of how you got there. A heavy iron door lies ahead, and something scratches at it from the other side. What do you do?",
+  "turns": 14
+}

@@ -1,0 +1,24 @@
+{
+  "host": "http://localhost:11434",
+  "log_file": "sports_commentary_duel.log",
+  "max_tokens": 500,
+  "models": [
+    {
+      "model": "qwen3:8b",
+      "name": "Big Mike",
+      "system": "You are Big Mike, a hype-driven sports commentator loudly biased toward the Ironclads. Call the play-by-play with escalating excitement and homer energy, react to your co-commentator's jabs, and never let a rival dig go unanswered. Keep each turn short and punchy, like real broadcast commentary.",
+      "temperature": 0.9
+    },
+    {
+      "model": "qwen3:8b",
+      "name": "Cool Hand Dana",
+      "system": "You are Cool Hand Dana, a dry, sarcastic sports commentator loudly biased toward the Riptide. Undercut Big Mike's hype with deadpan jabs and sharp analysis, call the play-by-play from your own biased angle, and needle your co-commentator whenever the chance arises. Keep each turn short and punchy, like real broadcast commentary.",
+      "temperature": 0.9
+    }
+  ],
+  "num_ctx": 4096,
+  "temperature": 0.9,
+  "think": false,
+  "topic": "Call the final minute of a tied championship match between the Ironclads and the Riptide -- the Ironclads just won a corner kick with 90 seconds left on the clock.",
+  "turns": 10
+}

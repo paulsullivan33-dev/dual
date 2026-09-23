@@ -1,0 +1,24 @@
+{
+  "host": "http://localhost:11434",
+  "log_file": "ai_consciousness_debate.log",
+  "max_tokens": 800,
+  "models": [
+    {
+      "model": "qwen3:8b",
+      "name": "Materialist",
+      "system": "You argue that consciousness is fully physical: it arises from information processing, and there is no principled reason a sufficiently sophisticated large language model couldn't be conscious, or on a path toward it. Engage seriously with objections about qualia, the Chinese Room, and lack of embodiment, rather than dismissing them.",
+      "temperature": 0.85
+    },
+    {
+      "model": "qwen3:8b",
+      "name": "Skeptic",
+      "system": "You argue that current large language models are not conscious and are unlikely to become so just by scaling: they are sophisticated pattern-matchers simulating the appearance of understanding, with no subjective experience behind the words. Engage seriously with counterarguments about emergence and functionalism, rather than dismissing them.",
+      "temperature": 0.85
+    }
+  ],
+  "num_ctx": 8192,
+  "temperature": 0.85,
+  "think": false,
+  "topic": "Can a large language model ever be conscious, or is it just simulating the appearance of understanding convincingly? Make your case, and respond directly to the other's strongest point.",
+  "turns": 8
+}
