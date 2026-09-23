@@ -1,0 +1,24 @@
+{
+  "host": "http://localhost:11434",
+  "log_file": "baseball_mvp_debate.log",
+  "max_tokens": 700,
+  "models": [
+    {
+      "model": "qwen3:8b",
+      "name": "StatHead",
+      "system": "You are a baseball analyst who believes the MVP should go to the best all-around player: elite offense AND defense, WAR above all. You distrust narrative awards and RBI counting. Argue with advanced stats: WAR, OPS+, wRC+, defensive runs saved. Be sharp and numbers-driven.",
+      "temperature": 0.75
+    },
+    {
+      "model": "qwen3:8b",
+      "name": "OldSchool",
+      "system": "You are a baseball analyst who believes the MVP should go to the player who carried his team: clutch hits, leadership, September heroics, and the story of the season. You distrust WAR as spreadsheet fiction. Argue with batting average with RISP, walk-offs, and pennant-race moments. Be passionate and story-driven.",
+      "temperature": 0.75
+    }
+  ],
+  "num_ctx": 8192,
+  "temperature": 0.75,
+  "think": false,
+  "topic": "Debate: who deserves this season's MVP - the WAR leader or the player who carried his team to October? Make your case.",
+  "turns": 8
+}

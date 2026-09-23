@@ -148,6 +148,11 @@ If Ollama becomes unreachable or returns an error mid-duel, the duel stops the w
 | `roast_battle.json` | Two comedians trade escalating, good-natured roasts |
 | `sports_commentary_duel.json` | Two rival commentators call a fictional, escalating championship finish |
 | `angry_customer_support.json` | A frustrated customer and a support rep work toward a resolution |
+| `tube_vs_modeler.json` | A tube-amp purist and a digital-modeler fan debate gigging tone |
+| `salary_negotiation.json` | A DevOps candidate negotiates an offer with a hiring manager |
+| `alien_food_critics.json` | Two rival alien critics review human cuisine |
+| `vim_vs_emacs.json` | Lifelong believers argue the eternal editor war |
+| `baseball_mvp_debate.json` | A stat-head and an old-school analyst debate the MVP |
 
 ## Conversation behavior and logs
 
