@@ -17,53 +17,26 @@ Ollama must be running (default http://localhost:11434).
 """
 
 import argparse
-import json
-import re
 import sys
-import urllib.request
-import urllib.error
+
+from ollama_common import (
+    DEFAULT_HOST,
+    DEFAULT_TIMEOUT,
+    OllamaError,
+    build_duel_json,
+    call_chat,
+    save_transcript_json_safe,
+    setup_utf8_stdout,
+)
 
 
-def strip_think_tags(text):
-    """Remove <think>...</think> blocks a model may emit inside the reply text.
-
-    Some models (notably Qwen) leak their reasoning into the content even when
-    thinking is disabled via the API, sometimes with no opening <think> tag.
-    Handles complete blocks, a closing tag with no opening tag (strip
-    everything through it), and a stray opening tag with no close (cut from
-    it to the end).
-    """
-    text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL | re.IGNORECASE)
-    text = re.sub(r"^.*</think>", "", text, flags=re.DOTALL | re.IGNORECASE)
-    text = re.sub(r"<think>.*$", "", text, flags=re.DOTALL | re.IGNORECASE)
-    return text.strip()
-
-
-def call_chat(host, model, messages, think=False, num_predict=300, timeout=900):
-    """Single non-streaming /api/chat call. Returns (thinking, reply)."""
-    payload = {
-        "model": model,
-        "messages": messages,
-        "stream": False,
-        "think": think,
-        "options": {"num_predict": num_predict},
-    }
-    req = urllib.request.Request(
-        host + "/api/chat",
-        data=json.dumps(payload).encode(),
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            data = json.load(resp)
-    except urllib.error.HTTPError as e:
-        body = e.read().decode(errors="replace")
-        sys.exit(f"HTTP {e.code} from Ollama: {body}\nHint: did you run `ollama pull {model}`?")
-    except urllib.error.URLError as e:
-        sys.exit(f"Cannot reach Ollama at {host}: {e.reason}\nIs `ollama serve` running?")
-    msg = data["message"]
-    return msg.get("thinking", "").strip(), strip_think_tags(msg["content"])
+def _build_options(args):
+    options = {"num_predict": args.max_tokens}
+    if args.temperature is not None:
+        options["temperature"] = args.temperature
+    if args.num_ctx is not None:
+        options["num_ctx"] = args.num_ctx
+    return options
 
 
 def print_turn(thinking, reply, show_thinking):
@@ -86,17 +59,25 @@ def cmd_chat(args):
             text = input("You: ").strip()
         except (EOFError, KeyboardInterrupt):
             print("\nBye.")
+            save_transcript_json_safe(args.save_json, messages)
             return
         if text.lower() in ("quit", "exit", ":q"):
             print("Bye.")
+            save_transcript_json_safe(args.save_json, messages)
             return
         if not text:
             continue
         messages.append({"role": "user", "content": text})
         print(f"\n{args.model}:")
         print("  (waiting for reply...)", file=sys.stderr, flush=True)
-        thinking, reply = call_chat(args.host, args.model, messages,
-                                    think=args.think, num_predict=args.max_tokens)
+        try:
+            thinking, reply = call_chat(args.host, args.model, messages,
+                                        args.think, _build_options(args),
+                                        timeout=args.timeout)
+        except OllamaError as e:
+            print(f"\n{e}\n", file=sys.stderr)
+            messages.pop()  # drop the unanswered user turn so a retry doesn't duplicate it
+            continue
         messages.append({"role": "assistant", "content": reply})
         print_turn(thinking, reply, show_thinking=args.think)
         print()
@@ -126,7 +107,8 @@ def cmd_duel(args):
             print(f"[{me['model']} as {me['name']}]")
             print("  (waiting for reply...)", file=sys.stderr, flush=True)
             thinking, reply = call_chat(args.host, me["model"], messages,
-                                        think=args.think, num_predict=args.max_tokens)
+                                        args.think, _build_options(args),
+                                        timeout=args.timeout)
             transcript.append((i, reply))
             # Label, then thinking and reply as distinct blocks, then a blank
             # line so speakers stay visually distinct.
@@ -134,7 +116,10 @@ def cmd_duel(args):
             print()
     except KeyboardInterrupt:
         print("\nStopped.", file=sys.stderr)
+    except OllamaError as e:
+        print(f"\n{e}\nStopped.", file=sys.stderr)
     print(f"Done: {len(transcript)} replies.", file=sys.stderr)
+    save_transcript_json_safe(args.save_json, build_duel_json(transcript, personas))
 
 
 def main():
@@ -142,13 +127,21 @@ def main():
     # after the subcommand: `ollama_chat.py --think duel ...` and
     # `ollama_chat.py duel --think ...` are equivalent.
     common = argparse.ArgumentParser(add_help=False)
-    common.add_argument("--host", default="http://localhost:11434",
+    common.add_argument("--host", default=DEFAULT_HOST,
                         help="Ollama base URL")
     common.add_argument("--think", action="store_true",
                         help="show the model's reasoning (thinking) as well as its reply")
     common.add_argument("--max-tokens", type=int, default=None,
                         help="max tokens per response (default 300, or 2048 with --think, "
                              "since thinking tokens count against the same budget)")
+    common.add_argument("--timeout", type=float, default=DEFAULT_TIMEOUT,
+                        help=f"per-request timeout in seconds (default {DEFAULT_TIMEOUT})")
+    common.add_argument("--save-json", default=None,
+                        help="save the conversation transcript to this JSON file when done")
+    common.add_argument("--temperature", type=float, default=None,
+                        help="sampling temperature passed to Ollama (server default if unset)")
+    common.add_argument("--num-ctx", type=int, default=None,
+                        help="context window size passed to Ollama (server default if unset)")
 
     p = argparse.ArgumentParser(
         description="Chat with Ollama, or make two models talk to each other.",
@@ -171,13 +164,7 @@ def main():
 
     args = p.parse_args()
 
-    # Model output often contains emoji/CJK/smart quotes, which crash
-    # Windows consoles on a legacy code page (e.g. cp1252 PowerShell).
-    # Force UTF-8 output; fall back silently on non-standard streams.
-    try:
-        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-    except AttributeError:
-        pass
+    setup_utf8_stdout()
 
     # Thinking tokens come out of the same num_predict budget as the reply,
     # so --think needs a much larger default or the reply gets starved.
@@ -186,6 +173,8 @@ def main():
     if args.mode == "chat":
         cmd_chat(args)
     else:
+        if args.turns < 1:
+            sys.exit(f"--turns must be >= 1, got {args.turns}.")
         cmd_duel(args)
 
 

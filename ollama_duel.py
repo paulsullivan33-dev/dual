@@ -7,21 +7,37 @@ Usage:
     python3 ollama_duel.py duel.json --turns 10 --topic "A different question"
 
 Globals in the JSON (host, topic, turns, think, max_tokens, temperature,
-num_ctx, log_file) act as defaults; anything set inside a "models" entry
-overrides the global for that model only. "models" must contain exactly 2 entries.
+num_ctx, log_file, save_json, timeout) act as defaults; anything set inside
+a "models" entry overrides the global for that model only (think,
+max_tokens, temperature, num_ctx only -- the rest are duel-wide). "models"
+must contain exactly 2 entries.
 If "log_file" is set, everything printed to stdout is mirrored to that
-file (appended, with session start/end markers).
+file (appended, with session start/end markers). If "save_json" is set,
+the transcript (speaker/model/text per turn) is written there as JSON when
+the duel ends, including after a stopped-early error or Ctrl-C.
 """
 
 import argparse
 import json
-import re
 import sys
-import urllib.request
-import urllib.error
 from datetime import datetime
 
-DEFAULT_HOST = "http://localhost:11434"
+from ollama_common import (
+    DEFAULT_HOST,
+    DEFAULT_TIMEOUT,
+    OllamaError,
+    build_duel_json,
+    call_chat,
+    save_transcript_json_safe,
+    setup_utf8_stdout,
+)
+
+
+TOP_LEVEL_KEYS = {
+    "host", "topic", "turns", "think", "max_tokens", "temperature",
+    "num_ctx", "log_file", "save_json", "timeout", "models",
+}
+MODEL_KEYS = {"model", "name", "system", "think", "max_tokens", "temperature", "num_ctx"}
 
 
 class Tee:
@@ -38,16 +54,50 @@ class Tee:
             s.flush()
 
 
+def _validate_field(container, key, kind, label, minimum=None):
+    """Check an optional field's type (and minimum, if given) or exit with
+    a clear message. `kind` is one of "bool", "int", "number", "str"."""
+    if key not in container or container[key] is None:
+        return
+    value = container[key]
+    if kind == "bool":
+        ok = isinstance(value, bool)
+    elif kind == "int":
+        ok = isinstance(value, int) and not isinstance(value, bool)
+    elif kind == "number":
+        ok = isinstance(value, (int, float)) and not isinstance(value, bool)
+    else:  # "str"
+        ok = isinstance(value, str)
+    if not ok:
+        sys.exit(f'"{key}" in {label} must be a {kind}, got {value!r}.')
+    if minimum is not None and value < minimum:
+        sys.exit(f'"{key}" in {label} must be >= {minimum}, got {value!r}.')
+
+
+def _check_unknown_keys(container, allowed, label):
+    """Reject keys outside `allowed` so a typo (e.g. "temprature") fails
+    loudly instead of silently falling back to a default."""
+    unknown = sorted(set(container) - allowed)
+    if unknown:
+        sys.exit(
+            f'Unknown setting(s) in {label}: {", ".join(unknown)}. '
+            f'Allowed: {", ".join(sorted(allowed))}.'
+        )
+
+
 def load_config(path):
     try:
-        with open(path) as f:
+        with open(path, encoding="utf-8") as f:
             cfg = json.load(f)
     except FileNotFoundError:
         sys.exit(f"Config file not found: {path}")
+    except UnicodeDecodeError as e:
+        sys.exit(f"Config {path} is not valid UTF-8: {e}")
     except json.JSONDecodeError as e:
         sys.exit(f"Invalid JSON in {path}: {e}")
     if not isinstance(cfg, dict):
         sys.exit(f"Config {path} must be a JSON object.")
+    _check_unknown_keys(cfg, TOP_LEVEL_KEYS, "top level")
     models = cfg.get("models")
     if not isinstance(models, list) or len(models) != 2:
         sys.exit('Config must define exactly 2 models in the "models" list.')
@@ -55,6 +105,24 @@ def load_config(path):
         if not isinstance(m, dict) or "model" not in m:
             sys.exit('Each model entry needs a "model" key, e.g. "qwen3:4b".')
         m.setdefault("name", m["model"])
+        _check_unknown_keys(m, MODEL_KEYS, f'model "{m["name"]}"')
+
+    _validate_field(cfg, "host", "str", "top level")
+    _validate_field(cfg, "topic", "str", "top level")
+    _validate_field(cfg, "turns", "int", "top level", minimum=1)
+    _validate_field(cfg, "think", "bool", "top level")
+    _validate_field(cfg, "max_tokens", "int", "top level", minimum=1)
+    _validate_field(cfg, "temperature", "number", "top level", minimum=0)
+    _validate_field(cfg, "num_ctx", "int", "top level", minimum=1)
+    _validate_field(cfg, "log_file", "str", "top level")
+    _validate_field(cfg, "save_json", "str", "top level")
+    _validate_field(cfg, "timeout", "number", "top level", minimum=1)
+    for m in models:
+        label = f'model "{m["name"]}"'
+        _validate_field(m, "think", "bool", label)
+        _validate_field(m, "max_tokens", "int", label, minimum=1)
+        _validate_field(m, "temperature", "number", label, minimum=0)
+        _validate_field(m, "num_ctx", "int", label, minimum=1)
     return cfg
 
 
@@ -63,48 +131,6 @@ def first_not_none(*values):
         if v is not None:
             return v
     return None
-
-
-def strip_think_tags(text):
-    """Remove <think>...</think> blocks a model may emit inside the reply text.
-
-    Some models (notably Qwen) leak their reasoning into the content even when
-    thinking is disabled via the API, sometimes with no opening <think> tag.
-    Handles complete blocks, a closing tag with no opening tag (strip
-    everything through it), and a stray opening tag with no close (cut from
-    it to the end).
-    """
-    text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL | re.IGNORECASE)
-    text = re.sub(r"^.*</think>", "", text, flags=re.DOTALL | re.IGNORECASE)
-    text = re.sub(r"<think>.*$", "", text, flags=re.DOTALL | re.IGNORECASE)
-    return text.strip()
-
-
-def call_chat(host, model, messages, think, options, timeout=900):
-    """Single non-streaming /api/chat call. Returns (thinking, reply)."""
-    payload = {
-        "model": model,
-        "messages": messages,
-        "stream": False,
-        "think": think,
-        "options": options,
-    }
-    req = urllib.request.Request(
-        host + "/api/chat",
-        data=json.dumps(payload).encode(),
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            data = json.load(resp)
-    except urllib.error.HTTPError as e:
-        body = e.read().decode(errors="replace")
-        sys.exit(f"HTTP {e.code} from Ollama: {body}\nHint: did you run `ollama pull {model}`?")
-    except urllib.error.URLError as e:
-        sys.exit(f"Cannot reach Ollama at {host}: {e.reason}\nIs `ollama serve` running?")
-    msg = data["message"]
-    return msg.get("thinking", "").strip(), strip_think_tags(msg["content"])
 
 
 def print_turn(label, turn_no, thinking, reply, show_thinking):
@@ -138,15 +164,13 @@ def main():
                     help="force thinking display off")
     ap.add_argument("--log-file", default=None,
                     help="override the config log_file (mirror stdout to this file)")
+    ap.add_argument("--save-json", default=None,
+                    help="override the config save_json (write the transcript to this JSON file)")
+    ap.add_argument("--timeout", type=float, default=None,
+                    help="override the config timeout, in seconds")
     args = ap.parse_args()
 
-    # Model output often contains emoji/CJK/smart quotes, which crash
-    # Windows consoles on a legacy code page (e.g. cp1252 PowerShell).
-    # Force UTF-8 output; fall back silently on non-standard streams.
-    try:
-        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-    except AttributeError:
-        pass
+    setup_utf8_stdout()
 
     cfg = load_config(args.config)
     host = first_not_none(args.host, cfg.get("host"), DEFAULT_HOST)
@@ -154,6 +178,10 @@ def main():
     if not topic:
         sys.exit('No topic: set "topic" in the config or pass --topic.')
     turns = first_not_none(args.turns, cfg.get("turns"), 6)
+    if turns < 1:
+        sys.exit(f'"turns" must be >= 1, got {turns}.')
+    timeout = first_not_none(args.timeout, cfg.get("timeout"), DEFAULT_TIMEOUT)
+    save_json_path = first_not_none(args.save_json, cfg.get("save_json"))
 
     # Optional log file: everything printed to stdout is mirrored there.
     # (stderr progress lines like "(waiting for reply...)" stay console-only.)
@@ -211,24 +239,27 @@ def main():
                     messages.append({"role": role, "content": text})
                 if not transcript:
                     messages.append({"role": "user", "content": topic})
-    
+
                 print("  (waiting for reply...)", file=sys.stderr, flush=True)
                 thinking, reply = call_chat(host, me["model"], messages,
-                                            me["think"], me["options"])
+                                            me["think"], me["options"], timeout=timeout)
                 transcript.append((i, reply))
                 print_turn(f"[{me['model']} as {me['name']}]", turn + 1,
                            thinking, reply, show_thinking=me["think"])
         except KeyboardInterrupt:
             print("\nStopped.", file=sys.stderr)
+        except OllamaError as e:
+            print(f"\n{e}\nStopped.", file=sys.stderr)
         print(f"Done: {len(transcript)} replies.", file=sys.stderr)
     finally:
-        # Always write the session-end marker, even if call_chat
-        # exited early via sys.exit() on an Ollama error mid-duel.
+        # Always write the session-end marker / transcript, even if the
+        # duel stopped early on an Ollama error.
         if log_fh is not None:
             sys.stdout = sys.stdout.streams[0]  # unwrap the Tee
             stamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             log_fh.write(f"--- session ended {stamp} ({len(transcript)} replies) ---\n")
             log_fh.close()
+        save_transcript_json_safe(save_json_path, build_duel_json(transcript, participants))
 
 
 if __name__ == "__main__":
