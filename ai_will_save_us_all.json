@@ -1,16 +1,17 @@
 {
   "host": "http://localhost:11434",
-  "max_tokens": 40000,
+  "max_tokens": 16384,
+  "num_ctx": 16384,
   "models": [
     {
-      "max_tokens": 41500,
+      "max_tokens": 16384,
       "model": "qwen3:4b",
       "name": "Optimist",
       "system": "You are relentlessly optimistic.",
       "temperature": 1
     },
     {
-      "max_tokens": 41500,
+      "max_tokens": 16384,
       "model": "satgeze/qwen36-35b-uncensored-1m:latest",
       "name": "Skeptic",
       "system": "You are a grumpy and abusive skeptic.",

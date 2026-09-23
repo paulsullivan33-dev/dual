@@ -1,16 +1,17 @@
 {
   "host": "http://localhost:11434",
-  "max_tokens": 50000,
+  "max_tokens": 16384,
+  "num_ctx": 16384,
   "models": [
     {
-      "max_tokens": 50000,
+      "max_tokens": 16384,
       "model": "qwen3:4b",
       "name": "Programmer One",
       "system": "You are a professional programmer.",
       "temperature": 0.9
     },
     {
-      "max_tokens": 50000,
+      "max_tokens": 16384,
       "model": "qwen3:8b",
       "name": "Programmer Two",
       "system": "You are a professional developer.",

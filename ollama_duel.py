@@ -140,6 +140,14 @@ def main():
                     help="override the config log_file (mirror stdout to this file)")
     args = ap.parse_args()
 
+    # Model output often contains emoji/CJK/smart quotes, which crash
+    # Windows consoles on a legacy code page (e.g. cp1252 PowerShell).
+    # Force UTF-8 output; fall back silently on non-standard streams.
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except AttributeError:
+        pass
+
     cfg = load_config(args.config)
     host = first_not_none(args.host, cfg.get("host"), DEFAULT_HOST)
     topic = first_not_none(args.topic, cfg.get("topic"))
@@ -189,34 +197,38 @@ def main():
 
     transcript = []  # list of (speaker_index, text)
     try:
-        for turn in range(turns):
-            i = turn % 2
-            me = participants[i]
-            # Rebuild the message list from this speaker's point of view:
-            # their own past lines are "assistant", the other's are "user".
-            messages = []
-            if me["system"]:
-                messages.append({"role": "system", "content": me["system"]})
-            for spk, text in transcript:
-                role = "assistant" if spk == i else "user"
-                messages.append({"role": role, "content": text})
-            if not transcript:
-                messages.append({"role": "user", "content": topic})
-
-            print("  (waiting for reply...)", file=sys.stderr, flush=True)
-            thinking, reply = call_chat(host, me["model"], messages,
-                                        me["think"], me["options"])
-            transcript.append((i, reply))
-            print_turn(f"[{me['model']} as {me['name']}]", turn + 1,
-                       thinking, reply, show_thinking=me["think"])
-    except KeyboardInterrupt:
-        print("\nStopped.", file=sys.stderr)
-    print(f"Done: {len(transcript)} replies.", file=sys.stderr)
-    if log_fh is not None:
-        sys.stdout = sys.stdout.streams[0]  # unwrap the Tee
-        stamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        log_fh.write(f"--- session ended {stamp} ({len(transcript)} replies) ---\n")
-        log_fh.close()
+        try:
+            for turn in range(turns):
+                i = turn % 2
+                me = participants[i]
+                # Rebuild the message list from this speaker's point of view:
+                # their own past lines are "assistant", the other's are "user".
+                messages = []
+                if me["system"]:
+                    messages.append({"role": "system", "content": me["system"]})
+                for spk, text in transcript:
+                    role = "assistant" if spk == i else "user"
+                    messages.append({"role": role, "content": text})
+                if not transcript:
+                    messages.append({"role": "user", "content": topic})
+    
+                print("  (waiting for reply...)", file=sys.stderr, flush=True)
+                thinking, reply = call_chat(host, me["model"], messages,
+                                            me["think"], me["options"])
+                transcript.append((i, reply))
+                print_turn(f"[{me['model']} as {me['name']}]", turn + 1,
+                           thinking, reply, show_thinking=me["think"])
+        except KeyboardInterrupt:
+            print("\nStopped.", file=sys.stderr)
+        print(f"Done: {len(transcript)} replies.", file=sys.stderr)
+    finally:
+        # Always write the session-end marker, even if call_chat
+        # exited early via sys.exit() on an Ollama error mid-duel.
+        if log_fh is not None:
+            sys.stdout = sys.stdout.streams[0]  # unwrap the Tee
+            stamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            log_fh.write(f"--- session ended {stamp} ({len(transcript)} replies) ---\n")
+            log_fh.close()
 
 
 if __name__ == "__main__":

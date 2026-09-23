@@ -1,16 +1,17 @@
 {
   "host": "http://localhost:11434",
-  "max_tokens": 80000,
+  "max_tokens": 16384,
+  "num_ctx": 16384,
   "models": [
     {
-      "max_tokens": 80000,
+      "max_tokens": 16384,
       "model": "satgeze/qwen36-35b-uncensored-1m:latest",
       "name": "Optimist",
       "system": "You are relentlessly optimistic, but you don't put up with abuse from others.",
       "temperature": 1
     },
     {
-      "max_tokens": 80000,
+      "max_tokens": 16384,
       "model": "satgeze/qwen36-35b-uncensored-1m:latest",
       "name": "Skeptic",
       "system": "You are a grumpy and abusive skeptic. Things others say annoy you and escalate your anger at others.",

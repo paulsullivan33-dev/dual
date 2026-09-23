@@ -140,7 +140,8 @@ The programming scenario produces code as conversation text. Neither script exec
 - **Cannot reach Ollama:** check that the server is running and `--host` points to it.
 - **HTTP error or missing model:** check the error text and ensure the model is available on the selected server; use `ollama pull MODEL` for an available model identifier.
 - **Empty or truncated replies:** increase the generation budget, especially when thinking is enabled. For JSON scenarios, check for per-model `max_tokens` overrides.
-- **Long waits:** several supplied scenarios set budgets of 40,000 to 80,000 tokens per reply. Lower the applicable `max_tokens` values for shorter experiments.
+- **Long waits:** the novel and debate scenarios allow up to 16,384 tokens per reply. Lower the applicable `max_tokens` values for shorter experiments.
+- **Truncated replies:** generation silently stops when the model's context window fills, so keep `max_tokens` at or below the effective window — the `num_ctx` setting, or the server default when `num_ctx` is unset. Raising `max_tokens` without raising `num_ctx` does not produce longer replies.
 - **Long conversations lose details:** the scripts resend the transcript without summarizing it, but the model's context capacity still limits what it can use.
 
 For the full command-line help:

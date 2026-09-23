@@ -27,11 +27,14 @@ import urllib.error
 def strip_think_tags(text):
     """Remove <think>...</think> blocks a model may emit inside the reply text.
 
-    Some models (notably Qwen) include their reasoning inline in the content
-    even when thinking is disabled via the API. Strip complete blocks; if a
-    stray opening tag remains (truncated output), cut from it to the end.
+    Some models (notably Qwen) leak their reasoning into the content even when
+    thinking is disabled via the API, sometimes with no opening <think> tag.
+    Handles complete blocks, a closing tag with no opening tag (strip
+    everything through it), and a stray opening tag with no close (cut from
+    it to the end).
     """
     text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL | re.IGNORECASE)
+    text = re.sub(r"^.*</think>", "", text, flags=re.DOTALL | re.IGNORECASE)
     text = re.sub(r"<think>.*$", "", text, flags=re.DOTALL | re.IGNORECASE)
     return text.strip()
 
@@ -167,6 +170,15 @@ def main():
     d.add_argument("--system-b", default=None, help="persona for B, e.g. 'You are a skeptic.'")
 
     args = p.parse_args()
+
+    # Model output often contains emoji/CJK/smart quotes, which crash
+    # Windows consoles on a legacy code page (e.g. cp1252 PowerShell).
+    # Force UTF-8 output; fall back silently on non-standard streams.
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except AttributeError:
+        pass
+
     # Thinking tokens come out of the same num_predict budget as the reply,
     # so --think needs a much larger default or the reply gets starved.
     if args.max_tokens is None:
