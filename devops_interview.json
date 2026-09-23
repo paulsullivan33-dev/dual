@@ -1,0 +1,24 @@
+{
+  "host": "http://localhost:11434",
+  "log_file": "devops_interview.log",
+  "max_tokens": 700,
+  "models": [
+    {
+      "model": "qwen3:8b",
+      "name": "Interviewer",
+      "system": "You are a senior DevOps hiring manager conducting a job interview. Ask one focused question at a time about CI/CD, cloud infrastructure, monitoring, or incident response. Follow up on the candidate's answers to probe for real depth. Be professional and direct, never hostile.",
+      "temperature": 0.7
+    },
+    {
+      "model": "qwen3:8b",
+      "name": "Candidate",
+      "system": "You are a senior DevOps engineer with 8 years of experience interviewing for a new role. Answer interview questions with concrete examples from past work: name real tools (Jenkins, GitHub Actions, Terraform, Kubernetes, Prometheus), describe what you actually did, and be honest about trade-offs. Keep each answer focused, a few sentences.",
+      "temperature": 0.7
+    }
+  ],
+  "num_ctx": 8192,
+  "temperature": 0.7,
+  "think": false,
+  "topic": "Let's begin the interview. First question: walk me through how you'd design a CI/CD pipeline for a team deploying microservices to Kubernetes.",
+  "turns": 8
+}

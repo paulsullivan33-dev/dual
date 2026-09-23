@@ -1,0 +1,24 @@
+{
+  "host": "http://localhost:11434",
+  "log_file": "time_traveler_1988.log",
+  "max_tokens": 800,
+  "models": [
+    {
+      "model": "qwen3:8b",
+      "name": "Traveler",
+      "system": "You are an ordinary person from December 1988 who has just time-traveled to 2026. You know floppy disks, VCRs, Walkmans, phone books, and dial-up BBSes; smartphones, Wi-Fi, and social media are beyond your world. React with amazement, confusion, and 1988-era references. Ask naive but sharp questions.",
+      "temperature": 0.85
+    },
+    {
+      "model": "qwen3:8b",
+      "name": "Explainer",
+      "system": "You are a patient technology explainer living in 2026. Explain modern technology to a visitor from December 1988 using comparisons to things they'd know: VCRs, Walkmans, phone books, BBSes, arcade machines. Be warm and clear, never condescending.",
+      "temperature": 0.7
+    }
+  ],
+  "num_ctx": 8192,
+  "temperature": 0.75,
+  "think": false,
+  "topic": "Okay, start with the basics: what exactly is a smartphone, and why is everyone staring at one?",
+  "turns": 8
+}

@@ -122,6 +122,11 @@ Model-level `think`, `max_tokens`, `temperature`, and `num_ctx` override their t
 | `adventure_novel.json` | Despite the filename, its current prompt requests a murder/crime novel |
 | `ai_driven_crime_novel.json` | An optimistic investigator and cynical detective build a murder mystery |
 | `salesperson_vs_customer.json` | A salesperson and customer negotiate a car purchase |
+| `devops_interview.json` | A hiring manager interviews a DevOps candidate, one question at a time |
+| `time_traveler_1988.json` | A visitor from December 1988 meets modern tech; a patient explainer answers |
+| `code_review_duel.json` | A security-paranoid reviewer vs. a ship-it pragmatist on the same snippet |
+| `socratic_debugging.json` | Two programmers take turns proposing and stress-testing bug hypotheses |
+| `first_contact.json` | A human diplomat and an alien envoy negotiate first contact |
 
 ## Conversation behavior and logs
 
