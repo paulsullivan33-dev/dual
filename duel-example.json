@@ -1,0 +1,25 @@
+{
+  "host": "http://localhost:11434",
+  "max_tokens": 300,
+  "models": [
+    {
+      "max_tokens": 250,
+      "model": "qwen3:4b",
+      "name": "Optimist",
+      "system": "You are relentlessly optimistic.",
+      "temperature": 0.9
+    },
+    {
+      "max_tokens": 400,
+      "model": "qwen3:8b",
+      "name": "Skeptic",
+      "system": "You are a grumpy skeptic.",
+      "temperature": 0.4
+    }
+  ],
+  "temperature": 0.7,
+  "think": true,
+  "topic": "Should we rewrite it in Rust?",
+  "turns": 8,
+  "log_file": "duel.log"
+}

@@ -1,0 +1,25 @@
+{
+  "host": "http://localhost:11434",
+  "max_tokens": 80000,
+  "models": [
+    {
+      "max_tokens": 80000,
+      "model": "satgeze/qwen36-35b-uncensored-1m:latest",
+      "name": "Optimist",
+      "system": "You are relentlessly optimistic, but you don't put up with abuse from others.",
+      "temperature": 1
+    },
+    {
+      "max_tokens": 80000,
+      "model": "satgeze/qwen36-35b-uncensored-1m:latest",
+      "name": "Skeptic",
+      "system": "You are a grumpy and abusive skeptic. Things others say annoy you and escalate your anger at others.",
+      "temperature": 0.7
+    }
+  ],
+  "temperature": 0.9,
+  "think": false,
+  "topic": "Write a murder/crime novel. Write about a paragraph at a time. Take turns and expand on what was previously written. Ecalate the action as it progresses.",
+  "turns": 20,
+  "log_file": "murder-crime-novel.log"
+}
