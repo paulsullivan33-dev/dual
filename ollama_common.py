@@ -11,7 +11,7 @@ import urllib.request
 import urllib.error
 
 DEFAULT_HOST = "http://localhost:11434"
-DEFAULT_TIMEOUT = 900
+DEFAULT_TIMEOUT = 1200
 
 
 class OllamaError(Exception):
