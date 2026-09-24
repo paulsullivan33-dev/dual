@@ -49,7 +49,7 @@ Common options for `ollama_chat.py` go after the `chat` or `duel` subcommand:
 | `--host` | Ollama server base URL | `http://localhost:11434` |
 | `--think` | Request thinking and display the separate thinking field when returned | Off |
 | `--max-tokens` | Per-response generation budget | 300, or 2048 with `--think` |
-| `--timeout` | Per-request timeout, in seconds | 900 |
+| `--timeout` | Per-request timeout, in seconds | 1200 |
 | `--save-json` | Write the finished transcript to this JSON file | Off |
 | `--temperature` | Sampling temperature passed to Ollama | Server default |
 | `--num-ctx` | Context window size passed to Ollama | Server default |
@@ -109,7 +109,7 @@ The JSON must be an object with exactly two entries in `models`. Each entry requ
 | `turns` | Top level | Total replies; defaults to 6; must be a positive integer |
 | `log_file` | Top level | Optional path for an appended transcript |
 | `save_json` | Top level | Optional path to write the structured transcript (`speaker`/`model`/`text` per reply) as JSON when the duel ends, including after an early stop |
-| `timeout` | Top level | Per-request timeout in seconds; defaults to 900 |
+| `timeout` | Top level | Per-request timeout in seconds; defaults to 1200 |
 | `think` | Top level or model entry | Request and display thinking; defaults to false |
 | `max_tokens` | Top level or model entry | Passed as Ollama's `num_predict`; defaults to 300, or 2048 when thinking is enabled |
 | `temperature` | Top level or model entry | Passed to Ollama if specified |
@@ -158,7 +158,7 @@ If Ollama becomes unreachable or returns an error mid-duel, the duel stops the w
 
 Each request includes the participant's system prompt and all previous generated replies. The participant's own replies are represented as assistant messages; the other participant's replies are represented as user messages. The initial topic is sent only on the first request, so later turns rely on the generated conversation to retain it.
 
-Requests are sequential and non-streaming: a complete reply appears after the server finishes generating it. Each request has a 900-second timeout. Press Ctrl+C to stop a duel early.
+Requests are sequential and non-streaming: a complete reply appears after the server finishes generating it. Each request has a 1200-second timeout. Press Ctrl+C to stop a duel early.
 
 The scripts remove inline `<think>` blocks from reply text. When thinking is enabled, they separately display the server's `thinking` field when available. Thinking behavior depends on the model and server, and its token use can reduce the budget available for the visible reply.
 
