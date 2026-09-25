@@ -169,23 +169,26 @@ def format_duel_stats(model_stats):
         rows.append((model, s["turns"], gen_tps, prompt_tps,
                      s["gen_tokens"], s["truncated"]))
 
-    def col(cells, header, align_right=True):
-        cells = [header] + [str(c) for c in cells]
+    def col(values, header, align_right=True):
+        """Pad one column; returns (header_cell, [data_cells])."""
+        cells = [header] + [str(v) for v in values]
         width = max(len(c) for c in cells)
         pad = str.rjust if align_right else str.ljust
-        return [pad(c, width) for c in cells]
+        padded = [pad(c, width) for c in cells]
+        return padded[0], padded[1:]
 
-    name_col = col([r[0] for r in rows], "Model", align_right=False)
-    turns_col = col([r[1] for r in rows], "Turns")
-    gen_col = col([f"{r[2]:.1f}" for r in rows], "Gen tok/s")
-    prompt_col = col([f"{r[3]:.1f}" for r in rows], "Prompt tok/s")
-    tokens_col = col([r[4] for r in rows], "Tokens")
-    trunc_col = col([r[5] for r in rows], "Truncated")
-
-    lines = ["=== Model performance ==="]
+    cols = [
+        col([r[0] for r in rows], "Model", align_right=False),
+        col([r[1] for r in rows], "Turns"),
+        col([f"{r[2]:.1f}" for r in rows], "Gen tok/s"),
+        col([f"{r[3]:.1f}" for r in rows], "Prompt tok/s"),
+        col([r[4] for r in rows], "Tokens"),
+        col([r[5] for r in rows], "Truncated"),
+    ]
+    lines = ["=== Model performance ===",
+             "  ".join(header for header, _ in cols)]
     for i in range(len(rows)):
-        lines.append(f"{name_col[i]}  {turns_col[i]}  {gen_col[i]}  "
-                     f"{prompt_col[i]}  {tokens_col[i]}  {trunc_col[i]}")
+        lines.append("  ".join(cells[i] for _, cells in cols))
     return "\n".join(lines)
 
 
