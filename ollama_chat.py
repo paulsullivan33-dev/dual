@@ -27,6 +27,7 @@ from ollama_common import (
     call_chat,
     save_transcript_json_safe,
     setup_utf8_stdout,
+    wrap_text,
 )
 
 
@@ -46,7 +47,7 @@ def print_turn(thinking, reply, show_thinking):
         for line in thinking.splitlines():
             print("    " + line)
         print("  Reply:")
-    print(reply)
+    print(wrap_text(reply))
 
 
 def cmd_chat(args):
