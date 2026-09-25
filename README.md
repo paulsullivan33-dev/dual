@@ -231,7 +231,7 @@ python ollama_duel.py --help
 
 ## Running the tests
 
-The `tests/` directory has stdlib-only `unittest` coverage for the shared helpers (`ollama_common.py`), config loading and validation (`ollama_duel.py`), and CLI argument handling (`ollama_chat.py`) — no live Ollama server required; network calls are mocked. It also checks that every included scenario JSON file loads and validates.
+The `tests/` directory has stdlib-only `unittest` coverage for the shared helpers (`ollama_common.py`), config loading and validation (`ollama_duel.py`), CLI argument handling (`ollama_chat.py`), benchmarking (`ollama_bench.py`), and the LED matrix driver (`unoq_matrix.py`) — no live Ollama server required; network calls are mocked. It also checks that every included scenario JSON file loads and validates.
 
 ```shell
 python -m unittest discover -s tests
