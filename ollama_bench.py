@@ -102,11 +102,14 @@ def bench_model(host, model, prompt, options, timeout, iterations, warmup=True):
     return warm, summarize(runs)
 
 
-def _col(values, header, fmt):
-    """Format one table column: header + values, padded to the widest."""
+def _col(values, header, fmt, align_right=True):
+    """Format one table column: header + values, padded to the widest.
+    Returns (header_cell, [data_cells])."""
     cells = [header] + [fmt(v) for v in values]
     width = max(len(c) for c in cells)
-    return [c.rjust(width) for c in cells], width
+    pad = str.rjust if align_right else str.ljust
+    padded = [pad(c, width) for c in cells]
+    return padded[0], padded[1:]
 
 
 def format_comparison(results):
@@ -116,20 +119,20 @@ def format_comparison(results):
     models = [m for m, _, _ in ordered]
     sums = [s for _, _, s in ordered]
 
-    name_col, _ = _col(models, "Model", lambda v: v)
-    # left-align the name column
-    width = max(len(c) for c in name_col)
-    name_col = [c.ljust(width) for c in name_col]
-    prompt_col, _ = _col(sums, "Prompt tok/s", lambda s: f"{s['prompt_tps']:.1f} +/- {s['prompt_tps_stdev']:.1f}")
-    gen_col, _ = _col(sums, "Gen tok/s", lambda s: f"{s['gen_tps']:.1f} +/- {s['gen_tps_stdev']:.1f}")
-    total_col, _ = _col(sums, "Total s/run", lambda s: f"{s['total_s']:.1f} +/- {s['total_s_stdev']:.1f}")
-    load_col, _ = _col([w["load_s"] if w else 0.0 for _, w, _ in ordered],
-                       "Load s", lambda v: f"{v:.1f}")
-
-    lines = []
-    for i in range(len(name_col)):
-        lines.append(f"{name_col[i]}  {prompt_col[i]}  {gen_col[i]}  "
-                     f"{total_col[i]}  {load_col[i]}")
+    cols = [
+        _col(models, "Model", lambda v: v, align_right=False),
+        _col(sums, "Prompt tok/s",
+             lambda s: f"{s['prompt_tps']:.1f} +/- {s['prompt_tps_stdev']:.1f}"),
+        _col(sums, "Gen tok/s",
+             lambda s: f"{s['gen_tps']:.1f} +/- {s['gen_tps_stdev']:.1f}"),
+        _col(sums, "Total s/run",
+             lambda s: f"{s['total_s']:.1f} +/- {s['total_s_stdev']:.1f}"),
+        _col([w["load_s"] if w else 0.0 for _, w, _ in ordered],
+             "Load s", lambda v: f"{v:.1f}"),
+    ]
+    lines = ["  ".join(header for header, _ in cols)]
+    for i in range(len(ordered)):
+        lines.append("  ".join(cells[i] for _, cells in cols))
     return "\n".join(lines)
 
 
