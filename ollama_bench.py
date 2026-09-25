@@ -24,7 +24,12 @@ import sys
 import urllib.request
 import urllib.error
 
-from ollama_common import DEFAULT_HOST, DEFAULT_TIMEOUT, setup_utf8_stdout
+from ollama_common import (
+    DEFAULT_HOST,
+    DEFAULT_TIMEOUT,
+    compute_metrics,
+    setup_utf8_stdout,
+)
 
 DEFAULT_PROMPT = (
     "Write a short paragraph about the history of the transistor, "
@@ -68,24 +73,6 @@ def call_generate(host, model, prompt, options, timeout):
         raise BenchError(
             f"Cannot reach Ollama at {host}: {e.reason}\nIs `ollama serve` running?"
         ) from e
-
-
-def compute_metrics(data):
-    """Extract tokens/sec figures from one /api/generate response dict."""
-    def tps(count, duration_ns):
-        seconds = duration_ns / 1e9
-        return count / seconds if seconds > 0 else 0.0
-
-    return {
-        "prompt_tps": tps(data.get("prompt_eval_count", 0),
-                          data.get("prompt_eval_duration", 0)),
-        "gen_tps": tps(data.get("eval_count", 0),
-                       data.get("eval_duration", 0)),
-        "total_s": data.get("total_duration", 0) / 1e9,
-        "load_s": data.get("load_duration", 0) / 1e9,
-        "prompt_tokens": data.get("prompt_eval_count", 0),
-        "gen_tokens": data.get("eval_count", 0),
-    }
 
 
 def summarize(runs):
