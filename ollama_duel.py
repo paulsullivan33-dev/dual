@@ -35,6 +35,7 @@ from ollama_common import (
     call_chat,
     save_transcript_json_safe,
     setup_utf8_stdout,
+    wrap_text,
 )
 
 
@@ -154,7 +155,7 @@ def print_turn(label, turn_no, thinking, reply, show_thinking):
             print("    (no thinking returned)")
         print()
     print("--- REPLY ---")
-    print(reply)
+    print(wrap_text(reply))
     print()
 
 
