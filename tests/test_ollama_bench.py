@@ -124,6 +124,21 @@ def test_call_generate_unreachable_host_becomes_bench_error(monkeypatch):
     raise AssertionError("expected BenchError")
 
 
+def test_call_generate_socket_timeout_becomes_bench_error(monkeypatch):
+    # A server that accepts the request but never answers must surface as
+    # BenchError, not a raw traceback.
+    def fake(req, timeout=None):
+        raise TimeoutError("timed out")
+
+    monkeypatch.setattr(ollama_bench.urllib.request, "urlopen", fake)
+    try:
+        call_generate("http://x", "m", "hi", {}, 5)
+    except BenchError as e:
+        assert "timed out after 5s" in str(e)
+        return
+    raise AssertionError("expected BenchError")
+
+
 def test_bench_model_does_warmup_then_iterations(monkeypatch):
     calls = []
 

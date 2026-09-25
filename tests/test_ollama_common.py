@@ -40,6 +40,27 @@ class WrapTextTests(unittest.TestCase):
         for line in lines[1:]:
             self.assertTrue(line.startswith(" " * 7))
 
+    def test_fenced_code_is_left_untouched(self):
+        # Regression test: wrapping split long code lines and dropped their
+        # indentation, so programs in duel logs couldn't be run as-is.
+        code = ("```python\n"
+                "def f(n):\n"
+                "        raise ValueError('" + "x" * 90 + "' % (n,))\n"
+                "```")
+        self.assertEqual(oc.wrap_text(code), code)
+
+    def test_prose_around_fenced_code_still_wraps(self):
+        prose = "word " * 30
+        text = prose + "\n~~~\n    " + "y " * 50 + "\n~~~\n" + prose
+        lines = oc.wrap_text(text).split("\n")
+        self.assertIn("    " + "y " * 50, lines)  # code line kept verbatim
+        self.assertLessEqual(len(lines[0]), 75)
+        self.assertLessEqual(len(lines[-1]), 75)
+
+    def test_other_fence_marker_does_not_close_block(self):
+        text = "```\n~~~\n" + "z " * 50 + "\n```"
+        self.assertEqual(oc.wrap_text(text), text)
+
 
 class StripThinkTagsTests(unittest.TestCase):
     def test_no_tags(self):

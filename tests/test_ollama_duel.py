@@ -213,6 +213,14 @@ class TurnNudgeTests(unittest.TestCase):
         self.assertIn("staying in character as Two", nudge)
         self.assertIn("Do not repeat or summarize", nudge)
 
+    def test_topic_opens_every_turn(self):
+        # Regression test: the topic used to be sent only on turn 1, so the
+        # second speaker never saw it. It must open each speaker's messages.
+        seen = self._run_two_turns()
+        for contents in seen:
+            self.assertEqual(contents[0], "test topic")
+        self.assertEqual(seen[1][1], "canned reply")
+
 
 class RepeatPenaltyTests(unittest.TestCase):
     """repeat_penalty must reach Ollama's options so scenarios can tame

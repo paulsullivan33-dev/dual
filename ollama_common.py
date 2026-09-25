@@ -42,10 +42,23 @@ def wrap_text(text, width=WRAP_WIDTH, initial_indent="", subsequent_indent=""):
     split across lines (a single over-long word keeps its own line rather
     than being cut). Blank lines and existing paragraph breaks are kept.
     initial_indent/subsequent_indent are passed through to textwrap, e.g. to
-    align wrapped continuation lines under a label."""
+    align wrapped continuation lines under a label.
+
+    Lines inside ``` or ~~~ fenced code blocks (and the fence lines
+    themselves) are left untouched: wrapping would split long code lines and
+    drop their indentation, leaving code that can't be copied out and run."""
     lines = []
+    fence = None  # marker ("```" or "~~~") of the open code block, if any
     for para in text.split("\n"):
-        if not para.strip():
+        marker = para.lstrip()[:3]
+        if fence is None and marker in ("```", "~~~"):
+            fence = marker
+            lines.append(para)
+        elif fence is not None:
+            if marker == fence:
+                fence = None
+            lines.append(para)
+        elif not para.strip():
             lines.append("")
         else:
             lines.extend(textwrap.wrap(

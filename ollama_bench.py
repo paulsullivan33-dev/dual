@@ -69,6 +69,13 @@ def call_generate(host, model, prompt, options, timeout):
             f"HTTP {e.code} from Ollama: {body}\n"
             f"Hint: did you run `ollama pull {model}`?"
         ) from e
+    except TimeoutError as e:
+        # socket.timeout is TimeoutError since 3.3; urlopen can let it escape
+        # unwrapped when the server accepts the request but never answers.
+        raise BenchError(
+            f"Ollama at {host} timed out after {timeout:g}s waiting for {model}.\n"
+            f"The server may be wedged (try `ollama ps`, restart `ollama serve`)."
+        ) from e
     except urllib.error.URLError as e:
         raise BenchError(
             f"Cannot reach Ollama at {host}: {e.reason}\nIs `ollama serve` running?"

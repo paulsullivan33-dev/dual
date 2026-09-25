@@ -330,15 +330,17 @@ def main():
                 me = participants[i]
                 # Rebuild the message list from this speaker's point of view:
                 # their own past lines are "assistant", the other's are "user".
+                # The topic always opens the conversation, so both speakers
+                # see it on every turn -- otherwise the second speaker never
+                # sees it at all and the first loses it after turn 1.
                 messages = []
                 if me["system"]:
                     messages.append({"role": "system", "content": me["system"]})
+                messages.append({"role": "user", "content": topic})
                 for spk, text in transcript:
                     role = "assistant" if spk == i else "user"
                     messages.append({"role": role, "content": text})
-                if not transcript:
-                    messages.append({"role": "user", "content": topic})
-                else:
+                if transcript:
                     # Nudge the model to answer the other participant instead
                     # of starting a fresh parallel monologue. Without this,
                     # small models tend to ignore the transcript and each emit

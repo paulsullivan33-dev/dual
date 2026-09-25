@@ -164,7 +164,7 @@ If Ollama becomes unreachable or returns an error mid-duel, the duel stops the w
 
 ## Conversation behavior and logs
 
-Each request includes the participant's system prompt and all previous generated replies. The participant's own replies are represented as assistant messages; the other participant's replies are represented as user messages. The initial topic is sent only on the first request, so later turns rely on the generated conversation to retain it.
+Each request includes the participant's system prompt and all previous generated replies. The participant's own replies are represented as assistant messages; the other participant's replies are represented as user messages. The topic opens every request, so both participants see it on every turn.
 
 Requests are sequential and non-streaming: a complete reply appears after the server finishes generating it. Each request has a 1200-second timeout. Press Ctrl+C to stop a duel early.
 

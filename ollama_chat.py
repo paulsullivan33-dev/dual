@@ -97,14 +97,14 @@ def cmd_duel(args):
             me = personas[i]
             # Build the message list from this speaker's point of view:
             # their own past lines are "assistant", the other's are "user".
+            # The topic always opens the conversation so both speakers keep it.
             messages = []
             if me["system"]:
                 messages.append({"role": "system", "content": me["system"]})
+            messages.append({"role": "user", "content": args.topic})
             for spk, text in transcript:
                 role = "assistant" if spk == i else "user"
                 messages.append({"role": role, "content": text})
-            if not transcript:
-                messages.append({"role": "user", "content": args.topic})
             print(f"[{me['model']} as {me['name']}]")
             print("  (waiting for reply...)", file=sys.stderr, flush=True)
             thinking, reply, _done_reason, _metrics = call_chat(args.host, me["model"], messages,
