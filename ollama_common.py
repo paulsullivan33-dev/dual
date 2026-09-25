@@ -49,7 +49,11 @@ def strip_think_tags(text):
 
 
 def call_chat(host, model, messages, think, options, timeout=DEFAULT_TIMEOUT):
-    """Single non-streaming /api/chat call. Returns (thinking, reply).
+    """Single non-streaming /api/chat call. Returns (thinking, reply, done_reason).
+
+    done_reason is "stop" when the model finished on its own, "length" when
+    generation hit the max_tokens (num_predict) ceiling and the reply was
+    truncated.
 
     Raises OllamaError on an unreachable host or an error response; never
     calls sys.exit so a caller mid-conversation can decide how to stop.
@@ -80,7 +84,9 @@ def call_chat(host, model, messages, think, options, timeout=DEFAULT_TIMEOUT):
             f"Cannot reach Ollama at {host}: {e.reason}\nIs `ollama serve` running?"
         ) from e
     msg = data["message"]
-    return msg.get("thinking", "").strip(), strip_think_tags(msg["content"])
+    return (msg.get("thinking", "").strip(),
+            strip_think_tags(msg["content"]),
+            data.get("done_reason", ""))
 
 
 def save_transcript_json(path, turns):
