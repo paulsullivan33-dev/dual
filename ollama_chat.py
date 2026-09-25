@@ -71,9 +71,9 @@ def cmd_chat(args):
         print(f"\n{args.model}:")
         print("  (waiting for reply...)", file=sys.stderr, flush=True)
         try:
-            thinking, reply = call_chat(args.host, args.model, messages,
-                                        args.think, _build_options(args),
-                                        timeout=args.timeout)
+            thinking, reply, _done_reason = call_chat(args.host, args.model, messages,
+                                                         args.think, _build_options(args),
+                                                         timeout=args.timeout)
         except OllamaError as e:
             print(f"\n{e}\n", file=sys.stderr)
             messages.pop()  # drop the unanswered user turn so a retry doesn't duplicate it
@@ -106,9 +106,9 @@ def cmd_duel(args):
                 messages.append({"role": "user", "content": args.topic})
             print(f"[{me['model']} as {me['name']}]")
             print("  (waiting for reply...)", file=sys.stderr, flush=True)
-            thinking, reply = call_chat(args.host, me["model"], messages,
-                                        args.think, _build_options(args),
-                                        timeout=args.timeout)
+            thinking, reply, _done_reason = call_chat(args.host, me["model"], messages,
+                                                         args.think, _build_options(args),
+                                                         timeout=args.timeout)
             transcript.append((i, reply))
             # Label, then thinking and reply as distinct blocks, then a blank
             # line so speakers stay visually distinct.
