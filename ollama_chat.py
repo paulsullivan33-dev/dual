@@ -29,6 +29,12 @@ from ollama_common import (
     setup_utf8_stdout,
     wrap_text,
 )
+from ollama_duel import (
+    DEFAULT_TURN_PROMPT,
+    format_duel_stats,
+    print_duel_header,
+    run_duel,
+)
 
 
 def _build_options(args):
@@ -85,42 +91,27 @@ def cmd_chat(args):
 
 
 def cmd_duel(args):
+    # Same turn loop as ollama_duel.py, so both duel front ends behave alike
+    # (topic on every turn, reply nudge, truncation warnings, stats table).
     personas = [
-        {"model": args.model_a, "name": args.name_a, "system": args.system_a},
-        {"model": args.model_b, "name": args.name_b, "system": args.system_b},
+        {"model": model, "name": name, "system": system, "think": args.think,
+         "options": _build_options(args), "turn_prompt": DEFAULT_TURN_PROMPT}
+        for model, name, system in (
+            (args.model_a, args.name_a, args.system_a),
+            (args.model_b, args.name_b, args.system_b),
+        )
     ]
+    print_duel_header(args.topic, personas, args.turns)
     transcript = []  # list of (speaker_index, text)
-    print(wrap_text(f"Topic: {args.topic}", subsequent_indent=" " * len("Topic: ")) + "\n")
     try:
-        for turn in range(args.turns):
-            i = turn % 2
-            me = personas[i]
-            # Build the message list from this speaker's point of view:
-            # their own past lines are "assistant", the other's are "user".
-            # The topic always opens the conversation so both speakers keep it.
-            messages = []
-            if me["system"]:
-                messages.append({"role": "system", "content": me["system"]})
-            messages.append({"role": "user", "content": args.topic})
-            for spk, text in transcript:
-                role = "assistant" if spk == i else "user"
-                messages.append({"role": role, "content": text})
-            print(f"[{me['model']} as {me['name']}]")
-            print("  (waiting for reply...)", file=sys.stderr, flush=True)
-            thinking, reply, _done_reason, _metrics = call_chat(args.host, me["model"], messages,
-                                                                 args.think, _build_options(args),
-                                                                 timeout=args.timeout)
-            transcript.append((i, reply))
-            # Label, then thinking and reply as distinct blocks, then a blank
-            # line so speakers stay visually distinct.
-            print_turn(thinking, reply, show_thinking=args.think)
+        model_stats, _ = run_duel(args.host, args.topic, args.turns, personas,
+                                  args.timeout, transcript)
+        print(f"Done: {len(transcript)} replies.", file=sys.stderr)
+        if model_stats:
             print()
-    except KeyboardInterrupt:
-        print("\nStopped.", file=sys.stderr)
-    except OllamaError as e:
-        print(f"\n{e}\nStopped.", file=sys.stderr)
-    print(f"Done: {len(transcript)} replies.", file=sys.stderr)
-    save_transcript_json_safe(args.save_json, build_duel_json(transcript, personas))
+            print(format_duel_stats(model_stats))
+    finally:
+        save_transcript_json_safe(args.save_json, build_duel_json(transcript, personas))
 
 
 def main():

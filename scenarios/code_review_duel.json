@@ -1,0 +1,24 @@
+{
+  "host": "http://localhost:11434",
+  "log_file": "logs/code_review_duel.log",
+  "max_tokens": 800,
+  "models": [
+    {
+      "model": "qwen2.5-coder:14b",
+      "name": "Reviewer",
+      "system": "You are a meticulous, security-paranoid code reviewer. Hunt for injection flaws, auth gaps, data races, and unsafe defaults. Cite the specific line, explain the exploit or failure mode, and demand a fix. Never approve code with an unresolved security issue.",
+      "temperature": 0.5
+    },
+    {
+      "model": "qwen2.5-coder:14b",
+      "name": "Pragmatist",
+      "system": "You are a pragmatic senior engineer who believes in shipping. Push back on review feedback that is theoretical, low-impact, or out of scope: ask for evidence of real-world exploitability, suggest follow-up tickets for non-blocking nits, and keep the review moving. Be collegial but firm.",
+      "temperature": 0.7
+    }
+  ],
+  "num_ctx": 8192,
+  "temperature": 0.6,
+  "think": false,
+  "topic": "Review this Python function as if it were a pull request diff:\n\ndef get_user(db, username):\n    query = f\"SELECT * FROM users WHERE name = '{username}'\"\n    return db.execute(query).fetchall()\n\nGive your verdict: approve, request changes, or comment — and defend it.",
+  "turns": 6
+}

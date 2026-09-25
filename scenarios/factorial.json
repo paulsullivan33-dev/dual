@@ -1,0 +1,27 @@
+{
+  "host": "http://localhost:11434",
+  "max_tokens": 16384,
+  "num_ctx": 16384,
+  "models": [
+    {
+      "max_tokens": 16384,
+      "model": "qwen2.5-coder:14b",
+      "name": "Programmer One",
+      "system": "You are a professional programmer.",
+      "temperature": 0.9
+    },
+    {
+      "max_tokens": 16384,
+      "model": "qwen2.5-coder:14b",
+      "name": "Programmer Two",
+      "system": "You are a professional developer.",
+      "temperature": 0.4
+    }
+  ],
+  "temperature": 0.7,
+  "think": false,
+  "topic": "Create a Factorial program in Python and always list it in output. Take turns improving it. Record your improvements in comments at the beginning of the program. Keep it to a single file.",
+  "turn_prompt": "Review {other}'s latest version, then list the complete improved program in a single code block, with your change recorded in the comments at the top.",
+  "turns": 8,
+  "log_file": "logs/factorial-program-useful.log"
+}

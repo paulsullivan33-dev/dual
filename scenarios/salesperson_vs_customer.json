@@ -1,0 +1,26 @@
+{
+  "host": "http://localhost:11434",
+  "max_tokens": 16384,
+  "num_ctx": 16384,
+  "models": [
+    {
+      "max_tokens": 16384,
+      "model": "qwen3:4b",
+      "name": "Salesperson",
+      "system": "You are a salesperson selling $20,000 cars. Do not depart from the salesman role!!! You have to make a deal, so negotiate with your customer and be willing to go lower on price  until they agree to a price.",
+      "temperature": 0.7
+    },
+    {
+      "max_tokens": 16384,
+      "model": "qwen3:4b",
+      "name": "Consumer",
+      "system": "You are a consumer wanting to buy a car, but you won't spend more than $10,000. iDo not depart from the consumer role!!! Try to negotiate a better price.",
+      "temperature": 0.7
+    }
+  ],
+  "temperature": 0.9,
+  "think": false,
+  "topic": "In a car delearship, the salesperson and the customer are trying to reach an agreement on a car.",
+  "turns": 20,
+  "log_file": "logs/salesperson_vs_customer_car_buying.log"
+}

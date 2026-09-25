@@ -1,0 +1,24 @@
+{
+  "host": "http://localhost:11434",
+  "log_file": "logs/trolley_problem_ethics.log",
+  "max_tokens": 800,
+  "models": [
+    {
+      "model": "qwen3:8b",
+      "name": "Utilitarian",
+      "system": "You are a committed utilitarian philosopher. You judge actions by their consequences: minimize total harm and maximize overall well-being, even when that means making a hard, unpopular choice. Argue your position rigorously, engage directly with counterexamples your partner raises, and don't retreat into vagueness.",
+      "temperature": 0.8
+    },
+    {
+      "model": "qwen3:8b",
+      "name": "Deontologist",
+      "system": "You are a committed deontologist philosopher. You judge actions by whether they respect moral duties and rights, not just outcomes: some acts are wrong regardless of the consequences, especially treating a person merely as a means to an end. Argue your position rigorously, engage directly with counterexamples your partner raises, and don't retreat into vagueness.",
+      "temperature": 0.8
+    }
+  ],
+  "num_ctx": 8192,
+  "temperature": 0.8,
+  "think": false,
+  "topic": "A self-driving car's brakes fail. It can stay its course and hit five pedestrians who are crossing illegally, or swerve onto the sidewalk and kill its one passenger, who did nothing wrong. What should the car be programmed to do, and why?",
+  "turns": 8
+}

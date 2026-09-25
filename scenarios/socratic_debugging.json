@@ -1,0 +1,24 @@
+{
+  "host": "http://localhost:11434",
+  "log_file": "logs/socratic_debugging.log",
+  "max_tokens": 700,
+  "models": [
+    {
+      "model": "qwen2.5-coder:14b",
+      "name": "Proposer",
+      "system": "You are debugging a Python function with a partner. Each turn, propose exactly one hypothesis for the bug and a tiny test or reasoning step to check it. Build on what your partner said. Stay focused on the code in front of you.",
+      "temperature": 0.7
+    },
+    {
+      "model": "qwen2.5-coder:14b",
+      "name": "Skeptic",
+      "system": "You are debugging a Python function with a partner. Each turn, critically examine your partner's latest hypothesis: try to break it, point out what it doesn't explain, or confirm it with a concrete trace through the code. Then hand back the sharpest remaining question.",
+      "temperature": 0.6
+    }
+  ],
+  "num_ctx": 8192,
+  "temperature": 0.65,
+  "think": false,
+  "topic": "Debug this together:\n\nfrom datetime import datetime\nlog = []\ndef record(event, when=datetime.now()):\n    log.append((when, event))\n    return log\n\nEvery entry in the log ends up with the same timestamp, even when calls are minutes apart. Take turns proposing and testing hypotheses until you nail it.",
+  "turns": 8
+}

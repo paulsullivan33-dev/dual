@@ -40,5 +40,41 @@ class DuelTurnsValidationTests(unittest.TestCase):
         self.assertIn("--turns must be >= 1", str(exc.code))
 
 
+class DuelSharesTurnLoopTests(unittest.TestCase):
+    """`ollama_chat.py duel` must run the same turn loop as ollama_duel.py.
+    Regression test: the two had drifted (no reply nudge, no truncation
+    warning, no stats table in the chat version)."""
+
+    def _run_duel(self, done_reason="stop"):
+        import io
+        import ollama_duel
+        seen = []
+
+        def fake_call_chat(host, model, messages, think, options, timeout=None):
+            seen.append([m["content"] for m in messages])
+            metrics = {"gen_tokens": 10, "gen_s": 1.0,
+                       "prompt_tokens": 20, "prompt_s": 0.5, "gen_tps": 10.0}
+            return "", "canned reply", done_reason, metrics
+
+        argv = ["ollama_chat.py", "duel", "--topic", "the topic", "--turns", "2",
+                "--name-a", "Ann", "--name-b", "Bob"]
+        out = io.StringIO()
+        with mock.patch.object(sys, "argv", argv), \
+             mock.patch.object(ollama_duel, "call_chat", fake_call_chat), \
+             mock.patch.object(sys, "stdout", out):
+            ollama_chat.main()
+        return seen, out.getvalue()
+
+    def test_topic_every_turn_and_nudge_after_first(self):
+        seen, _ = self._run_duel()
+        self.assertEqual([turn[0] for turn in seen], ["the topic", "the topic"])
+        self.assertIn("Reply directly to Ann's last message", seen[1][-1])
+
+    def test_prints_stats_and_truncation_warning(self):
+        _, out = self._run_duel(done_reason="length")
+        self.assertIn("=== Model performance ===", out)
+        self.assertIn("hit the max_tokens ceiling", out)
+
+
 if __name__ == "__main__":
     unittest.main()

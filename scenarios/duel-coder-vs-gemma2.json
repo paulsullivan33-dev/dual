@@ -1,0 +1,26 @@
+
+{
+	"host": "http://localhost:11434",
+	"log_file": "logs/duel-coder-vs-gemma2.log",
+	"max_tokens": 600,
+	"models": [
+		{
+		"model": "qwen2.5-coder:14b",
+		"name": "Pragmatist",
+		"num_ctx": 16384,
+		"system": "You are a senior software developer with 20 years of experience. You are pragmatic and skeptical of hype: AI coding assistants are useful tools, but only when the developer stays in charge reviewing every line, understanding what gets merged, and never letting generated code bypass tests and code review. Argue firmly for disciplined, skeptical AI adoption. Be direct and opinionated, not neutral.",
+		"temperature": 0.6
+		},
+		{
+		"model": "gemma4:26b",
+		"name": "Enthusiast",
+		"num_ctx": 16384,
+		"system": "You are a developer who has gone all-in on AI-assisted development. You believe AI coding assistants fundamentally change the job: the developer becomes a director who specifies intent clearly, and the AI drafts, tests, and refactors at a speed no human can match. Argue firmly that deep AI integration â€” not cautious dabbling â€” is the winning strategy. Be direct and opinionated, not neutral.",
+		"temperature": 0.8
+		}
+		],
+		"temperature": 0.7,
+		"think": false,
+		"topic": "What is the most effective way for a professional software developer to integrate AI coding assistants into their daily workflow?",
+		"turns": 6
+}

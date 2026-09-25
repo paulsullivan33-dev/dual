@@ -64,10 +64,10 @@ For `chat`, `--save-json` writes the message list (`role`/`content` pairs) when 
 `ollama_duel.py` adds reusable configuration, per-participant generation settings, and optional transcript logging.
 
 ```shell
-python ollama_duel.py duel-example.json
-python ollama_duel.py ai_will_kill_us.json --turns 4 --no-think
-python ollama_duel.py salesperson_vs_customer.json --log-file negotiation.log
-python ollama_duel.py duel-example.json --topic "Should a small team adopt AI coding tools?" --turns 6
+python ollama_duel.py scenarios/duel-example.json
+python ollama_duel.py scenarios/ai_will_kill_us.json --turns 4 --no-think
+python ollama_duel.py scenarios/salesperson_vs_customer.json --log-file logs/negotiation.log
+python ollama_duel.py scenarios/duel-example.json --topic "Should a small team adopt AI coding tools?" --turns 6
 ```
 
 Before running a supplied scenario, inspect its `models` entries and pull those exact models, or replace them with models available on your server. For example, `duel-example.json` uses both `qwen3:4b` and `qwen3:8b`.
@@ -84,7 +84,7 @@ Save the following as `my-duel.json`, then run `python ollama_duel.py my-duel.js
   "think": false,
   "max_tokens": 600,
   "temperature": 0.7,
-  "log_file": "my-duel.log",
+  "log_file": "logs/my-duel.log",
   "models": [
     {
       "model": "qwen3:4b",
@@ -108,7 +108,7 @@ The JSON must be an object with exactly two entries in `models`. Each entry requ
 | `host` | Top level | Server URL; defaults to `http://localhost:11434` |
 | `topic` | Top level | Opening prompt for the first participant |
 | `turns` | Top level | Total replies; defaults to 6; must be a positive integer |
-| `log_file` | Top level | Optional path for the transcript; a date/time stamp is prepended to the file name so each run gets its own log |
+| `log_file` | Top level | Optional path for the transcript; a date/time stamp is prepended to the file name so each run gets its own log. The included scenarios write to `logs/`; missing folders are created |
 | `save_json` | Top level | Optional path to write the structured transcript (`speaker`/`model`/`text` per reply) as JSON when the duel ends, including after an early stop |
 | `timeout` | Top level | Per-request timeout in seconds; defaults to 1200 |
 | `display` | Top level | Show live duel stats on the Arduino Uno Q's built-in 8x13 LED matrix; defaults to false. Needs `python3-smbus` on the Uno Q. The script runs headless with a warning anywhere the matrix is unreachable, so this is safe to leave on in shared configs |
@@ -126,6 +126,8 @@ Invalid settings (an unrecognized key, wrong type, a `turns`/`max_tokens`/`num_c
 If Ollama becomes unreachable or returns an error mid-duel, the duel stops the way Ctrl-C does: it prints the error, keeps whatever replies were already generated, and still writes the log file's end marker and `save_json` transcript.
 
 ### Included scenarios
+
+These live in the `scenarios/` folder.
 
 | File | Scenario |
 | --- | --- |
@@ -171,7 +173,7 @@ Requests are sequential and non-streaming: a complete reply appears after the se
 
 The scripts remove inline `<think>` blocks from reply text. When thinking is enabled, they separately display the server's `thinking` field when available. Thinking behavior depends on the model and server, and its token use can reduce the budget available for the visible reply.
 
-When `log_file` is set, `ollama_duel.py` mirrors its standard output to a timestamped copy of that file (e.g. `"my-duel.log"` becomes `"20260925-084500-my-duel.log"`) while also printing it to the console, so each run gets its own log. Logs include session start markers and, on normal completion or a handled Ctrl+C, session end markers. Progress messages and the final reply count go to standard error and are not mirrored. Relative log paths are resolved from the directory where you run the command, and parent directories must already exist. Omit `log_file` to disable logging. Saved logs are not automatically loaded into a later session.
+When `log_file` is set, `ollama_duel.py` mirrors its standard output to a timestamped copy of that file (e.g. `"logs/my-duel.log"` becomes `"logs/20260925-084500-my-duel.log"`) while also printing it to the console, so each run gets its own log. Logs include session start markers and, on normal completion or a handled Ctrl+C, session end markers. Progress messages and the final reply count go to standard error and are not mirrored. Relative log paths are resolved from the directory where you run the command, and any missing folders in the path are created. Omit `log_file` to disable logging. Saved logs are not automatically loaded into a later session.
 
 The programming scenario produces code as conversation text. Neither script executes, tests, or automatically saves generated code as a Python file.
 

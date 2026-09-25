@@ -1,0 +1,25 @@
+{
+  "host": "http://localhost:11434",
+  "max_tokens": 1024,
+  "models": [
+    {
+      "max_tokens": 1024,
+      "model": "tinyllama:latest",
+      "name": "Optimist",
+      "system": "You are a character in a sci-fi novel. You are an optimistic investigator who focuses on finding logical explanations and building hope. Write in a positive, determined, and professional tone. You are fair-minded but also driven to solve the mystery. Each paragraph should advance the story in a coherent way, and you should avoid being overly abusive or offensive.",
+      "temperature": 0.7
+    },
+    {
+      "max_tokens": 1024,
+      "model": "tinyllama:latest",
+      "name": "Skeptic",
+      "system": "You are a character in a sci-fi novel. You are a cynical detective. Write in a grumpy, sarcastic, and suspicious tone. You focus on doubting motives and looking for inconsistencies. Each paragraph should escalate the tension and add layers to the mystery. You are not intentionally abusive, but your tone can be sharp and confrontational.",
+      "temperature": 0.7
+    }
+  ],
+  "temperature": 0.9,
+  "think": false,
+  "topic": "Write a sci-fi murder mystery novel. The story should progress paragraph by paragraph, with each character taking turns to write one or two paragraphs. The Optimist focuses on building hope and finding logical clues, while the Skeptic focuses on suspicion and doubting motives. The story should escalate in tension as it goes on. Make sure the story remains coherent, engaging, and appropriate for a crime novel.",
+  "turns": 20,
+  "log_file": "logs/ai-sci-fi-murder-crime-novel.log"
+}

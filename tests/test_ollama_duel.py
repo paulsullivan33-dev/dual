@@ -367,7 +367,8 @@ class ScenarioFilesValidateTests(unittest.TestCase):
     these are the files new users copy and run first."""
 
     def _scenario_paths(self):
-        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        root = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "scenarios")
         return sorted(
             os.path.join(root, name) for name in os.listdir(root) if name.endswith(".json")
         )
@@ -389,6 +390,20 @@ class ScenarioFilesValidateTests(unittest.TestCase):
                 self.assertTrue(has_max_tokens, "missing max_tokens (top level or per model)")
                 for m in cfg["models"]:
                     self.assertTrue(m.get("system"), f'model "{m["name"]}" has no system prompt')
+                # Keep run logs out of the repo root.
+                if cfg.get("log_file"):
+                    self.assertTrue(cfg["log_file"].startswith("logs/"),
+                                    f'log_file {cfg["log_file"]!r} should be under logs/')
+
+
+class LogDirectoryTests(unittest.TestCase):
+    def test_missing_log_directory_is_created(self):
+        with tempfile.TemporaryDirectory() as d:
+            log_file = os.path.join(d, "new", "nested", "duel.log")
+            run_duel(minimal_config(turns=1, log_file=log_file))
+            logs = os.listdir(os.path.join(d, "new", "nested"))
+            self.assertEqual(len(logs), 1)
+            self.assertTrue(logs[0].endswith("-duel.log"))
 
 
 class FormatDuelStatsTests(unittest.TestCase):

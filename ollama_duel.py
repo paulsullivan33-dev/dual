@@ -261,6 +261,92 @@ def _matrix(matrix, method, *args):
     return matrix
 
 
+def build_turn_messages(participants, i, topic, transcript):
+    """Build the message list for participant `i`'s next turn.
+
+    Seen from that speaker's point of view: their own past lines are
+    "assistant", the other's are "user". The topic always opens the
+    conversation, so both speakers see it on every turn -- otherwise the
+    second speaker never sees it at all and the first loses it after turn 1.
+    After the first turn, the speaker's turn_prompt (see DEFAULT_TURN_PROMPT)
+    closes the list; an empty turn_prompt disables it.
+    """
+    me = participants[i]
+    messages = []
+    if me["system"]:
+        messages.append({"role": "system", "content": me["system"]})
+    messages.append({"role": "user", "content": topic})
+    for spk, text in transcript:
+        role = "assistant" if spk == i else "user"
+        messages.append({"role": role, "content": text})
+    if transcript and me["turn_prompt"]:
+        messages.append({
+            "role": "user",
+            "content": render_turn_prompt(me["turn_prompt"], me["name"],
+                                          participants[1 - i]["name"]),
+        })
+    return messages
+
+
+def print_duel_header(topic, participants, turns):
+    a, b = participants
+    print(wrap_text(f"Topic: {topic}", subsequent_indent=" " * len("Topic: ")))
+    print(f"[{a['model']} as {a['name']}] vs [{b['model']} as {b['name']}] -- {turns} turns\n")
+
+
+def run_duel(host, topic, turns, participants, timeout, transcript, matrix=None):
+    """Run the duel's turn loop, printing each reply as it arrives.
+
+    Each participant is a dict with name, model, system, think, options and
+    turn_prompt. Replies are appended to the caller's `transcript` list as
+    (speaker_index, text) so that whatever was generated survives an early
+    stop. Ctrl-C or an OllamaError stops the loop gracefully.
+
+    Returns (model_stats, matrix): per-model stats for format_duel_stats,
+    and the LED matrix, or None if there is none or it failed mid-duel.
+    """
+    model_stats = {}  # model -> {turns, gen_tokens, gen_s, prompt_tokens, prompt_s, truncated}
+    try:
+        for turn in range(turns):
+            i = turn % 2
+            me = participants[i]
+            messages = build_turn_messages(participants, i, topic, transcript)
+
+            print("  (waiting for reply...)", file=sys.stderr, flush=True)
+            matrix = _matrix(matrix, "progress", turn, turns)
+            thinking, reply, done_reason, metrics = call_chat(host, me["model"], messages,
+                                                             me["think"], me["options"],
+                                                             timeout=timeout)
+            # Ollama's measured generation speed (exact token count over
+            # generation time, excluding model load and prompt reading).
+            if matrix is not None:
+                matrix = _matrix(matrix, "show_text",
+                                 f"{metrics['gen_tps']:.1f}T/S")
+            transcript.append((i, reply))
+            stats = model_stats.setdefault(me["model"], {
+                "turns": 0, "gen_tokens": 0, "gen_s": 0.0,
+                "prompt_tokens": 0, "prompt_s": 0.0, "truncated": 0})
+            stats["turns"] += 1
+            stats["gen_tokens"] += metrics["gen_tokens"]
+            stats["gen_s"] += metrics["gen_s"]
+            stats["prompt_tokens"] += metrics["prompt_tokens"]
+            stats["prompt_s"] += metrics["prompt_s"]
+            if done_reason == "length":
+                stats["truncated"] += 1
+            print_turn(f"[{me['model']} as {me['name']}]", turn + 1,
+                       thinking, reply, show_thinking=me["think"])
+            if done_reason == "length":
+                print(f"--- WARNING: reply hit the max_tokens ceiling "
+                      f"({me['options']['num_predict']} tokens) and was truncated; "
+                      f"consider raising max_tokens ---")
+                print()
+    except KeyboardInterrupt:
+        print("\nStopped.", file=sys.stderr)
+    except OllamaError as e:
+        print(f"\n{e}\nStopped.", file=sys.stderr)
+    return model_stats, matrix
+
+
 def main():
     ap = argparse.ArgumentParser(description="Two Ollama models converse, configured from a JSON file.")
     ap.add_argument("config", help="path to JSON config file")
@@ -306,6 +392,10 @@ def main():
     if log_path:
         log_path = timestamped_log_path(log_path)
         try:
+            # Scenarios log to logs/...; create the folder on first use.
+            log_dir = os.path.dirname(log_path)
+            if log_dir:
+                os.makedirs(log_dir, exist_ok=True)
             log_fh = open(log_path, "w", encoding="utf-8", buffering=1)
         except OSError as e:
             sys.exit(f"Cannot open log file {log_path}: {e}")
@@ -362,70 +452,12 @@ def main():
                                           DEFAULT_TURN_PROMPT),
         })
 
-    a, b = participants
-    print(wrap_text(f"Topic: {topic}", subsequent_indent=" " * len("Topic: ")))
-    print(f"[{a['model']} as {a['name']}] vs [{b['model']} as {b['name']}] -- {turns} turns\n")
+    print_duel_header(topic, participants, turns)
 
     transcript = []  # list of (speaker_index, text)
-    model_stats = {}  # model -> {turns, gen_tokens, gen_s, prompt_tokens, prompt_s, truncated}
     try:
-        try:
-            for turn in range(turns):
-                i = turn % 2
-                me = participants[i]
-                # Rebuild the message list from this speaker's point of view:
-                # their own past lines are "assistant", the other's are "user".
-                # The topic always opens the conversation, so both speakers
-                # see it on every turn -- otherwise the second speaker never
-                # sees it at all and the first loses it after turn 1.
-                messages = []
-                if me["system"]:
-                    messages.append({"role": "system", "content": me["system"]})
-                messages.append({"role": "user", "content": topic})
-                for spk, text in transcript:
-                    role = "assistant" if spk == i else "user"
-                    messages.append({"role": role, "content": text})
-                if transcript and me["turn_prompt"]:
-                    # See DEFAULT_TURN_PROMPT; an empty turn_prompt disables it.
-                    messages.append({
-                        "role": "user",
-                        "content": render_turn_prompt(
-                            me["turn_prompt"], me["name"],
-                            participants[1 - i]["name"]),
-                    })
-
-                print("  (waiting for reply...)", file=sys.stderr, flush=True)
-                matrix = _matrix(matrix, "progress", turn, turns)
-                thinking, reply, done_reason, metrics = call_chat(host, me["model"], messages,
-                                                                 me["think"], me["options"],
-                                                                 timeout=timeout)
-                # Ollama's measured generation speed (exact token count over
-                # generation time, excluding model load and prompt reading).
-                if matrix is not None:
-                    matrix = _matrix(matrix, "show_text",
-                                     f"{metrics['gen_tps']:.1f}T/S")
-                transcript.append((i, reply))
-                stats = model_stats.setdefault(me["model"], {
-                    "turns": 0, "gen_tokens": 0, "gen_s": 0.0,
-                    "prompt_tokens": 0, "prompt_s": 0.0, "truncated": 0})
-                stats["turns"] += 1
-                stats["gen_tokens"] += metrics["gen_tokens"]
-                stats["gen_s"] += metrics["gen_s"]
-                stats["prompt_tokens"] += metrics["prompt_tokens"]
-                stats["prompt_s"] += metrics["prompt_s"]
-                if done_reason == "length":
-                    stats["truncated"] += 1
-                print_turn(f"[{me['model']} as {me['name']}]", turn + 1,
-                           thinking, reply, show_thinking=me["think"])
-                if done_reason == "length":
-                    print(f"--- WARNING: reply hit the max_tokens ceiling "
-                          f"({me['options']['num_predict']} tokens) and was truncated; "
-                          f"consider raising max_tokens ---")
-                    print()
-        except KeyboardInterrupt:
-            print("\nStopped.", file=sys.stderr)
-        except OllamaError as e:
-            print(f"\n{e}\nStopped.", file=sys.stderr)
+        model_stats, matrix = run_duel(host, topic, turns, participants, timeout,
+                                       transcript, matrix=matrix)
         print(f"Done: {len(transcript)} replies.", file=sys.stderr)
         if log_fh is not None:
             print(f"Logging to {log_path}", file=sys.stderr)
