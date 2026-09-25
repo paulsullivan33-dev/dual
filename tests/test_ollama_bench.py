@@ -12,11 +12,11 @@ import urllib.error
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import ollama_bench
+from ollama_common import compute_metrics
 from ollama_bench import (
     BenchError,
     bench_model,
     call_generate,
-    compute_metrics,
     format_comparison,
     summarize,
 )
