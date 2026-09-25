@@ -52,20 +52,30 @@ class CallChatTests(unittest.TestCase):
         return cm
 
     def test_success(self):
-        payload = {"message": {"content": "<think>hmm</think>hi", "thinking": "hmm"}}
+        payload = {"message": {"content": "<think>hmm</think>hi", "thinking": "hmm"},
+                   "done_reason": "stop"}
         with mock.patch("urllib.request.urlopen", return_value=self._mock_response(payload)):
-            thinking, reply = oc.call_chat(
+            thinking, reply, done_reason = oc.call_chat(
                 "http://x", "m", [{"role": "user", "content": "hi"}],
                 True, {"num_predict": 10})
         self.assertEqual(thinking, "hmm")
         self.assertEqual(reply, "hi")
+        self.assertEqual(done_reason, "stop")
 
     def test_missing_thinking_field_defaults_empty(self):
         payload = {"message": {"content": "hi"}}
         with mock.patch("urllib.request.urlopen", return_value=self._mock_response(payload)):
-            thinking, reply = oc.call_chat("http://x", "m", [], False, {})
+            thinking, reply, done_reason = oc.call_chat("http://x", "m", [], False, {})
         self.assertEqual(thinking, "")
         self.assertEqual(reply, "hi")
+        self.assertEqual(done_reason, "")
+
+    def test_done_reason_length_signals_truncation(self):
+        payload = {"message": {"content": "hi"}, "done_reason": "length"}
+        with mock.patch("urllib.request.urlopen", return_value=self._mock_response(payload)):
+            _, _, done_reason = oc.call_chat("http://x", "m", [], False,
+                                             {"num_predict": 10})
+        self.assertEqual(done_reason, "length")
 
     def test_http_error_raises_ollama_error(self):
         err = urllib.error.HTTPError(
