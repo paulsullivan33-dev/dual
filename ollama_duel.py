@@ -330,6 +330,22 @@ def main():
                     messages.append({"role": role, "content": text})
                 if not transcript:
                     messages.append({"role": "user", "content": topic})
+                else:
+                    # Nudge the model to answer the other participant instead
+                    # of starting a fresh parallel monologue. Without this,
+                    # small models tend to ignore the transcript and each emit
+                    # their own standalone continuation of the topic.
+                    other_name = participants[1 - i]["name"]
+                    messages.append({
+                        "role": "user",
+                        "content": (
+                            f"Reply directly to {other_name}'s last message, "
+                            f"staying in character as {me['name']}. Keep it to "
+                            f"a few short paragraphs. Do not repeat or "
+                            f"summarize what has already been said; move the "
+                            f"exchange forward."
+                        ),
+                    })
 
                 print("  (waiting for reply...)", file=sys.stderr, flush=True)
                 matrix = _matrix(matrix, "progress", turn, turns)
