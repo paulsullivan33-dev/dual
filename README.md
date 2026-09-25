@@ -138,7 +138,7 @@ If Ollama becomes unreachable or returns an error mid-duel, the duel stops the w
 | `factorial.json` | Two programmers take turns improving a single-file Python factorial program |
 | `murder_crime_novel_uncensored.json` | An abusive optimist and skeptic build a murder/crime novel, using an uncensored model |
 | `ai_driven_crime_novel.json` | An optimistic investigator and cynical detective build a murder mystery |
-| `slow_crime.json`, `slow_crime_v2.json` | A long (20-turn) sci-fi murder mystery written paragraph by paragraph on `tinyllama`, for small machines |
+| `slow_crime.json` | A long (20-turn) sci-fi murder mystery written paragraph by paragraph on `tinyllama`, for small machines |
 | `slow_crime_v3.json` | The same 20-turn mystery on `qwen3:8b`, with `repeat_penalty` set to curb repetitive prose |
 | `salesperson_vs_customer.json` | A salesperson and customer negotiate a car purchase |
 | `devops_interview.json` | A hiring manager interviews a DevOps candidate, one question at a time |
