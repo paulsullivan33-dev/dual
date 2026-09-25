@@ -236,5 +236,20 @@ class FormatDuelStatsTests(unittest.TestCase):
         self.assertEqual(ollama_duel.format_duel_stats({}), "")
 
 
+class TimestampedLogPathTests(unittest.TestCase):
+    def test_prepends_datetime_stamp_to_base_name(self):
+        path = ollama_duel.timestamped_log_path("duel.log")
+        self.assertRegex(path, r"^\d{8}-\d{6}-duel\.log$")
+
+    def test_keeps_directory(self):
+        path = ollama_duel.timestamped_log_path(os.path.join("logs", "duel.log"))
+        self.assertRegex(path, r"^logs[/\\]\d{8}-\d{6}-duel\.log$")
+
+    def test_stamp_matches_today(self):
+        from datetime import datetime
+        path = ollama_duel.timestamped_log_path("duel.log")
+        self.assertTrue(path.startswith(datetime.now().strftime("%Y%m%d-")))
+
+
 if __name__ == "__main__":
     unittest.main()
