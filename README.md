@@ -185,6 +185,26 @@ tiny one. The 1200-second default timeout is there to cover slow
 generations. For an always-on low-power box, small models chugging away
 unattended beat fast models competing for cycles on your main machine.
 
+## Benchmarking model speed
+
+`ollama_bench.py` measures tokens/second for one or more models so you can
+compare them objectively:
+
+```shell
+python ollama_bench.py qwen3:8b
+python ollama_bench.py qwen3:8b qwen2.5-coder:14b --iterations 5
+```
+
+Each model gets one warmup run (loads the model; not counted), then the
+requested number of timed runs of a fixed prompt. It reports
+prompt-processing speed, generation speed, and total time per run —
+averaged across runs — then prints a comparison table sorted by generation
+speed. Ollama reports exact token counts and timings, so the figures are
+measured, not estimated. Thinking is forced off so thinking and
+non-thinking models compare fairly. Useful flags: `--iterations`/`-n`,
+`--max-tokens`, `--num-ctx`, `--prompt`, `--host`, `--timeout`,
+`--no-warmup`.
+
 ## Troubleshooting
 
 - **Cannot reach Ollama:** check that the server is running and `--host` points to it.
