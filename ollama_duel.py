@@ -311,7 +311,7 @@ def main():
         })
 
     a, b = participants
-    print(f"Topic: {topic}")
+    print(wrap_text(f"Topic: {topic}", subsequent_indent=" " * len("Topic: ")))
     print(f"[{a['model']} as {a['name']}] vs [{b['model']} as {b['name']}] -- {turns} turns\n")
 
     transcript = []  # list of (speaker_index, text)
