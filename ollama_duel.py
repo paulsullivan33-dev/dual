@@ -281,14 +281,20 @@ def main():
                 print("  (waiting for reply...)", file=sys.stderr, flush=True)
                 matrix = _matrix(matrix, "progress", turn, turns)
                 t0 = time.monotonic()
-                thinking, reply = call_chat(host, me["model"], messages,
-                                            me["think"], me["options"], timeout=timeout)
+                thinking, reply, done_reason = call_chat(host, me["model"], messages,
+                                                           me["think"], me["options"],
+                                                           timeout=timeout)
                 dt = max(0.001, time.monotonic() - t0)
                 tps = max(1, len(reply) // 4) / dt  # ~4 chars per token
                 matrix = _matrix(matrix, "show_text", f"{tps:.1f}T/S")
                 transcript.append((i, reply))
                 print_turn(f"[{me['model']} as {me['name']}]", turn + 1,
                            thinking, reply, show_thinking=me["think"])
+                if done_reason == "length":
+                    print(f"--- WARNING: reply hit the max_tokens ceiling "
+                          f"({me['options']['num_predict']} tokens) and was truncated; "
+                          f"consider raising max_tokens ---")
+                    print()
         except KeyboardInterrupt:
             print("\nStopped.", file=sys.stderr)
         except OllamaError as e:
