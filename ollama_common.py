@@ -37,10 +37,12 @@ def setup_utf8_stdout():
 WRAP_WIDTH = 75
 
 
-def wrap_text(text, width=WRAP_WIDTH):
+def wrap_text(text, width=WRAP_WIDTH, initial_indent="", subsequent_indent=""):
     """Word-wrap text for console display: break at spaces so words are never
     split across lines (a single over-long word keeps its own line rather
-    than being cut). Blank lines and existing paragraph breaks are kept."""
+    than being cut). Blank lines and existing paragraph breaks are kept.
+    initial_indent/subsequent_indent are passed through to textwrap, e.g. to
+    align wrapped continuation lines under a label."""
     lines = []
     for para in text.split("\n"):
         if not para.strip():
@@ -48,6 +50,8 @@ def wrap_text(text, width=WRAP_WIDTH):
         else:
             lines.extend(textwrap.wrap(
                 para, width=width,
+                initial_indent=initial_indent,
+                subsequent_indent=subsequent_indent,
                 break_long_words=False, break_on_hyphens=False))
     return "\n".join(lines)
 
