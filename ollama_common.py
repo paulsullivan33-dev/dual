@@ -101,8 +101,9 @@ def call_chat(host, model, messages, think, options, timeout=DEFAULT_TIMEOUT):
     truncated. metrics is the compute_metrics() dict for this turn
     (token counts and tokens/sec figures).
 
-    Raises OllamaError on an unreachable host or an error response; never
-    calls sys.exit so a caller mid-conversation can decide how to stop.
+    Raises OllamaError on an unreachable host, a timeout waiting for the
+    server, or an error response; never calls sys.exit so a caller
+    mid-conversation can decide how to stop.
     """
     payload = {
         "model": model,
@@ -124,6 +125,13 @@ def call_chat(host, model, messages, think, options, timeout=DEFAULT_TIMEOUT):
         body = e.read().decode(errors="replace")
         raise OllamaError(
             f"HTTP {e.code} from Ollama: {body}\nHint: did you run `ollama pull {model}`?"
+        ) from e
+    except TimeoutError as e:
+        # socket.timeout is TimeoutError since 3.3; urlopen can let it escape
+        # unwrapped when the server accepts the request but never answers.
+        raise OllamaError(
+            f"Ollama at {host} timed out after {timeout:g}s waiting for {model}.\n"
+            f"The server may be wedged (try `ollama ps`, restart `ollama serve`)."
         ) from e
     except urllib.error.URLError as e:
         raise OllamaError(
