@@ -30,6 +30,16 @@ class WrapTextTests(unittest.TestCase):
     def test_short_text_unchanged(self):
         self.assertEqual(oc.wrap_text("hello"), "hello")
 
+    def test_subsequent_indent_aligns_continuations(self):
+        out = oc.wrap_text("Topic: " + "word " * 30,
+                           subsequent_indent=" " * 7)
+        lines = out.split("\n")
+        self.assertTrue(lines[0].startswith("Topic: "))
+        for line in lines:
+            self.assertLessEqual(len(line), 75)
+        for line in lines[1:]:
+            self.assertTrue(line.startswith(" " * 7))
+
 
 class StripThinkTagsTests(unittest.TestCase):
     def test_no_tags(self):
