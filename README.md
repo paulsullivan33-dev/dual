@@ -50,6 +50,7 @@ Common options for `ollama_chat.py` go after the `chat` or `duel` subcommand:
 | `--think` | Request thinking and display the separate thinking field when returned | Off |
 | `--max-tokens` | Per-response generation budget | 300, or 2048 with `--think` |
 | `--timeout` | Per-request timeout, in seconds | 1200 |
+| `--display` / `--no-display` | Show live duel stats (progress bar, tokens/sec) on the Arduino Uno Q's built-in 8x13 LED matrix | Off |
 | `--save-json` | Write the finished transcript to this JSON file | Off |
 | `--temperature` | Sampling temperature passed to Ollama | Server default |
 | `--num-ctx` | Context window size passed to Ollama | Server default |
@@ -110,6 +111,7 @@ The JSON must be an object with exactly two entries in `models`. Each entry requ
 | `log_file` | Top level | Optional path for an appended transcript |
 | `save_json` | Top level | Optional path to write the structured transcript (`speaker`/`model`/`text` per reply) as JSON when the duel ends, including after an early stop |
 | `timeout` | Top level | Per-request timeout in seconds; defaults to 1200 |
+| `display` | Top level | Show live duel stats on the Arduino Uno Q's built-in 8x13 LED matrix; defaults to false. Needs `python3-smbus` on the Uno Q. The script runs headless with a warning anywhere the matrix is unreachable, so this is safe to leave on in shared configs |
 | `think` | Top level or model entry | Request and display thinking; defaults to false |
 | `max_tokens` | Top level or model entry | Passed as Ollama's `num_predict`; defaults to 300, or 2048 when thinking is enabled |
 | `temperature` | Top level or model entry | Passed to Ollama if specified |
