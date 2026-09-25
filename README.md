@@ -168,6 +168,23 @@ When `log_file` is set, `ollama_duel.py` appends its standard output to that fil
 
 The programming scenario produces code as conversation text. Neither script executes, tests, or automatically saves generated code as a Python file.
 
+## Choosing models
+
+Match the model size to the machine running Ollama. Any model the server
+has pulled works — put its exact name in the scenario's `"model"` field.
+
+| Machine class | Example models | Notes |
+|---|---|---|
+| Memory-constrained single-board computers (a few GB of RAM, weak CPU) | `qwen3:0.6b`, `qwen3:1.7b`, `smollm2:1.7b`, `tinyllama:1.1b` | Expect a few tokens per second. Keep `turns` low and thinking budgets small; turn thinking off if replies get too slow. |
+| Older CPU-only desktops | `qwen3:4b`, `qwen3:8b`, `llama3.1:8b` | 8B models are the sweet spot for CPU-only machines with 12GB+ of RAM. |
+| Modern machines with ample RAM or a GPU | `qwen2.5-coder:14b`, `qwen3:14b`, larger 20B–30B models | Best duel quality. Note: `qwen2.5-coder:14b` rejects thinking-enabled requests, so use `"think": false` with it; the Qwen3 family supports thinking. |
+
+On a slow machine, prefer shorter `max_tokens` values and fewer turns — a
+duel that takes minutes on a fast machine can take an hour or more on a
+tiny one. The 1200-second default timeout is there to cover slow
+generations. For an always-on low-power box, small models chugging away
+unattended beat fast models competing for cycles on your main machine.
+
 ## Troubleshooting
 
 - **Cannot reach Ollama:** check that the server is running and `--host` points to it.
