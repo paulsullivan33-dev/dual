@@ -41,9 +41,10 @@ from ollama_common import (
 
 TOP_LEVEL_KEYS = {
     "host", "topic", "turns", "think", "max_tokens", "temperature",
-    "num_ctx", "log_file", "save_json", "timeout", "display", "models",
+    "num_ctx", "repeat_penalty", "log_file", "save_json", "timeout", "display", "models",
 }
-MODEL_KEYS = {"model", "name", "system", "think", "max_tokens", "temperature", "num_ctx"}
+MODEL_KEYS = {"model", "name", "system", "think", "max_tokens", "temperature",
+              "num_ctx", "repeat_penalty"}
 
 
 class Tee:
@@ -120,6 +121,7 @@ def load_config(path):
     _validate_field(cfg, "max_tokens", "int", "top level", minimum=1)
     _validate_field(cfg, "temperature", "number", "top level", minimum=0)
     _validate_field(cfg, "num_ctx", "int", "top level", minimum=1)
+    _validate_field(cfg, "repeat_penalty", "number", "top level", minimum=1)
     _validate_field(cfg, "log_file", "str", "top level")
     _validate_field(cfg, "save_json", "str", "top level")
     _validate_field(cfg, "timeout", "number", "top level", minimum=1)
@@ -130,6 +132,7 @@ def load_config(path):
         _validate_field(m, "max_tokens", "int", label, minimum=1)
         _validate_field(m, "temperature", "number", label, minimum=0)
         _validate_field(m, "num_ctx", "int", label, minimum=1)
+        _validate_field(m, "repeat_penalty", "number", label, minimum=1)
     return cfg
 
 
@@ -297,11 +300,15 @@ def main():
         )
         temperature = first_not_none(entry.get("temperature"), cfg.get("temperature"))
         num_ctx = first_not_none(entry.get("num_ctx"), cfg.get("num_ctx"))
+        repeat_penalty = first_not_none(entry.get("repeat_penalty"),
+                                        cfg.get("repeat_penalty"))
         options = {"num_predict": max_tokens}
         if num_ctx is not None:
             options["num_ctx"] = num_ctx
         if temperature is not None:
             options["temperature"] = temperature
+        if repeat_penalty is not None:
+            options["repeat_penalty"] = repeat_penalty
         participants.append({
             "name": entry["name"],
             "model": entry["model"],
