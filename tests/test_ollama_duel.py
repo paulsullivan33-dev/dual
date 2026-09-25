@@ -207,5 +207,34 @@ class ScenarioFilesValidateTests(unittest.TestCase):
                     self.assertTrue(m.get("system"), f'model "{m["name"]}" has no system prompt')
 
 
+class FormatDuelStatsTests(unittest.TestCase):
+    def _stats(self):
+        return {
+            "fast": {"turns": 2, "gen_tokens": 200, "gen_s": 2.0,
+                     "prompt_tokens": 80, "prompt_s": 0.2, "truncated": 0},
+            "slow": {"turns": 2, "gen_tokens": 100, "gen_s": 10.0,
+                     "prompt_tokens": 80, "prompt_s": 0.4, "truncated": 1},
+        }
+
+    def test_table_shows_weighted_tokens_per_second(self):
+        table = ollama_duel.format_duel_stats(self._stats())
+        self.assertIn("Model", table)
+        self.assertIn("Gen tok/s", table)
+        # 200 tokens / 2.0 s = 100.0 tok/s; 100 / 10.0 = 10.0 tok/s
+        self.assertIn("100.0", table)
+        self.assertIn("10.0", table)
+
+    def test_table_shows_turns_tokens_and_truncated(self):
+        table = ollama_duel.format_duel_stats(self._stats())
+        self.assertIn("fast", table)
+        self.assertIn("slow", table)
+        lines = table.splitlines()
+        slow_line = next(l for l in lines if "slow" in l)
+        self.assertIn("1", slow_line.split()[-1])  # truncated count
+
+    def test_empty_stats_returns_empty_string(self):
+        self.assertEqual(ollama_duel.format_duel_stats({}), "")
+
+
 if __name__ == "__main__":
     unittest.main()
