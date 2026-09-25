@@ -7,7 +7,8 @@ Usage:
     python3 ollama_duel.py duel.json --turns 10 --topic "A different question"
 
 Globals in the JSON (host, topic, turns, think, max_tokens, temperature,
-num_ctx, log_file, save_json, timeout) act as defaults; anything set inside
+num_ctx, log_file, save_json, timeout, display) act as defaults; anything set
+inside
 a "models" entry overrides the global for that model only (think,
 max_tokens, temperature, num_ctx only -- the rest are duel-wide). "models"
 must contain exactly 2 entries.
@@ -20,6 +21,7 @@ the duel ends, including after a stopped-early error or Ctrl-C.
 import argparse
 import json
 import sys
+import time
 from datetime import datetime
 
 from ollama_common import (
@@ -35,7 +37,7 @@ from ollama_common import (
 
 TOP_LEVEL_KEYS = {
     "host", "topic", "turns", "think", "max_tokens", "temperature",
-    "num_ctx", "log_file", "save_json", "timeout", "models",
+    "num_ctx", "log_file", "save_json", "timeout", "display", "models",
 }
 MODEL_KEYS = {"model", "name", "system", "think", "max_tokens", "temperature", "num_ctx"}
 
@@ -117,6 +119,7 @@ def load_config(path):
     _validate_field(cfg, "log_file", "str", "top level")
     _validate_field(cfg, "save_json", "str", "top level")
     _validate_field(cfg, "timeout", "number", "top level", minimum=1)
+    _validate_field(cfg, "display", "bool", "top level")
     for m in models:
         label = f'model "{m["name"]}"'
         _validate_field(m, "think", "bool", label)
@@ -152,6 +155,20 @@ def print_turn(label, turn_no, thinking, reply, show_thinking):
     print()
 
 
+def _matrix(matrix, method, *args):
+    """Best-effort LED matrix update. Returns the matrix, or None if the
+    display died mid-duel (the duel itself continues either way)."""
+    if matrix is None:
+        return None
+    try:
+        getattr(matrix, method)(*args)
+    except Exception as e:  # DisplayUnavailable or anything unexpected
+        print(f"LED matrix lost ({e}); continuing without display.",
+              file=sys.stderr)
+        return None
+    return matrix
+
+
 def main():
     ap = argparse.ArgumentParser(description="Two Ollama models converse, configured from a JSON file.")
     ap.add_argument("config", help="path to JSON config file")
@@ -168,6 +185,11 @@ def main():
                     help="override the config save_json (write the transcript to this JSON file)")
     ap.add_argument("--timeout", type=float, default=None,
                     help="override the config timeout, in seconds")
+    ap.add_argument("--display", dest="display", action="store_true", default=None,
+                    help="show live duel stats on the Arduino Uno Q's built-in "
+                         "8x13 LED matrix (needs python3-smbus on the Uno Q)")
+    ap.add_argument("--no-display", dest="display", action="store_false",
+                    help="force the LED matrix display off")
     args = ap.parse_args()
 
     setup_utf8_stdout()
@@ -182,6 +204,7 @@ def main():
         sys.exit(f'"turns" must be >= 1, got {turns}.')
     timeout = first_not_none(args.timeout, cfg.get("timeout"), DEFAULT_TIMEOUT)
     save_json_path = first_not_none(args.save_json, cfg.get("save_json"))
+    want_display = first_not_none(args.display, cfg.get("display"), False)
 
     # Optional log file: everything printed to stdout is mirrored there.
     # (stderr progress lines like "(waiting for reply...)" stay console-only.)
@@ -195,6 +218,21 @@ def main():
         stamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         log_fh.write(f"\n--- session started {stamp} ---\n")
         sys.stdout = Tee(sys.stdout, log_fh)
+
+    # Optional LED matrix display (Arduino Uno Q's built-in 8x13 matrix).
+    # Strictly opt-in and best-effort: any failure warns and the duel runs
+    # headless, so this never breaks the script on other machines.
+    matrix = None
+    if want_display:
+        try:
+            from unoq_matrix import DisplayUnavailable, UnoQMatrix
+            matrix = UnoQMatrix()
+            matrix.show_text("DUEL")
+        except DisplayUnavailable as e:
+            print(f"LED matrix unavailable ({e}); continuing without display.",
+                  file=sys.stderr)
+            matrix = None
+
 
     # Resolve per-model settings: model entry wins, then globals, then default.
     participants = []
@@ -241,8 +279,13 @@ def main():
                     messages.append({"role": "user", "content": topic})
 
                 print("  (waiting for reply...)", file=sys.stderr, flush=True)
+                matrix = _matrix(matrix, "progress", turn, turns)
+                t0 = time.monotonic()
                 thinking, reply = call_chat(host, me["model"], messages,
                                             me["think"], me["options"], timeout=timeout)
+                dt = max(0.001, time.monotonic() - t0)
+                tps = max(1, len(reply) // 4) / dt  # ~4 chars per token
+                matrix = _matrix(matrix, "show_text", f"{tps:.1f}T/S")
                 transcript.append((i, reply))
                 print_turn(f"[{me['model']} as {me['name']}]", turn + 1,
                            thinking, reply, show_thinking=me["think"])
@@ -254,6 +297,7 @@ def main():
     finally:
         # Always write the session-end marker / transcript, even if the
         # duel stopped early on an Ollama error.
+        matrix = _matrix(matrix, "show_text", "DONE")
         if log_fh is not None:
             sys.stdout = sys.stdout.streams[0]  # unwrap the Tee
             stamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
