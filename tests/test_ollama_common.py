@@ -53,28 +53,32 @@ class CallChatTests(unittest.TestCase):
 
     def test_success(self):
         payload = {"message": {"content": "<think>hmm</think>hi", "thinking": "hmm"},
-                   "done_reason": "stop"}
+                   "done_reason": "stop",
+                   "eval_count": 10, "eval_duration": 1_000_000_000}
         with mock.patch("urllib.request.urlopen", return_value=self._mock_response(payload)):
-            thinking, reply, done_reason = oc.call_chat(
+            thinking, reply, done_reason, metrics = oc.call_chat(
                 "http://x", "m", [{"role": "user", "content": "hi"}],
                 True, {"num_predict": 10})
         self.assertEqual(thinking, "hmm")
         self.assertEqual(reply, "hi")
         self.assertEqual(done_reason, "stop")
+        self.assertEqual(metrics["gen_tokens"], 10)
+        self.assertEqual(metrics["gen_tps"], 10.0)
 
     def test_missing_thinking_field_defaults_empty(self):
         payload = {"message": {"content": "hi"}}
         with mock.patch("urllib.request.urlopen", return_value=self._mock_response(payload)):
-            thinking, reply, done_reason = oc.call_chat("http://x", "m", [], False, {})
+            thinking, reply, done_reason, metrics = oc.call_chat("http://x", "m", [], False, {})
         self.assertEqual(thinking, "")
         self.assertEqual(reply, "hi")
         self.assertEqual(done_reason, "")
+        self.assertEqual(metrics["gen_tokens"], 0)
 
     def test_done_reason_length_signals_truncation(self):
         payload = {"message": {"content": "hi"}, "done_reason": "length"}
         with mock.patch("urllib.request.urlopen", return_value=self._mock_response(payload)):
-            _, _, done_reason = oc.call_chat("http://x", "m", [], False,
-                                             {"num_predict": 10})
+            _, _, done_reason, _ = oc.call_chat("http://x", "m", [], False,
+                                                {"num_predict": 10})
         self.assertEqual(done_reason, "length")
 
     def test_http_error_raises_ollama_error(self):
