@@ -116,6 +116,14 @@ class CallChatTests(unittest.TestCase):
                 oc.call_chat("http://x", "m", [], False, {})
         self.assertIn("Cannot reach Ollama", str(ctx.exception))
 
+    def test_socket_timeout_raises_ollama_error(self):
+        # A server that accepts the request but never answers must surface
+        # as OllamaError (graceful duel stop), not a raw traceback.
+        with mock.patch("urllib.request.urlopen", side_effect=TimeoutError("timed out")):
+            with self.assertRaises(oc.OllamaError) as ctx:
+                oc.call_chat("http://x", "m", [], False, {}, timeout=5)
+        self.assertIn("timed out after 5s", str(ctx.exception))
+
 
 class TranscriptJsonTests(unittest.TestCase):
     def test_build_duel_json(self):
