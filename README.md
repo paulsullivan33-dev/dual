@@ -116,9 +116,10 @@ The JSON must be an object with exactly two entries in `models`. Each entry requ
 | `max_tokens` | Top level or model entry | Passed as Ollama's `num_predict`; defaults to 300, or 2048 when thinking is enabled |
 | `temperature` | Top level or model entry | Passed to Ollama if specified |
 | `num_ctx` | Top level or model entry | Context-window setting passed to Ollama if specified |
+| `turn_prompt` | Top level or model entry | Instruction added as the last message on every turn after the first, to keep each reply answering the other participant. `{name}` and `{other}` are replaced with the speaker's and the other participant's names. Defaults to asking for a direct reply of a few short paragraphs that moves the exchange forward; set to `""` to turn it off. Useful for scenarios that want a full program or a long passage each turn |
 | `repeat_penalty` | Top level or model entry | Passed to Ollama if specified; must be at least 1. Values above 1 (e.g. `1.1`–`1.3`) discourage the model from repeating itself; `1` means no penalty |
 
-Model-level `think`, `max_tokens`, `temperature`, `num_ctx`, and `repeat_penalty` override their top-level values. The CLI supports `--topic`, `--turns`, `--host`, `--log-file`, `--save-json`, `--timeout`, `--think`, and `--no-think`; these override the corresponding configuration values. The two thinking flags apply to both participants. Change model identifiers and generation budgets in JSON; `ollama_duel.py` has no `--model` or `--max-tokens` option.
+Model-level `think`, `max_tokens`, `temperature`, `num_ctx`, `repeat_penalty`, and `turn_prompt` override their top-level values. The CLI supports `--topic`, `--turns`, `--host`, `--log-file`, `--save-json`, `--timeout`, `--think`, and `--no-think`; these override the corresponding configuration values. The two thinking flags apply to both participants. Change model identifiers and generation budgets in JSON; `ollama_duel.py` has no `--model` or `--max-tokens` option.
 
 Invalid settings (an unrecognized key, wrong type, a `turns`/`max_tokens`/`num_ctx` less than 1, a negative `temperature`, or a `repeat_penalty` below 1) are rejected with an error naming the offending key before any request is sent — a typo like `"temprature"` fails loudly instead of silently falling back to a default.
 
@@ -217,7 +218,7 @@ non-thinking models compare fairly. Useful flags: `--iterations`/`-n`,
 - **HTTP error or missing model:** check the error text and ensure the model is available on the selected server; use `ollama pull MODEL` for an available model identifier.
 - **Empty or truncated replies:** increase the generation budget, especially when thinking is enabled. For JSON scenarios, check for per-model `max_tokens` overrides.
 - **Long waits:** the novel and debate scenarios allow up to 16,384 tokens per reply. Lower the applicable `max_tokens` values for shorter experiments.
-- **Truncated replies:** generation silently stops when the model's context window fills, so keep `max_tokens` at or below the effective window — the `num_ctx` setting, or the server default when `num_ctx` is unset. Raising `max_tokens` without raising `num_ctx` does not produce longer replies.
+- **Truncated replies:** generation silently stops when the model's context window fills, so keep `max_tokens` at or below the effective window — the `num_ctx` setting, or the server default when `num_ctx` is unset. Raising `max_tokens` without raising `num_ctx` does not produce longer replies. `ollama_duel.py` prints a warning at startup when a participant's `max_tokens` is larger than its `num_ctx`, or above 4096 with no `num_ctx` set.
 - **Replies loop or repeat phrases:** set `repeat_penalty` to something like `1.1`–`1.3`, at the top level or for just the participant that repeats. Very high values can make wording erratic.
 - **Long conversations lose details:** the scripts resend the transcript without summarizing it, but the model's context capacity still limits what it can use.
 

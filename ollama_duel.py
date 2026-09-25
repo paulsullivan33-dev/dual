@@ -7,11 +7,11 @@ Usage:
     python3 ollama_duel.py duel.json --turns 10 --topic "A different question"
 
 Globals in the JSON (host, topic, turns, think, max_tokens, temperature,
-num_ctx, log_file, save_json, timeout, display) act as defaults; anything set
-inside
-a "models" entry overrides the global for that model only (think,
-max_tokens, temperature, num_ctx only -- the rest are duel-wide). "models"
-must contain exactly 2 entries.
+num_ctx, repeat_penalty, turn_prompt, log_file, save_json, timeout, display)
+act as defaults; anything set inside a "models" entry overrides the global for
+that model only (think, max_tokens, temperature, num_ctx, repeat_penalty,
+turn_prompt only -- the rest are duel-wide). "models" must contain exactly 2
+entries.
 If "log_file" is set, everything printed to stdout is mirrored to a
 timestamped copy of that file: the current date/time is prepended to the
 file name (e.g. "duel.log" -> "20260925-084500-duel.log") so each run gets
@@ -24,7 +24,6 @@ import argparse
 import json
 import os
 import sys
-import time
 from datetime import datetime
 
 from ollama_common import (
@@ -41,10 +40,26 @@ from ollama_common import (
 
 TOP_LEVEL_KEYS = {
     "host", "topic", "turns", "think", "max_tokens", "temperature",
-    "num_ctx", "repeat_penalty", "log_file", "save_json", "timeout", "display", "models",
+    "num_ctx", "repeat_penalty", "turn_prompt", "log_file", "save_json", "timeout",
+    "display", "models",
 }
 MODEL_KEYS = {"model", "name", "system", "think", "max_tokens", "temperature",
-              "num_ctx", "repeat_penalty"}
+              "num_ctx", "repeat_penalty", "turn_prompt"}
+
+# Sent as the last message on every turn after the first, to nudge the model
+# to answer the other participant instead of starting a fresh parallel
+# monologue. Without it, small models tend to ignore the transcript and each
+# emit their own standalone continuation of the topic. {name} and {other}
+# are replaced with the speaker's and the other participant's names.
+DEFAULT_TURN_PROMPT = (
+    "Reply directly to {other}'s last message, staying in character as "
+    "{name}. Keep it to a few short paragraphs. Do not repeat or summarize "
+    "what has already been said; move the exchange forward."
+)
+
+# Ollama's context window when num_ctx is unset is a server-side default of a
+# few thousand tokens; a larger max_tokens than that can't all be used.
+ASSUMED_DEFAULT_NUM_CTX = 4096
 
 
 class Tee:
@@ -122,6 +137,7 @@ def load_config(path):
     _validate_field(cfg, "temperature", "number", "top level", minimum=0)
     _validate_field(cfg, "num_ctx", "int", "top level", minimum=1)
     _validate_field(cfg, "repeat_penalty", "number", "top level", minimum=1)
+    _validate_field(cfg, "turn_prompt", "str", "top level")
     _validate_field(cfg, "log_file", "str", "top level")
     _validate_field(cfg, "save_json", "str", "top level")
     _validate_field(cfg, "timeout", "number", "top level", minimum=1)
@@ -133,6 +149,7 @@ def load_config(path):
         _validate_field(m, "temperature", "number", label, minimum=0)
         _validate_field(m, "num_ctx", "int", label, minimum=1)
         _validate_field(m, "repeat_penalty", "number", label, minimum=1)
+        _validate_field(m, "turn_prompt", "str", label)
     return cfg
 
 
@@ -140,6 +157,28 @@ def first_not_none(*values):
     for v in values:
         if v is not None:
             return v
+    return None
+
+
+def render_turn_prompt(template, name, other):
+    """Fill {name}/{other} in a turn prompt. Plain replace rather than
+    str.format, so any other braces in the text are left alone."""
+    return template.replace("{name}", name).replace("{other}", other)
+
+
+def context_warning(name, max_tokens, num_ctx):
+    """Return a warning when max_tokens can't fit in the context window
+    (generation silently stops once the window fills), else None."""
+    if num_ctx is not None:
+        if max_tokens > num_ctx:
+            return (f"Warning: {name}: max_tokens ({max_tokens}) is larger than "
+                    f"num_ctx ({num_ctx}); replies stop when the context window "
+                    f"fills. Lower max_tokens or raise num_ctx.")
+    elif max_tokens > ASSUMED_DEFAULT_NUM_CTX:
+        return (f"Warning: {name}: max_tokens ({max_tokens}) is set but num_ctx "
+                f"is not; Ollama's default context window is only a few "
+                f"thousand tokens, so long replies may be cut short. Set "
+                f"num_ctx to match.")
     return None
 
 
@@ -309,12 +348,18 @@ def main():
             options["temperature"] = temperature
         if repeat_penalty is not None:
             options["repeat_penalty"] = repeat_penalty
+        warning = context_warning(entry["name"], max_tokens, num_ctx)
+        if warning:
+            print(warning, file=sys.stderr)
         participants.append({
             "name": entry["name"],
             "model": entry["model"],
             "system": entry.get("system"),
             "think": think,
             "options": options,
+            "turn_prompt": first_not_none(entry.get("turn_prompt"),
+                                          cfg.get("turn_prompt"),
+                                          DEFAULT_TURN_PROMPT),
         })
 
     a, b = participants
@@ -340,32 +385,25 @@ def main():
                 for spk, text in transcript:
                     role = "assistant" if spk == i else "user"
                     messages.append({"role": role, "content": text})
-                if transcript:
-                    # Nudge the model to answer the other participant instead
-                    # of starting a fresh parallel monologue. Without this,
-                    # small models tend to ignore the transcript and each emit
-                    # their own standalone continuation of the topic.
-                    other_name = participants[1 - i]["name"]
+                if transcript and me["turn_prompt"]:
+                    # See DEFAULT_TURN_PROMPT; an empty turn_prompt disables it.
                     messages.append({
                         "role": "user",
-                        "content": (
-                            f"Reply directly to {other_name}'s last message, "
-                            f"staying in character as {me['name']}. Keep it to "
-                            f"a few short paragraphs. Do not repeat or "
-                            f"summarize what has already been said; move the "
-                            f"exchange forward."
-                        ),
+                        "content": render_turn_prompt(
+                            me["turn_prompt"], me["name"],
+                            participants[1 - i]["name"]),
                     })
 
                 print("  (waiting for reply...)", file=sys.stderr, flush=True)
                 matrix = _matrix(matrix, "progress", turn, turns)
-                t0 = time.monotonic()
                 thinking, reply, done_reason, metrics = call_chat(host, me["model"], messages,
                                                                  me["think"], me["options"],
                                                                  timeout=timeout)
-                dt = max(0.001, time.monotonic() - t0)
-                tps = max(1, len(reply) // 4) / dt  # ~4 chars per token
-                matrix = _matrix(matrix, "show_text", f"{tps:.1f}T/S")
+                # Ollama's measured generation speed (exact token count over
+                # generation time, excluding model load and prompt reading).
+                if matrix is not None:
+                    matrix = _matrix(matrix, "show_text",
+                                     f"{metrics['gen_tps']:.1f}T/S")
                 transcript.append((i, reply))
                 stats = model_stats.setdefault(me["model"], {
                     "turns": 0, "gen_tokens": 0, "gen_s": 0.0,

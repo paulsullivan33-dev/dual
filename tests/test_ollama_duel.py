@@ -222,6 +222,92 @@ class TurnNudgeTests(unittest.TestCase):
         self.assertEqual(seen[1][1], "canned reply")
 
 
+def run_duel(cfg, metrics=None):
+    """Run ollama_duel.main() on `cfg` with call_chat faked; return the
+    message contents sent on each turn."""
+    seen = []
+    metrics = metrics or {"gen_tokens": 10, "gen_s": 1.0,
+                          "prompt_tokens": 20, "prompt_s": 0.5}
+
+    def fake_call_chat(host, model, messages, think, options, timeout=None):
+        seen.append([m["content"] for m in messages])
+        return "", "canned reply", "stop", metrics
+
+    with tempfile.TemporaryDirectory() as d:
+        path = write_json(d, "cfg.json", cfg)
+        with mock.patch.object(sys, "argv", ["ollama_duel.py", path]), \
+             mock.patch.object(ollama_duel, "call_chat", fake_call_chat):
+            ollama_duel.main()
+    return seen
+
+
+class TurnPromptTests(unittest.TestCase):
+    """turn_prompt replaces the default per-turn nudge, e.g. for scenarios
+    that want a whole program or a long passage rather than "a few short
+    paragraphs"."""
+
+    def test_top_level_turn_prompt_replaces_default(self):
+        seen = run_duel(minimal_config(
+            turns=2, turn_prompt="Improve {other}'s program, {name}."))
+        self.assertEqual(seen[1][-1], "Improve m1's program, Two.")
+
+    def test_per_model_turn_prompt_wins_over_top_level(self):
+        cfg = minimal_config(turns=3, turn_prompt="top level")
+        cfg["models"][0]["turn_prompt"] = "model one"
+        seen = run_duel(cfg)
+        self.assertEqual(seen[1][-1], "top level")   # turn 2: Two
+        self.assertEqual(seen[2][-1], "model one")   # turn 3: m1
+
+    def test_empty_turn_prompt_disables_nudge(self):
+        seen = run_duel(minimal_config(turns=2, turn_prompt=""))
+        self.assertEqual(seen[1][-1], "canned reply")
+
+    def test_other_braces_are_left_alone(self):
+        self.assertEqual(
+            ollama_duel.render_turn_prompt("{name} vs {other}: {x} {}", "A", "B"),
+            "A vs B: {x} {}")
+
+    def test_non_string_turn_prompt_exits(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = write_json(d, "cfg.json", minimal_config(turn_prompt=5))
+            with self.assertRaises(SystemExit):
+                ollama_duel.load_config(path)
+
+
+class ContextWarningTests(unittest.TestCase):
+    def test_max_tokens_above_num_ctx_warns(self):
+        w = ollama_duel.context_warning("A", 8000, 4096)
+        self.assertIn("larger than num_ctx (4096)", w)
+
+    def test_max_tokens_within_num_ctx_is_fine(self):
+        self.assertIsNone(ollama_duel.context_warning("A", 16384, 16384))
+
+    def test_large_max_tokens_without_num_ctx_warns(self):
+        w = ollama_duel.context_warning("A", 80000, None)
+        self.assertIn("num_ctx is not", w)
+
+    def test_small_max_tokens_without_num_ctx_is_fine(self):
+        self.assertIsNone(ollama_duel.context_warning("A", 2048, None))
+
+
+class MatrixSpeedTests(unittest.TestCase):
+    def test_matrix_shows_measured_generation_speed(self):
+        shown = []
+
+        class FakeMatrix:
+            def show_text(self, text):
+                shown.append(text)
+
+            def progress(self, done, total):
+                pass
+
+        metrics = {"gen_tokens": 10, "gen_s": 1.0, "prompt_tokens": 20,
+                   "prompt_s": 0.5, "gen_tps": 12.345}
+        with mock.patch("unoq_matrix.UnoQMatrix", FakeMatrix):
+            run_duel(minimal_config(turns=1, display=True), metrics=metrics)
+        self.assertIn("12.3T/S", shown)
+
+
 class RepeatPenaltyTests(unittest.TestCase):
     """repeat_penalty must reach Ollama's options so scenarios can tame
     repetitive small models. Regression test: the key was silently dropped

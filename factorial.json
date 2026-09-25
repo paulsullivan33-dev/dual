@@ -21,6 +21,7 @@
   "temperature": 0.7,
   "think": false,
   "topic": "Create a Factorial program in Python and always list it in output. Take turns improving it. Record your improvements in comments at the beginning of the program. Keep it to a single file.",
+  "turn_prompt": "Review {other}'s latest version, then list the complete improved program in a single code block, with your change recorded in the comments at the top.",
   "turns": 8,
   "log_file": "factorial-program-useful.log"
 }
