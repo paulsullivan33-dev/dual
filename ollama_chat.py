@@ -90,7 +90,7 @@ def cmd_duel(args):
         {"model": args.model_b, "name": args.name_b, "system": args.system_b},
     ]
     transcript = []  # list of (speaker_index, text)
-    print(f"Topic: {args.topic}\n")
+    print(wrap_text(f"Topic: {args.topic}", subsequent_indent=" " * len("Topic: ")) + "\n")
     try:
         for turn in range(args.turns):
             i = turn % 2
