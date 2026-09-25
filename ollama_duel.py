@@ -155,6 +155,40 @@ def print_turn(label, turn_no, thinking, reply, show_thinking):
     print()
 
 
+def format_duel_stats(model_stats):
+    """Build a per-model performance table from the stats dict accumulated
+    during a duel. Each entry holds turns, token counts, phase durations in
+    seconds, and truncated-turn count. Returns "" when no turns completed."""
+    if not model_stats:
+        return ""
+    rows = []
+    for model, s in model_stats.items():
+        gen_tps = s["gen_tokens"] / s["gen_s"] if s["gen_s"] > 0 else 0.0
+        prompt_tps = (s["prompt_tokens"] / s["prompt_s"]
+                      if s["prompt_s"] > 0 else 0.0)
+        rows.append((model, s["turns"], gen_tps, prompt_tps,
+                     s["gen_tokens"], s["truncated"]))
+
+    def col(cells, header, align_right=True):
+        cells = [header] + [str(c) for c in cells]
+        width = max(len(c) for c in cells)
+        pad = str.rjust if align_right else str.ljust
+        return [pad(c, width) for c in cells]
+
+    name_col = col([r[0] for r in rows], "Model", align_right=False)
+    turns_col = col([r[1] for r in rows], "Turns")
+    gen_col = col([f"{r[2]:.1f}" for r in rows], "Gen tok/s")
+    prompt_col = col([f"{r[3]:.1f}" for r in rows], "Prompt tok/s")
+    tokens_col = col([r[4] for r in rows], "Tokens")
+    trunc_col = col([r[5] for r in rows], "Truncated")
+
+    lines = ["=== Model performance ==="]
+    for i in range(len(rows)):
+        lines.append(f"{name_col[i]}  {turns_col[i]}  {gen_col[i]}  "
+                     f"{prompt_col[i]}  {tokens_col[i]}  {trunc_col[i]}")
+    return "\n".join(lines)
+
+
 def _matrix(matrix, method, *args):
     """Best-effort LED matrix update. Returns the matrix, or None if the
     display died mid-duel (the duel itself continues either way)."""
@@ -262,6 +296,7 @@ def main():
     print(f"[{a['model']} as {a['name']}] vs [{b['model']} as {b['name']}] -- {turns} turns\n")
 
     transcript = []  # list of (speaker_index, text)
+    model_stats = {}  # model -> {turns, gen_tokens, gen_s, prompt_tokens, prompt_s, truncated}
     try:
         try:
             for turn in range(turns):
@@ -281,13 +316,23 @@ def main():
                 print("  (waiting for reply...)", file=sys.stderr, flush=True)
                 matrix = _matrix(matrix, "progress", turn, turns)
                 t0 = time.monotonic()
-                thinking, reply, done_reason = call_chat(host, me["model"], messages,
-                                                           me["think"], me["options"],
-                                                           timeout=timeout)
+                thinking, reply, done_reason, metrics = call_chat(host, me["model"], messages,
+                                                                 me["think"], me["options"],
+                                                                 timeout=timeout)
                 dt = max(0.001, time.monotonic() - t0)
                 tps = max(1, len(reply) // 4) / dt  # ~4 chars per token
                 matrix = _matrix(matrix, "show_text", f"{tps:.1f}T/S")
                 transcript.append((i, reply))
+                stats = model_stats.setdefault(me["model"], {
+                    "turns": 0, "gen_tokens": 0, "gen_s": 0.0,
+                    "prompt_tokens": 0, "prompt_s": 0.0, "truncated": 0})
+                stats["turns"] += 1
+                stats["gen_tokens"] += metrics["gen_tokens"]
+                stats["gen_s"] += metrics["gen_s"]
+                stats["prompt_tokens"] += metrics["prompt_tokens"]
+                stats["prompt_s"] += metrics["prompt_s"]
+                if done_reason == "length":
+                    stats["truncated"] += 1
                 print_turn(f"[{me['model']} as {me['name']}]", turn + 1,
                            thinking, reply, show_thinking=me["think"])
                 if done_reason == "length":
@@ -300,6 +345,9 @@ def main():
         except OllamaError as e:
             print(f"\n{e}\nStopped.", file=sys.stderr)
         print(f"Done: {len(transcript)} replies.", file=sys.stderr)
+        if model_stats:
+            print()
+            print(format_duel_stats(model_stats))
     finally:
         # Always write the session-end marker / transcript, even if the
         # duel stopped early on an Ollama error.
