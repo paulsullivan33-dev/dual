@@ -134,8 +134,12 @@ If Ollama becomes unreachable or returns an error mid-duel, the duel stops the w
 | `duel-coder-vs-gemma.json` | Pragmatic and enthusiastic developers debate AI coding assistants |
 | `duel-coder-vs-gemma2.json` | Alternate configuration for the same developer debate |
 | `program_writing.json` | Two programmers take turns proposing and improving a single Python program |
+| `program_writing_v2.json` | The same program-writing duel on `qwen2.5-coder:14b`, with thinking off |
+| `factorial.json` | Two programmers take turns improving a single-file Python factorial program |
 | `murder_crime_novel_uncensored.json` | An abusive optimist and skeptic build a murder/crime novel, using an uncensored model |
 | `ai_driven_crime_novel.json` | An optimistic investigator and cynical detective build a murder mystery |
+| `slow_crime.json`, `slow_crime_v2.json` | A long (20-turn) sci-fi murder mystery written paragraph by paragraph on `tinyllama`, for small machines |
+| `slow_crime_v3.json` | The same 20-turn mystery on `qwen3:8b`, with `repeat_penalty` set to curb repetitive prose |
 | `salesperson_vs_customer.json` | A salesperson and customer negotiate a car purchase |
 | `devops_interview.json` | A hiring manager interviews a DevOps candidate, one question at a time |
 | `time_traveler_1988.json` | A visitor from December 1988 meets modern tech; a patient explainer answers |
@@ -149,6 +153,7 @@ If Ollama becomes unreachable or returns an error mid-duel, the duel stops the w
 | `ai_consciousness_debate.json` | A materialist and a skeptic debate whether an LLM could be conscious |
 | `text_adventure_dungeon.json` | A Dungeon Master and an adventurer build a fantasy dungeon crawl together |
 | `roast_battle.json` | Two comedians trade escalating, good-natured roasts |
+| `roast_battle_v2.json` | The same roast battle with one comedian on an uncensored 35B model |
 | `sports_commentary_duel.json` | Two rival commentators call a fictional, escalating championship finish |
 | `angry_customer_support.json` | A frustrated customer and a support rep work toward a resolution |
 | `tube_vs_modeler.json` | A tube-amp purist and a digital-modeler fan debate gigging tone |
