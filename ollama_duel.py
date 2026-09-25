@@ -387,6 +387,8 @@ def main():
         except OllamaError as e:
             print(f"\n{e}\nStopped.", file=sys.stderr)
         print(f"Done: {len(transcript)} replies.", file=sys.stderr)
+        if log_fh is not None:
+            print(f"Logging to {log_path}", file=sys.stderr)
         if model_stats:
             print()
             print(format_duel_stats(model_stats))
