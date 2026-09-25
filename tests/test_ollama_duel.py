@@ -214,6 +214,60 @@ class TurnNudgeTests(unittest.TestCase):
         self.assertIn("Do not repeat or summarize", nudge)
 
 
+class RepeatPenaltyTests(unittest.TestCase):
+    """repeat_penalty must reach Ollama's options so scenarios can tame
+    repetitive small models. Regression test: the key was silently dropped
+    before (unknown-key validation would even have rejected it)."""
+
+    def _run_turns(self, turns, **overrides):
+        seen_options = []
+
+        def fake_call_chat(host, model, messages, think, options, timeout=None):
+            seen_options.append(options)
+            metrics = {"gen_tokens": 10, "gen_s": 1.0,
+                       "prompt_tokens": 20, "prompt_s": 0.5}
+            return "", "canned reply", "stop", metrics
+
+        with tempfile.TemporaryDirectory() as d:
+            path = write_json(d, "cfg.json", minimal_config(turns=turns, **overrides))
+            with mock.patch.object(sys, "argv", ["ollama_duel.py", path]), \
+                 mock.patch.object(ollama_duel, "call_chat", fake_call_chat):
+                ollama_duel.main()
+        return seen_options
+
+    def test_top_level_repeat_penalty_reaches_options(self):
+        seen = self._run_turns(1, repeat_penalty=1.2)
+        self.assertEqual(seen[0]["repeat_penalty"], 1.2)
+
+    def test_per_model_repeat_penalty_wins_over_top_level(self):
+        models = [
+            {"model": "m1", "repeat_penalty": 1.3},
+            {"model": "m2", "name": "Two"},
+        ]
+        seen = self._run_turns(2, models=models, repeat_penalty=1.1)
+        self.assertEqual(seen[0]["repeat_penalty"], 1.3)
+        self.assertEqual(seen[1]["repeat_penalty"], 1.1)
+
+    def test_absent_repeat_penalty_not_in_options(self):
+        seen = self._run_turns(1)
+        self.assertNotIn("repeat_penalty", seen[0])
+
+    def test_bad_per_model_repeat_penalty_exits(self):
+        cfg = minimal_config(models=[{"model": "m1", "repeat_penalty": "high"},
+                                      {"model": "m2"}])
+        with tempfile.TemporaryDirectory() as d:
+            path = write_json(d, "cfg.json", cfg)
+            with self.assertRaises(SystemExit):
+                ollama_duel.load_config(path)
+
+    def test_below_minimum_repeat_penalty_exits(self):
+        cfg = minimal_config(repeat_penalty=0.5)
+        with tempfile.TemporaryDirectory() as d:
+            path = write_json(d, "cfg.json", cfg)
+            with self.assertRaises(SystemExit):
+                ollama_duel.load_config(path)
+
+
 class ScenarioFilesValidateTests(unittest.TestCase):
     """Every shipped *.json scenario must load and validate cleanly, since
     these are the files new users copy and run first."""
