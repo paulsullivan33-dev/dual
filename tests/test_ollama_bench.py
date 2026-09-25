@@ -167,3 +167,20 @@ def test_format_comparison_sorts_fastest_first():
     table = format_comparison(results)
     assert table.index("fast") < table.index("slow")
     assert "Model" in table and "Gen tok/s" in table
+
+
+def _summary(gen_tps):
+    return {"prompt_tps": 100.0, "prompt_tps_stdev": 0.0,
+            "gen_tps": gen_tps, "gen_tps_stdev": 0.0,
+            "total_s": 5.0, "total_s_stdev": 0.0}
+
+
+def test_format_comparison_lists_every_model_once():
+    results = [("slow", {"load_s": 1.0}, _summary(10.0)),
+               ("fast", {"load_s": 0.5}, _summary(40.0))]
+    table = format_comparison(results)
+    data_lines = [line for line in table.splitlines()
+                  if "slow" in line or "fast" in line]
+    assert len(data_lines) == 2
+    assert sum("slow" in line for line in data_lines) == 1
+    assert sum("fast" in line for line in data_lines) == 1
