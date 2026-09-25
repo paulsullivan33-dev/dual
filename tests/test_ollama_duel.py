@@ -178,6 +178,42 @@ class MainTurnsValidationTests(unittest.TestCase):
                     ollama_duel.main()
 
 
+class TurnNudgeTests(unittest.TestCase):
+    """From turn 2 on, each turn's prompt must end with a nudge telling the
+    model to reply directly to the other participant. Regression test: small
+    models otherwise ignore the transcript and each emit a standalone
+    continuation of the topic (parallel monologues, no back-and-forth)."""
+
+    def _run_two_turns(self):
+        seen = []
+
+        def fake_call_chat(host, model, messages, think, options, timeout=None):
+            seen.append([m["content"] for m in messages])
+            metrics = {"gen_tokens": 10, "gen_s": 1.0,
+                       "prompt_tokens": 20, "prompt_s": 0.5}
+            return "", "canned reply", "stop", metrics
+
+        with tempfile.TemporaryDirectory() as d:
+            path = write_json(d, "cfg.json", minimal_config(turns=2))
+            with mock.patch.object(sys, "argv", ["ollama_duel.py", path]), \
+                 mock.patch.object(ollama_duel, "call_chat", fake_call_chat):
+                ollama_duel.main()
+        return seen
+
+    def test_first_turn_has_topic_and_no_nudge(self):
+        seen = self._run_two_turns()
+        self.assertEqual(len(seen), 2)
+        self.assertEqual(seen[0][-1], "test topic")
+
+    def test_later_turns_nudge_a_direct_reply(self):
+        seen = self._run_two_turns()
+        nudge = seen[1][-1]
+        # Turn 2 is spoken by "Two", so the nudge must name the other side.
+        self.assertIn("Reply directly to m1's last message", nudge)
+        self.assertIn("staying in character as Two", nudge)
+        self.assertIn("Do not repeat or summarize", nudge)
+
+
 class ScenarioFilesValidateTests(unittest.TestCase):
     """Every shipped *.json scenario must load and validate cleanly, since
     these are the files new users copy and run first."""
