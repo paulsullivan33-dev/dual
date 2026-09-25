@@ -12,14 +12,17 @@ inside
 a "models" entry overrides the global for that model only (think,
 max_tokens, temperature, num_ctx only -- the rest are duel-wide). "models"
 must contain exactly 2 entries.
-If "log_file" is set, everything printed to stdout is mirrored to that
-file (appended, with session start/end markers). If "save_json" is set,
+If "log_file" is set, everything printed to stdout is mirrored to a
+timestamped copy of that file: the current date/time is prepended to the
+file name (e.g. "duel.log" -> "20260925-084500-duel.log") so each run gets
+its own log instead of appending to a previous run's. If "save_json" is set,
 the transcript (speaker/model/text per turn) is written there as JSON when
 the duel ends, including after a stopped-early error or Ctrl-C.
 """
 
 import argparse
 import json
+import os
 import sys
 import time
 from datetime import datetime
@@ -192,6 +195,15 @@ def format_duel_stats(model_stats):
     return "\n".join(lines)
 
 
+def timestamped_log_path(log_path):
+    """Prepend a filesystem-safe date/time stamp to the log file's base name
+    (e.g. "logs/duel.log" -> "logs/20260925-084500-duel.log") so each duel
+    run writes its own log file instead of appending to a previous run's."""
+    directory, base = os.path.split(log_path)
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    return os.path.join(directory, f"{stamp}-{base}")
+
+
 def _matrix(matrix, method, *args):
     """Best-effort LED matrix update. Returns the matrix, or None if the
     display died mid-duel (the duel itself continues either way)."""
@@ -245,13 +257,16 @@ def main():
 
     # Optional log file: everything printed to stdout is mirrored there.
     # (stderr progress lines like "(waiting for reply...)" stay console-only.)
+    # The stamp prepended to the file name keeps each run in its own file.
     log_path = first_not_none(args.log_file, cfg.get("log_file"))
     log_fh = None
     if log_path:
+        log_path = timestamped_log_path(log_path)
         try:
-            log_fh = open(log_path, "a", encoding="utf-8", buffering=1)
+            log_fh = open(log_path, "w", encoding="utf-8", buffering=1)
         except OSError as e:
             sys.exit(f"Cannot open log file {log_path}: {e}")
+        print(f"Logging to {log_path}", file=sys.stderr)
         stamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         log_fh.write(f"\n--- session started {stamp} ---\n")
         sys.stdout = Tee(sys.stdout, log_fh)
