@@ -48,12 +48,39 @@ def strip_think_tags(text):
     return text.strip()
 
 
+def compute_metrics(data):
+    """Extract tokens/sec figures from one /api/generate or /api/chat
+    response dict. prompt_s/gen_s are the raw phase durations in seconds,
+    useful for aggregating across runs."""
+    def tps(count, duration_ns):
+        seconds = duration_ns / 1e9
+        return count / seconds if seconds > 0 else 0.0
+
+    prompt_s = data.get("prompt_eval_duration", 0) / 1e9
+    gen_s = data.get("eval_duration", 0) / 1e9
+    return {
+        "prompt_tps": tps(data.get("prompt_eval_count", 0),
+                          data.get("prompt_eval_duration", 0)),
+        "gen_tps": tps(data.get("eval_count", 0),
+                       data.get("eval_duration", 0)),
+        "prompt_s": prompt_s,
+        "gen_s": gen_s,
+        "total_s": data.get("total_duration", 0) / 1e9,
+        "load_s": data.get("load_duration", 0) / 1e9,
+        "prompt_tokens": data.get("prompt_eval_count", 0),
+        "gen_tokens": data.get("eval_count", 0),
+    }
+
+
 def call_chat(host, model, messages, think, options, timeout=DEFAULT_TIMEOUT):
-    """Single non-streaming /api/chat call. Returns (thinking, reply, done_reason).
+    """Single non-streaming /api/chat call.
+
+    Returns (thinking, reply, done_reason, metrics).
 
     done_reason is "stop" when the model finished on its own, "length" when
     generation hit the max_tokens (num_predict) ceiling and the reply was
-    truncated.
+    truncated. metrics is the compute_metrics() dict for this turn
+    (token counts and tokens/sec figures).
 
     Raises OllamaError on an unreachable host or an error response; never
     calls sys.exit so a caller mid-conversation can decide how to stop.
@@ -86,7 +113,8 @@ def call_chat(host, model, messages, think, options, timeout=DEFAULT_TIMEOUT):
     msg = data["message"]
     return (msg.get("thinking", "").strip(),
             strip_think_tags(msg["content"]),
-            data.get("done_reason", ""))
+            data.get("done_reason", ""),
+            compute_metrics(data))
 
 
 def save_transcript_json(path, turns):
