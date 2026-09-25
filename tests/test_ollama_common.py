@@ -12,6 +12,25 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import ollama_common as oc
 
 
+class WrapTextTests(unittest.TestCase):
+    def test_wraps_at_spaces_within_width(self):
+        text = "word " * 30  # 150 chars, no natural breaks
+        for line in oc.wrap_text(text).split("\n"):
+            self.assertLessEqual(len(line), 75)
+
+    def test_never_splits_a_word(self):
+        text = "short " + "a" * 100 + " tail"
+        lines = oc.wrap_text(text).split("\n")
+        self.assertIn("a" * 100, lines)  # long word kept whole on its own line
+
+    def test_keeps_blank_lines_and_paragraphs(self):
+        text = "first paragraph here\n\nsecond paragraph here"
+        self.assertEqual(oc.wrap_text(text), text)
+
+    def test_short_text_unchanged(self):
+        self.assertEqual(oc.wrap_text("hello"), "hello")
+
+
 class StripThinkTagsTests(unittest.TestCase):
     def test_no_tags(self):
         self.assertEqual(oc.strip_think_tags("hello"), "hello")
