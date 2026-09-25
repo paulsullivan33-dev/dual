@@ -7,6 +7,7 @@ the two scripts.
 import json
 import re
 import sys
+import textwrap
 import urllib.request
 import urllib.error
 
@@ -31,6 +32,24 @@ def setup_utf8_stdout():
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     except AttributeError:
         pass
+
+
+WRAP_WIDTH = 75
+
+
+def wrap_text(text, width=WRAP_WIDTH):
+    """Word-wrap text for console display: break at spaces so words are never
+    split across lines (a single over-long word keeps its own line rather
+    than being cut). Blank lines and existing paragraph breaks are kept."""
+    lines = []
+    for para in text.split("\n"):
+        if not para.strip():
+            lines.append("")
+        else:
+            lines.extend(textwrap.wrap(
+                para, width=width,
+                break_long_words=False, break_on_hyphens=False))
+    return "\n".join(lines)
 
 
 def strip_think_tags(text):
