@@ -1,0 +1,26 @@
+{
+  "host": "http://localhost:11434",
+  "topic": "Write parse_duration(text) in Python: it converts duration strings such as '1h30m', '45s', '2h', '1h 5m 10s' and '90m' into a whole number of seconds, and raises ValueError for anything it cannot parse. Include assert-based tests at the bottom. Start with one simple first version in a single code block.",
+  "turns": 10,
+  "think": false,
+  "max_tokens": 4096,
+  "num_ctx": 16384,
+  "temperature": 0.5,
+  "log_file": "logs/builder_vs_breaker.log",
+  "models": [
+    {
+      "model": "qwen2.5-coder:14b",
+      "name": "Builder",
+      "temperature": 0.4,
+      "system": "You are a careful developer. You write parse_duration and fix it whenever a new test fails, without breaking earlier tests. The program must run and pass all of its tests. Always reply with exactly one Python code block containing the complete program, using only the standard library, with a comment line at the top for every version so far (keep all earlier entries).",
+      "turn_prompt": "{other} added a test that breaks your code. Fix the code so every test passes, including the new one, without deleting or weakening any test."
+    },
+    {
+      "model": "qwen3:14b",
+      "name": "Breaker",
+      "temperature": 0.8,
+      "system": "You are a relentless tester. Your job is to find one realistic input that the current parse_duration handles wrongly (wrong result, crash, or accepting garbage) and add it as a new assert test. Do not fix the code yourself. Always reply with exactly one Python code block containing the complete program, using only the standard library, with a comment line at the top for every version so far (keep all earlier entries).",
+      "turn_prompt": "Find one input that {other}'s latest parse_duration gets wrong. Add exactly one new assert test for it, change nothing else, explain the bug in the change-history comment, and list the complete program."
+    }
+  ]
+}

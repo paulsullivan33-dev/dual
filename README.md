@@ -139,6 +139,13 @@ These live in the `scenarios/` folder.
 | `program_writing.json` | Two programmers take turns proposing and improving a single Python program |
 | `program_writing_v2.json` | The same program-writing duel on `qwen2.5-coder:14b`, with thinking off |
 | `factorial.json` | Two programmers take turns improving a single-file Python factorial program |
+| `builder_vs_breaker.json` | A Builder writes a duration parser; a Breaker adds one failing test per turn and the Builder fixes it |
+| `tdd_pingpong.json` | Ping-pong test-driven development of a Roman numeral converter: make the last test pass, add the next failing one |
+| `legacy_refactor.json` | Two refactorers clean up deliberately messy invoice code one step at a time while its tests keep passing |
+| `speed_race.json` | Two performance engineers race to speed up a prime counter, with correctness asserts and a `timeit` benchmark |
+| `code_golf_vs_maintainer.json` | A golfer shrinks a word-count program; a maintainer makes it readable again, keeping the output identical |
+| `product_owner_vs_developer.json` | A product owner adds or changes one requirement per turn; a developer builds a command-line to-do tool to match |
+| `tic_tac_toe_game.json` | Two game developers build a playable terminal tic-tac-toe game one feature per turn, with a `--test` self-test |
 | `murder_crime_novel_uncensored.json` | An abusive optimist and skeptic build a murder/crime novel, using an uncensored model |
 | `ai_driven_crime_novel.json` | An optimistic investigator and cynical detective build a murder mystery |
 | `slow_crime.json` | A long (20-turn) sci-fi murder mystery written paragraph by paragraph on `tinyllama`, for small machines |
@@ -163,6 +170,16 @@ These live in the `scenarios/` folder.
 | `salary_negotiation.json` | A DevOps candidate negotiates an offer with a hiring manager |
 | `alien_food_critics.json` | Two rival alien critics review human cuisine |
 | `vim_vs_emacs.json` | Lifelong believers argue the eternal editor war |
+
+### Programming scenarios
+
+The programming scenarios (`factorial.json`, `program_writing*.json`, and the seven from `builder_vs_breaker.json` to `tic_tac_toe_game.json` above) share a few conventions that trial runs showed matter:
+
+- **Format rules live in each system prompt:** one code block with the complete program, standard library only, and a change-history comment line per version. The system prompt is the only instruction sent on every turn, including the first, so rules placed only in the topic tend to be ignored.
+- **Each speaker has a distinct role** (builder and breaker, golfer and maintainer, and so on) with its own `turn_prompt`, so the exchange doesn't stall into near-identical turns.
+- **Programs check themselves** with `assert` statements or a self-test, so you can copy a turn's code out of the log and run it to see whether that turn broke anything. The scripts never run generated code themselves.
+
+Most use `qwen2.5-coder:14b`; `builder_vs_breaker.json`, `speed_race.json`, and `product_owner_vs_developer.json` also use `qwen3:14b` for the second role, so different models catch different mistakes.
 | `baseball_mvp_debate.json` | A stat-head and an old-school analyst debate the MVP |
 
 ## Conversation behavior and logs

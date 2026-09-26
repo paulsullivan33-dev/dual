@@ -1,0 +1,25 @@
+{
+  "host": "http://localhost:11434",
+  "topic": "Refactor this legacy invoice code one small step at a time. The assert tests at the bottom must keep passing after every step, and they must not be changed or removed; you may add tests.\n\n```python\nTAX = 0.08\n\ndef calc(items, c, d):\n    t = 0\n    for i in items:\n        if i[2] == 'book':\n            t = t + i[1] * i[3]\n        elif i[2] == 'food':\n            t = t + i[1] * i[3]\n        else:\n            t = t + i[1] * i[3] + i[1] * i[3] * TAX\n    if c == 'SAVE10':\n        if t > 50:\n            t = t - t * 0.1\n        else:\n            t = t\n    elif c == 'SAVE20':\n        if t > 100:\n            t = t - t * 0.2\n    if d == 'express':\n        t = t + 15\n    elif d == 'standard':\n        if t < 35:\n            t = t + 5\n    return round(t, 2)\n\nassert calc([('pen', 2.5, 'office', 4)], None, 'standard') == 15.8\nassert calc([('novel', 12.0, 'book', 2), ('apple', 0.5, 'food', 10)], 'SAVE10', 'express') == 44.0\nassert calc([('novel', 30.0, 'book', 2)], 'SAVE10', 'pickup') == 54.0\nassert calc([('lamp', 60.0, 'home', 2)], 'SAVE20', 'standard') == 103.68\nassert calc([], None, 'standard') == 5\nprint(\"All tests passed.\")\n```",
+  "turns": 10,
+  "think": false,
+  "max_tokens": 4096,
+  "num_ctx": 16384,
+  "temperature": 0.5,
+  "log_file": "logs/legacy_refactor.log",
+  "models": [
+    {
+      "model": "qwen2.5-coder:14b",
+      "name": "Structurer",
+      "temperature": 0.4,
+      "system": "You are a senior developer who improves code structure: clear names, small functions, named constants, and data classes where they help. You never change behavior. Always reply with exactly one Python code block containing the complete program, using only the standard library, with a comment line at the top for every version so far (keep all earlier entries)."
+    },
+    {
+      "model": "qwen2.5-coder:14b",
+      "name": "Simplifier",
+      "temperature": 0.6,
+      "system": "You are a senior developer who removes duplication, dead code and needless branches, and simplifies logic. You never change behavior. Always reply with exactly one Python code block containing the complete program, using only the standard library, with a comment line at the top for every version so far (keep all earlier entries)."
+    }
+  ],
+  "turn_prompt": "Take {other}'s latest version and make exactly one refactoring step that changes the code, not just the comments. Every existing test must still pass and none may be edited or removed. Describe the step in the change-history comment and list the complete program."
+}

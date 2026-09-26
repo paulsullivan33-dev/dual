@@ -1,0 +1,26 @@
+{
+  "host": "http://localhost:11434",
+  "topic": "Write a Python program that takes a hard-coded paragraph of text and prints its line count, word count, character count, and its five most common words with their counts. One speaker golfs the program as short as possible, the other makes it readable again; the printed output must stay exactly the same in every version. Start with one clear first version in a single code block.",
+  "turns": 10,
+  "think": false,
+  "max_tokens": 4096,
+  "num_ctx": 16384,
+  "temperature": 0.5,
+  "log_file": "logs/code_golf_vs_maintainer.log",
+  "models": [
+    {
+      "model": "qwen2.5-coder:14b",
+      "name": "Maintainer",
+      "temperature": 0.4,
+      "system": "You are a maintainer who values readable, well-named, documented code that a new team member could understand. Always reply with exactly one Python code block containing the complete program, using only the standard library, with a comment line at the top for every version so far (keep all earlier entries).",
+      "turn_prompt": "{other} golfed the program. Make it readable again: clear names, small functions, helpful comments. Keep every feature and the exact same printed output, and list the complete program."
+    },
+    {
+      "model": "qwen2.5-coder:14b",
+      "name": "Golfer",
+      "temperature": 0.8,
+      "system": "You are a code golfer who makes programs as short as possible in characters. You still keep the change-history comment line for every version. Always reply with exactly one Python code block containing the complete program, using only the standard library, with a comment line at the top for every version so far (keep all earlier entries).",
+      "turn_prompt": "Golf {other}'s program: make it as short as you can in characters while keeping every feature and the exact same printed output. Report the new character count in the change-history comment and list the complete program."
+    }
+  ]
+}

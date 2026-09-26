@@ -1,0 +1,25 @@
+{
+  "host": "http://localhost:11434",
+  "topic": "Speed race: write count_primes(n), which returns how many primes are less than n. The program must assert that count_primes(100) == 25 and count_primes(1_000_000) == 78498, then time count_primes(1_000_000) with timeit and print the best of 5 runs in milliseconds. Start with one simple, correct first version in a single code block.",
+  "turns": 10,
+  "think": false,
+  "max_tokens": 4096,
+  "num_ctx": 16384,
+  "temperature": 0.5,
+  "log_file": "logs/speed_race.log",
+  "models": [
+    {
+      "model": "qwen2.5-coder:14b",
+      "name": "Racer One",
+      "temperature": 0.5,
+      "system": "You are a performance engineer racing a rival to make count_primes as fast as possible in pure Python. Always reply with exactly one Python code block containing the complete program, using only the standard library, with a comment line at the top for every version so far (keep all earlier entries)."
+    },
+    {
+      "model": "qwen3:14b",
+      "name": "Racer Two",
+      "temperature": 0.7,
+      "system": "You are a performance engineer racing a rival to make count_primes as fast as possible in pure Python. Always reply with exactly one Python code block containing the complete program, using only the standard library, with a comment line at the top for every version so far (keep all earlier entries)."
+    }
+  ],
+  "turn_prompt": "Make {other}'s count_primes faster with one concrete optimization. Keep the correctness asserts and the timeit benchmark exactly as they are. Record the optimization and your expected speedup in the change-history comment, and list the complete program."
+}

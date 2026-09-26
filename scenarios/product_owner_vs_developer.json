@@ -1,0 +1,26 @@
+{
+  "host": "http://localhost:11434",
+  "topic": "Build a command-line to-do list tool in Python. It stores tasks in a todo.json file next to the script and supports 'add <text>', 'list', and 'done <number>' commands via argparse. The Developer writes the first version; after that, the Product Owner adds or changes one requirement per turn and the Developer implements it.",
+  "turns": 10,
+  "think": false,
+  "max_tokens": 4096,
+  "num_ctx": 16384,
+  "temperature": 0.5,
+  "log_file": "logs/product_owner_vs_developer.log",
+  "models": [
+    {
+      "model": "qwen2.5-coder:14b",
+      "name": "Developer",
+      "temperature": 0.4,
+      "system": "You are a developer building a command-line tool for a product owner. Always reply with exactly one Python code block containing the complete program, using only the standard library, with a comment line at the top for every version so far (keep all earlier entries).",
+      "turn_prompt": "Implement {other}'s newest requirement in the program without breaking earlier features. Record it in the change-history comment and list the complete program."
+    },
+    {
+      "model": "qwen3:14b",
+      "name": "Product Owner",
+      "temperature": 0.8,
+      "system": "You are a product owner for a command-line to-do tool. You do not write code. Each turn you reply in two or three plain sentences with exactly one new or changed requirement, sometimes changing your mind about an earlier one, the way real users do. Keep requirements realistic and testable.",
+      "turn_prompt": "Look at {other}'s latest program and give exactly one new or changed requirement in two or three plain sentences. Do not write code."
+    }
+  ]
+}

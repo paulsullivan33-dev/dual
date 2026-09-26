@@ -1,0 +1,25 @@
+{
+  "host": "http://localhost:11434",
+  "topic": "Build a playable terminal tic-tac-toe game in Python, one feature per turn: for example a board display, move input with validation, win and draw detection, a computer opponent, a smarter opponent, and a replay option. Include a self_test() function with assert tests for the game logic, run when the script is started with --test; otherwise start the game. Start with one simple first version in a single code block.",
+  "turns": 10,
+  "think": false,
+  "max_tokens": 4096,
+  "num_ctx": 16384,
+  "temperature": 0.5,
+  "log_file": "logs/tic_tac_toe_game.log",
+  "models": [
+    {
+      "model": "qwen2.5-coder:14b",
+      "name": "Game Dev One",
+      "temperature": 0.5,
+      "system": "You are a game developer building a small, polished terminal game with a colleague. Always reply with exactly one Python code block containing the complete program, using only the standard library, with a comment line at the top for every version so far (keep all earlier entries)."
+    },
+    {
+      "model": "qwen2.5-coder:14b",
+      "name": "Game Dev Two",
+      "temperature": 0.7,
+      "system": "You are a game developer building a small, polished terminal game with a colleague. Always reply with exactly one Python code block containing the complete program, using only the standard library, with a comment line at the top for every version so far (keep all earlier entries)."
+    }
+  ],
+  "turn_prompt": "Take {other}'s latest version and add exactly one new feature or gameplay improvement, keeping the game playable and self_test() passing. Add tests for the new feature, record it in the change-history comment, and list the complete program."
+}

@@ -1,0 +1,25 @@
+{
+  "host": "http://localhost:11434",
+  "topic": "Ping-pong test-driven development: build to_roman(n), converting integers from 1 to 3999 into Roman numerals, one test at a time. The first speaker writes the first failing test only, with a to_roman stub that returns an empty string. Tests are assert statements at the bottom of the file.",
+  "turns": 12,
+  "think": false,
+  "max_tokens": 4096,
+  "num_ctx": 16384,
+  "temperature": 0.5,
+  "log_file": "logs/tdd_pingpong.log",
+  "models": [
+    {
+      "model": "qwen2.5-coder:14b",
+      "name": "Ping",
+      "temperature": 0.4,
+      "system": "You are a disciplined test-driven developer pairing with a colleague. Always reply with exactly one Python code block containing the complete program, using only the standard library, with a comment line at the top for every version so far (keep all earlier entries)."
+    },
+    {
+      "model": "qwen2.5-coder:14b",
+      "name": "Pong",
+      "temperature": 0.6,
+      "system": "You are a disciplined test-driven developer pairing with a colleague. Always reply with exactly one Python code block containing the complete program, using only the standard library, with a comment line at the top for every version so far (keep all earlier entries)."
+    }
+  ],
+  "turn_prompt": "Make {other}'s newest failing test pass with the simplest code change that keeps all earlier tests passing. Then add exactly one new failing test for the next small piece of behavior, and list the complete program."
+}
