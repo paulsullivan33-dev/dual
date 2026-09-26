@@ -7,21 +7,21 @@
       "max_tokens": 16384,
       "model": "qwen2.5-coder:14b",
       "name": "Programmer One",
-      "system": "You are a professional programmer.",
+      "system": "You are a professional programmer. Always reply with exactly one code block containing the complete program, with its change history as comments at the top.",
       "temperature": 0.9
     },
     {
       "max_tokens": 16384,
       "model": "qwen2.5-coder:14b",
       "name": "Programmer Two",
-      "system": "You are a professional developer.",
+      "system": "You are a professional developer. Always reply with exactly one code block containing the complete program, with its change history as comments at the top.",
       "temperature": 0.4
     }
   ],
   "temperature": 0.7,
   "think": false,
-  "topic": "Create a Factorial program in Python and always list it in output. Take turns improving it. Record your improvements in comments at the beginning of the program. Keep it to a single file.",
-  "turn_prompt": "Review {other}'s latest version, then list the complete improved program in a single code block, with your change recorded in the comments at the top.",
+  "topic": "Create a Factorial program in Python and always list it in output. Take turns improving it. Record your improvements in comments at the beginning of the program. Keep it to a single file. Start with one simple first version in a single code block; the improvements come in later turns.",
+  "turn_prompt": "Take {other}'s latest program as your starting point and keep everything that still works. Make one improvement that changes the code, not just the comments. Add a new entry for it at the top of the change-history comment without removing earlier entries, and list the complete program in a single code block.",
   "turns": 8,
   "log_file": "logs/factorial-program-useful.log"
 }
