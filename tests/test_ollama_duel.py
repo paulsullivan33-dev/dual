@@ -450,5 +450,23 @@ class TimestampedLogPathTests(unittest.TestCase):
         self.assertTrue(path.startswith(datetime.now().strftime("%Y%m%d-")))
 
 
+class SessionMarkerTests(unittest.TestCase):
+    def test_session_end_repeats_start_time_on_line_above(self):
+        with tempfile.TemporaryDirectory() as d:
+            log_file = os.path.join(d, "duel.log")
+            run_duel(minimal_config(turns=1, log_file=log_file))
+            logs = os.listdir(d)
+            self.assertEqual(len(logs), 1)
+            with open(os.path.join(d, logs[0]), encoding="utf-8") as f:
+                lines = f.read().splitlines()
+            end_idx = next(i for i, l in enumerate(lines)
+                           if "session ended" in l)
+            self.assertIn("(1 replies)", lines[end_idx])
+            # The line directly above repeats the session start marker,
+            # identical to the one written at the top of the log.
+            first_start = next(l for l in lines if "session started" in l)
+            self.assertEqual(lines[end_idx - 1], first_start)
+
+
 if __name__ == "__main__":
     unittest.main()

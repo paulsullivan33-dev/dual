@@ -400,8 +400,8 @@ def main():
         except OSError as e:
             sys.exit(f"Cannot open log file {log_path}: {e}")
         print(f"Logging to {log_path}", file=sys.stderr)
-        stamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        log_fh.write(f"\n--- session started {stamp} ---\n")
+        start_stamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        log_fh.write(f"\n--- session started {start_stamp} ---\n")
         sys.stdout = Tee(sys.stdout, log_fh)
 
     # Optional LED matrix display (Arduino Uno Q's built-in 8x13 matrix).
@@ -471,6 +471,7 @@ def main():
         if log_fh is not None:
             sys.stdout = sys.stdout.streams[0]  # unwrap the Tee
             stamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            log_fh.write(f"--- session started {start_stamp} ---\n")
             log_fh.write(f"--- session ended {stamp} ({len(transcript)} replies) ---\n")
             log_fh.close()
         save_transcript_json_safe(save_json_path, build_duel_json(transcript, participants))
