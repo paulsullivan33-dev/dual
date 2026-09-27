@@ -51,10 +51,18 @@ MODEL_KEYS = {"model", "name", "system", "think", "max_tokens", "temperature",
 # monologue. Without it, small models tend to ignore the transcript and each
 # emit their own standalone continuation of the topic. {name} and {other}
 # are replaced with the speaker's and the other participant's names.
+# Default repetition penalty sent when the config doesn't set one. Small
+# models fall into echo loops without it; 1.25 is strong enough to break
+# the loop without mangling normal prose. Overridable per model or top
+# level via "repeat_penalty".
+DEFAULT_REPEAT_PENALTY = 1.25
+
 DEFAULT_TURN_PROMPT = (
     "Reply directly to {other}'s last message, staying in character as "
-    "{name}. Keep it to a few short paragraphs. Do not repeat or summarize "
-    "what has already been said; move the exchange forward."
+    "{name}. Write only {name}'s own words and actions -- never write "
+    "dialogue or actions for {other}. Keep it to a few short paragraphs. "
+    "Do not repeat or summarize what has already been said; move the "
+    "exchange forward."
 )
 
 # Ollama's context window when num_ctx is unset is a server-side default of a
@@ -430,7 +438,8 @@ def main():
         temperature = first_not_none(entry.get("temperature"), cfg.get("temperature"))
         num_ctx = first_not_none(entry.get("num_ctx"), cfg.get("num_ctx"))
         repeat_penalty = first_not_none(entry.get("repeat_penalty"),
-                                        cfg.get("repeat_penalty"))
+                                        cfg.get("repeat_penalty"),
+                                        DEFAULT_REPEAT_PENALTY)
         options = {"num_predict": max_tokens}
         if num_ctx is not None:
             options["num_ctx"] = num_ctx

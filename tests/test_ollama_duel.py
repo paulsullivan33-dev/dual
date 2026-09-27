@@ -262,6 +262,15 @@ class TurnPromptTests(unittest.TestCase):
         seen = run_duel(minimal_config(turns=2, turn_prompt=""))
         self.assertEqual(seen[1][-1], "canned reply")
 
+    def test_default_nudge_forbids_writing_the_other_side(self):
+        # Regression test: small models play both parts in one reply.
+        # The default nudge must tell each speaker to write only itself.
+        seen = run_duel(minimal_config(turns=2))
+        nudge = seen[1][-1]
+        self.assertIn("Write only Two's own words and actions", nudge)
+        self.assertIn("never write", nudge)
+        self.assertIn("dialogue or actions for m1", nudge)
+
     def test_other_braces_are_left_alone(self):
         self.assertEqual(
             ollama_duel.render_turn_prompt("{name} vs {other}: {x} {}", "A", "B"),
@@ -342,9 +351,9 @@ class RepeatPenaltyTests(unittest.TestCase):
         self.assertEqual(seen[0]["repeat_penalty"], 1.3)
         self.assertEqual(seen[1]["repeat_penalty"], 1.1)
 
-    def test_absent_repeat_penalty_not_in_options(self):
+    def test_absent_repeat_penalty_defaults_to_1_25(self):
         seen = self._run_turns(1)
-        self.assertNotIn("repeat_penalty", seen[0])
+        self.assertEqual(seen[0]["repeat_penalty"], 1.25)
 
     def test_bad_per_model_repeat_penalty_exits(self):
         cfg = minimal_config(models=[{"model": "m1", "repeat_penalty": "high"},
