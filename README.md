@@ -211,6 +211,27 @@ tiny one. The 1200-second default timeout is there to cover slow
 generations. For an always-on low-power box, small models chugging away
 unattended beat fast models competing for cycles on your main machine.
 
+## Coding agent
+
+`ollama_agent.py` is a minimal coding agent: describe a task, the model
+writes files into a project directory, and you iterate on them.
+
+```shell
+python ollama_agent.py --task "a python script that renames photos in a folder by date taken"
+python ollama_agent.py --model qwen2.5-coder:14b --task "a flappy-bird clone in pygame" --output-dir ./flappy
+```
+
+The model hands over files in fenced code blocks tagged with the language
+and path (```` ```python:hello.py ````); plain untagged fences are treated
+as snippets and ignored. Every write is previewed and confirmed unless you
+pass `--yes`, and paths are confined to `--output-dir` — `..` and absolute
+paths are refused. Nothing is ever executed; running the code is your job.
+After each round, describe a change or type `done` to finish; the model
+sees the current files on every turn, so it can revise its own work.
+
+Useful flags: `--output-dir`, `--max-tokens` (default 4096),
+`--temperature`, `--num-ctx`, `--host`, `--timeout`, `--yes`.
+
 ## Benchmarking model speed
 
 `ollama_bench.py` measures tokens/second for one or more models so you can
@@ -251,7 +272,7 @@ python ollama_duel.py --help
 
 ## Running the tests
 
-The `tests/` directory has stdlib-only `unittest` coverage for the shared helpers (`ollama_common.py`), config loading and validation (`ollama_duel.py`), CLI argument handling (`ollama_chat.py`), benchmarking (`ollama_bench.py`), and the LED matrix driver (`unoq_matrix.py`) — no live Ollama server required; network calls are mocked. It also checks that every included scenario JSON file loads and validates.
+The `tests/` directory has stdlib-only `unittest` coverage for the shared helpers (`ollama_common.py`), config loading and validation (`ollama_duel.py`), CLI argument handling (`ollama_chat.py`), benchmarking (`ollama_bench.py`), the coding agent (`ollama_agent.py`), and the LED matrix driver (`unoq_matrix.py`) — no live Ollama server required; network calls are mocked. It also checks that every included scenario JSON file loads and validates.
 
 ```shell
 python -m unittest discover -s tests
