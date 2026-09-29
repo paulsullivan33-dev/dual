@@ -110,6 +110,7 @@ The JSON must be an object with exactly two entries in `models`. Each entry requ
 | `turns` | Top level | Total replies; defaults to 6; must be a positive integer |
 | `log_file` | Top level | Optional path for the transcript; a date/time stamp is prepended to the file name so each run gets its own log. The included scenarios write to `logs/`; missing folders are created |
 | `save_json` | Top level | Optional path to write the structured transcript (`speaker`/`model`/`text` per reply) as JSON when the duel ends, including after an early stop |
+| `results_log` | Top level | Optional path for the run summary; defaults to `run_results.log` in the current directory. After every duel a one-block entry is appended: date/time, config, models, turns completed, and the per-model stats table on success or the error message when the duel stopped early. Missing folders are created; pass `--no-results-log` to disable |
 | `timeout` | Top level | Per-request timeout in seconds; defaults to 1200 |
 | `display` | Top level | Show live duel stats on the Arduino Uno Q's built-in 8x13 LED matrix; defaults to false. Needs `python3-smbus` on the Uno Q. The script runs headless with a warning anywhere the matrix is unreachable, so this is safe to leave on in shared configs |
 | `think` | Top level or model entry | Request and display thinking; defaults to false |
@@ -119,7 +120,7 @@ The JSON must be an object with exactly two entries in `models`. Each entry requ
 | `turn_prompt` | Top level or model entry | Instruction added as the last message on every turn after the first, to keep each reply answering the other participant. `{name}` and `{other}` are replaced with the speaker's and the other participant's names. Defaults to asking for a direct reply of a few short paragraphs that moves the exchange forward; set to `""` to turn it off. Useful for scenarios that want a full program or a long passage each turn |
 | `repeat_penalty` | Top level or model entry | Passed to Ollama if specified; must be at least 1. Values above 1 (e.g. `1.1`–`1.3`) discourage the model from repeating itself; `1` means no penalty |
 
-Model-level `think`, `max_tokens`, `temperature`, `num_ctx`, `repeat_penalty`, and `turn_prompt` override their top-level values. The CLI supports `--topic`, `--turns`, `--host`, `--log-file`, `--save-json`, `--timeout`, `--think`, and `--no-think`; these override the corresponding configuration values. The two thinking flags apply to both participants. Change model identifiers and generation budgets in JSON; `ollama_duel.py` has no `--model` or `--max-tokens` option.
+Model-level `think`, `max_tokens`, `temperature`, `num_ctx`, `repeat_penalty`, and `turn_prompt` override their top-level values. The CLI supports `--topic`, `--turns`, `--host`, `--log-file`, `--save-json`, `--results-log`, `--no-results-log`, `--timeout`, `--think`, and `--no-think`; these override the corresponding configuration values. The two thinking flags apply to both participants. Change model identifiers and generation budgets in JSON; `ollama_duel.py` has no `--model` or `--max-tokens` option.
 
 Invalid settings (an unrecognized key, wrong type, a `turns`/`max_tokens`/`num_ctx` less than 1, a negative `temperature`, or a `repeat_penalty` below 1) are rejected with an error naming the offending key before any request is sent — a typo like `"temprature"` fails loudly instead of silently falling back to a default.
 
@@ -191,6 +192,8 @@ Requests are sequential and non-streaming: a complete reply appears after the se
 The scripts remove inline `<think>` blocks from reply text. When thinking is enabled, they separately display the server's `thinking` field when available. Thinking behavior depends on the model and server, and its token use can reduce the budget available for the visible reply.
 
 When `log_file` is set, `ollama_duel.py` mirrors its standard output to a timestamped copy of that file (e.g. `"logs/my-duel.log"` becomes `"logs/20260925-084500-my-duel.log"`) while also printing it to the console, so each run gets its own log. Logs include session start markers and, on normal completion or a handled Ctrl+C, session end markers. Progress messages and the final reply count go to standard error and are not mirrored. Relative log paths are resolved from the directory where you run the command, and any missing folders in the path are created. Omit `log_file` to disable logging. Saved logs are not automatically loaded into a later session.
+
+Separately, every duel appends a one-block summary to `run_results.log` in the directory where you run the command (override with `results_log` or `--results-log`, disable with `--no-results-log`). Each entry carries the date/time, config file, models, how many of the requested turns completed, and the per-model stats table when the duel finished -- or the error message when it stopped early, so a batch of overnight runs can be scanned without opening each transcript log.
 
 The programming scenario produces code as conversation text. Neither script executes, tests, or automatically saves generated code as a Python file.
 

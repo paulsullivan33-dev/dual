@@ -235,7 +235,8 @@ def run_duel(cfg, metrics=None):
 
     with tempfile.TemporaryDirectory() as d:
         path = write_json(d, "cfg.json", cfg)
-        with mock.patch.object(sys, "argv", ["ollama_duel.py", path]), \
+        with mock.patch.object(sys, "argv",
+                               ["ollama_duel.py", path, "--no-results-log"]), \
              mock.patch.object(ollama_duel, "call_chat", fake_call_chat):
             ollama_duel.main()
     return seen
@@ -495,7 +496,8 @@ class StopNoteTests(unittest.TestCase):
         cfg = minimal_config(log_file=os.path.join(d, "duel.log"), **overrides)
         with tempfile.TemporaryDirectory() as cfg_dir:
             path = write_json(cfg_dir, "cfg.json", cfg)
-            with mock.patch.object(sys, "argv", ["ollama_duel.py", path]), \
+            with mock.patch.object(sys, "argv",
+                                   ["ollama_duel.py", path, "--no-results-log"]), \
                  mock.patch.object(ollama_duel, "call_chat", fake_call_chat):
                 ollama_duel.main()
         logs = os.listdir(d)
@@ -671,6 +673,159 @@ class DedupGuardTests(unittest.TestCase):
     def test_normalize_reply(self):
         self.assertEqual(ollama_duel.normalize_reply("  a\n b\tc "),
                          "a b c")
+
+
+class RunSummaryTests(unittest.TestCase):
+    """After every duel, a one-block summary is appended to run_results.log:
+    date/time plus the stats table on success, or the error message when the
+    duel stopped early -- so a batch of runs can be scanned without opening
+    each transcript log."""
+
+    @staticmethod
+    def _canned(*args, **kwargs):
+        metrics = {"gen_tokens": 10, "gen_s": 1.0,
+                   "prompt_tokens": 20, "prompt_s": 0.5}
+        return "", "canned reply", "stop", metrics
+
+    def _run(self, d, fake_call_chat, extra_argv=(), **overrides):
+        """Run main() with call_chat faked; the summary goes to d's
+        run_results.log. Returns that file's text."""
+        cfg = minimal_config(results_log=os.path.join(d, "run_results.log"),
+                             **overrides)
+        with tempfile.TemporaryDirectory() as cfg_dir:
+            path = write_json(cfg_dir, "cfg.json", cfg)
+            argv = ["ollama_duel.py", path] + list(extra_argv)
+            with mock.patch.object(sys, "argv", argv), \
+                 mock.patch.object(ollama_duel, "call_chat", fake_call_chat):
+                ollama_duel.main()
+        with open(os.path.join(d, "run_results.log"), encoding="utf-8") as f:
+            return f.read()
+
+    def test_successful_run_logs_ok_and_stats(self):
+        with tempfile.TemporaryDirectory() as d:
+            contents = self._run(d, self._canned, turns=2)
+        self.assertIn("Result: OK", contents)
+        self.assertRegex(contents, r"Run: \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}")
+        self.assertIn("Models: m1 (m1) vs m2 (Two)", contents)
+        self.assertIn("Turns: 2/2 (2 replies)", contents)
+        self.assertIn("Model performance", contents)
+        self.assertIn("Gen tok/s", contents)
+
+    def test_failed_run_logs_error_not_stats(self):
+        def boom(*args, **kwargs):
+            raise ollama_duel.OllamaError("Cannot reach Ollama at http://x")
+
+        with tempfile.TemporaryDirectory() as d:
+            contents = self._run(d, boom, turns=3)
+        self.assertIn("Result: STOPPED EARLY", contents)
+        self.assertIn("Cannot reach Ollama at http://x", contents)
+        self.assertIn("Turns: 0/3 (0 replies)", contents)
+        self.assertNotIn("Model performance", contents)
+
+    def test_entries_append_across_runs(self):
+        with tempfile.TemporaryDirectory() as d:
+            self._run(d, self._canned, turns=1)
+            contents = self._run(d, self._canned, turns=1)
+        self.assertEqual(contents.count("Result: OK"), 2)
+
+    def test_default_filename_is_run_results_log(self):
+        with tempfile.TemporaryDirectory() as d:
+            with tempfile.TemporaryDirectory() as cfg_dir:
+                path = write_json(cfg_dir, "cfg.json",
+                                  minimal_config(turns=1))
+                old = os.getcwd()
+                os.chdir(d)
+                try:
+                    with mock.patch.object(
+                            sys, "argv", ["ollama_duel.py", path]), \
+                         mock.patch.object(ollama_duel, "call_chat",
+                                           self._canned):
+                        ollama_duel.main()
+                finally:
+                    os.chdir(old)
+            self.assertTrue(
+                os.path.isfile(os.path.join(d, "run_results.log")))
+
+    def test_no_results_log_disables(self):
+        with tempfile.TemporaryDirectory() as d:
+            cfg = minimal_config(
+                turns=1,
+                results_log=os.path.join(d, "run_results.log"))
+            with tempfile.TemporaryDirectory() as cfg_dir:
+                path = write_json(cfg_dir, "cfg.json", cfg)
+                with mock.patch.object(
+                        sys, "argv",
+                        ["ollama_duel.py", path, "--no-results-log"]), \
+                     mock.patch.object(ollama_duel, "call_chat",
+                                       self._canned):
+                    ollama_duel.main()
+            self.assertFalse(
+                os.path.exists(os.path.join(d, "run_results.log")))
+
+    def test_cli_results_log_overrides_config(self):
+        with tempfile.TemporaryDirectory() as d:
+            cfg_path = os.path.join(d, "cfg_results.log")
+            cli_path = os.path.join(d, "cli_results.log")
+            cfg = minimal_config(turns=1, results_log=cfg_path)
+            with tempfile.TemporaryDirectory() as cfg_dir:
+                path = write_json(cfg_dir, "cfg.json", cfg)
+                with mock.patch.object(
+                        sys, "argv",
+                        ["ollama_duel.py", path,
+                         "--results-log", cli_path]), \
+                     mock.patch.object(ollama_duel, "call_chat",
+                                       self._canned):
+                    ollama_duel.main()
+            self.assertTrue(os.path.isfile(cli_path))
+            self.assertFalse(os.path.exists(cfg_path))
+
+    def test_unwritable_path_warns_but_does_not_crash(self):
+        import io
+        with tempfile.TemporaryDirectory() as d:
+            blocker = os.path.join(d, "blocker")
+            with open(blocker, "w", encoding="utf-8") as f:
+                f.write("x")
+            cfg = minimal_config(
+                turns=1,
+                results_log=os.path.join(blocker, "run_results.log"))
+            with tempfile.TemporaryDirectory() as cfg_dir:
+                path = write_json(cfg_dir, "cfg.json", cfg)
+                err = io.StringIO()
+                with mock.patch.object(sys, "argv",
+                                       ["ollama_duel.py", path]), \
+                     mock.patch.object(ollama_duel, "call_chat",
+                                       self._canned), \
+                     mock.patch.object(sys, "stderr", err):
+                    ollama_duel.main()  # must not raise
+            self.assertIn("could not write run summary", err.getvalue())
+
+    def test_results_log_wrong_type_exits(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = write_json(d, "cfg.json",
+                              minimal_config(results_log=123))
+            with self.assertRaises(SystemExit):
+                ollama_duel.load_config(path)
+
+    def test_crashed_run_logs_crashed(self):
+        def bad(*args, **kwargs):
+            raise ValueError("kaboom")
+
+        with tempfile.TemporaryDirectory() as d:
+            cfg = minimal_config(
+                turns=2,
+                results_log=os.path.join(d, "run_results.log"))
+            with tempfile.TemporaryDirectory() as cfg_dir:
+                path = write_json(cfg_dir, "cfg.json", cfg)
+                with mock.patch.object(sys, "argv",
+                                       ["ollama_duel.py", path]), \
+                     mock.patch.object(ollama_duel, "call_chat", bad):
+                    with self.assertRaises(ValueError):
+                        ollama_duel.main()
+            with open(os.path.join(d, "run_results.log"),
+                      encoding="utf-8") as f:
+                contents = f.read()
+        self.assertIn("Result: CRASHED", contents)
+        self.assertIn("kaboom", contents)
 
 
 if __name__ == "__main__":

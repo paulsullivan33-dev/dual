@@ -18,6 +18,12 @@ file name (e.g. "duel.log" -> "20260925-084500-duel.log") so each run gets
 its own log instead of appending to a previous run's. If "save_json" is set,
 the transcript (speaker/model/text per turn) is written there as JSON when
 the duel ends, including after a stopped-early error or Ctrl-C.
+
+After every run the script also appends a one-block summary to
+"run_results.log" in the current directory (override with the top-level
+"results_log" setting or --results-log, disable with --no-results-log):
+date/time, config, models, turns completed, and the per-model stats table
+on success or the error message when the duel stopped early.
 """
 
 import argparse
@@ -42,7 +48,7 @@ from ollama_common import (
 TOP_LEVEL_KEYS = {
     "host", "topic", "turns", "think", "max_tokens", "temperature",
     "num_ctx", "repeat_penalty", "turn_prompt", "log_file", "save_json", "timeout",
-    "display", "dedup_guard", "models",
+    "display", "dedup_guard", "results_log", "models",
 }
 MODEL_KEYS = {"model", "name", "system", "think", "max_tokens", "temperature",
               "num_ctx", "repeat_penalty", "turn_prompt"}
@@ -164,6 +170,7 @@ def load_config(path):
     _validate_field(cfg, "timeout", "number", "top level", minimum=1)
     _validate_field(cfg, "display", "bool", "top level")
     _validate_field(cfg, "dedup_guard", "bool", "top level")
+    _validate_field(cfg, "results_log", "str", "top level")
     for m in models:
         label = f'model "{m["name"]}"'
         _validate_field(m, "think", "bool", label)
@@ -273,6 +280,59 @@ def timestamped_log_path(log_path):
     directory, base = os.path.split(log_path)
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     return os.path.join(directory, f"{stamp}-{base}")
+
+
+def format_run_summary(run_started, config_path, participants, turns,
+                       transcript, model_stats, stop_note, crashed=False):
+    """Build the one-block summary appended to run_results.log after a duel.
+
+    Always carries the date/time, config, models, and how many of the
+    requested turns completed. A finished duel gets the per-model stats
+    table; a duel that stopped early gets the error message instead, so a
+    batch of runs can be scanned without opening each transcript log.
+    `crashed` covers an unexpected exception escaping the turn loop (the
+    traceback itself goes to the console); pass the message as stop_note.
+    """
+    bar = "-" * 72
+    stamp = run_started.strftime("%Y-%m-%d %H:%M:%S")
+    duration_s = (datetime.now() - run_started).total_seconds()
+    a, b = participants
+    lines = [
+        bar,
+        f"Run: {stamp}",
+        f"Config: {config_path}",
+        f"Models: {a['model']} ({a['name']}) vs {b['model']} ({b['name']})",
+        f"Turns: {len(transcript)}/{turns} "
+        f"({len(transcript)} replies) in {duration_s:.0f}s",
+    ]
+    if crashed:
+        lines.append("Result: CRASHED")
+        lines.append(stop_note.strip())
+    elif stop_note:
+        lines.append("Result: STOPPED EARLY")
+        lines.append(stop_note.strip())
+    else:
+        lines.append("Result: OK")
+        stats_table = format_duel_stats(model_stats)
+        if stats_table:
+            lines.append(stats_table)
+    lines.append(bar)
+    return "\n".join(lines) + "\n"
+
+
+def append_run_summary(path, entry):
+    """Append one summary block to the results log. Best-effort: a bad
+    path warns on stderr instead of failing the run, since the summary is
+    a convenience -- the transcript log and save_json are already written."""
+    try:
+        parent = os.path.dirname(path)
+        if parent:
+            os.makedirs(parent, exist_ok=True)
+        with open(path, "a", encoding="utf-8") as f:
+            f.write(entry)
+    except OSError as e:
+        print(f"Warning: could not write run summary to {path}: {e}",
+              file=sys.stderr)
 
 
 def _matrix(matrix, method, *args):
@@ -418,6 +478,11 @@ def main():
                     help="override the config log_file (mirror stdout to this file)")
     ap.add_argument("--save-json", default=None,
                     help="override the config save_json (write the transcript to this JSON file)")
+    ap.add_argument("--results-log", default=None,
+                    help="override the config results_log (append a run summary "
+                         "to this file; default run_results.log)")
+    ap.add_argument("--no-results-log", dest="results_log", action="store_false",
+                    help="do not write the run summary file")
     ap.add_argument("--timeout", type=float, default=None,
                     help="override the config timeout, in seconds")
     ap.add_argument("--display", dest="display", action="store_true", default=None,
@@ -441,6 +506,12 @@ def main():
     save_json_path = first_not_none(args.save_json, cfg.get("save_json"))
     want_display = first_not_none(args.display, cfg.get("display"), False)
     dedup_guard = first_not_none(cfg.get("dedup_guard"), True)
+    # Run summary file: appended after every duel with the date/time and
+    # either the stats table (success) or the error (early stop). Defaults
+    # to run_results.log in the current directory; --no-results-log (or a
+    # false-y CLI value) disables it.
+    results_log_path = first_not_none(args.results_log, cfg.get("results_log"),
+                                      "run_results.log")
 
     # Optional log file: everything printed to stdout is mirrored there.
     # (stderr progress lines like "(waiting for reply...)" stay console-only.)
@@ -515,6 +586,8 @@ def main():
 
     transcript = []  # list of (speaker_index, text)
     stop_note = None  # why the duel ended early, when it did
+    model_stats = {}  # per-model stats; stays empty if the loop never starts
+    run_started = datetime.now()
     try:
         model_stats, matrix, stop_note = run_duel(host, topic, turns, participants, timeout,
                                                   transcript, matrix=matrix,
@@ -541,6 +614,22 @@ def main():
             log_fh.write(f"--- session ended {stamp} ({len(transcript)} replies) ---\n")
             log_fh.close()
         save_transcript_json_safe(save_json_path, build_duel_json(transcript, participants))
+        if results_log_path:
+            # One-block summary for run_results.log: timestamp plus stats on
+            # success, or the error when the duel stopped early. Written
+            # here so it lands even for handled early stops -- and for an
+            # unexpected crash, sys.exc_info() still holds the exception
+            # while the finally block runs.
+            crashed = stop_note is None and sys.exc_info()[0] is not None
+            crash_note = None
+            if crashed:
+                exc = sys.exc_info()[1]
+                crash_note = f"unexpected error: {type(exc).__name__}: {exc}"
+            entry = format_run_summary(run_started, args.config, participants,
+                                       turns, transcript, model_stats,
+                                       crash_note or stop_note,
+                                       crashed=crashed)
+            append_run_summary(results_log_path, entry)
 
 
 if __name__ == "__main__":
