@@ -173,5 +173,121 @@ class RunAgentTests(unittest.TestCase):
             self.assertEqual(rc, 1)
 
 
+class ExtractUntaggedFencesTests(unittest.TestCase):
+    def test_single_untagged_fence(self):
+        text = "```python\nprint('hi')\n```"
+        self.assertEqual(ollama_agent.extract_untagged_fences(text),
+                         [("python", "print('hi')\n")])
+
+    def test_bare_fence_has_empty_lang(self):
+        text = "```\nhello\n```"
+        self.assertEqual(ollama_agent.extract_untagged_fences(text),
+                         [("", "hello\n")])
+
+    def test_tagged_fences_are_excluded(self):
+        text = "```python:a.py\n1\n```\n```js\n2\n```"
+        self.assertEqual(ollama_agent.extract_untagged_fences(text),
+                         [("js", "2\n")])
+
+    def test_unclosed_untagged_ignored(self):
+        self.assertEqual(
+            ollama_agent.extract_untagged_fences("```python\nx=1"), [])
+
+    def test_no_fences(self):
+        self.assertEqual(ollama_agent.extract_untagged_fences("just prose"), [])
+
+    def test_extract_files_still_ignores_untagged(self):
+        text = "```python\nprint('snippet')\n```\n```text:real.txt\nx\n```"
+        self.assertEqual(ollama_agent.extract_files(text),
+                         [("real.txt", "x\n")])
+
+
+class SuggestFilenameTests(unittest.TestCase):
+    def test_python_extension_and_slug(self):
+        name = ollama_agent.suggest_filename("Build a sudoku solver", "python", 0)
+        self.assertEqual(name, "build_a_sudoku_solver.py")
+
+    def test_unknown_lang_gets_txt(self):
+        name = ollama_agent.suggest_filename("do things", "cobol", 0)
+        self.assertTrue(name.endswith(".txt"))
+
+    def test_index_suffix_on_later_blocks(self):
+        first = ollama_agent.suggest_filename("task", "python", 0)
+        second = ollama_agent.suggest_filename("task", "python", 1)
+        self.assertEqual(first, "task.py")
+        self.assertEqual(second, "task_2.py")
+
+    def test_empty_task_falls_back_to_output(self):
+        self.assertEqual(ollama_agent.suggest_filename("", "python", 0),
+                         "output.py")
+
+    def test_long_task_is_truncated(self):
+        name = ollama_agent.suggest_filename("a" * 100, "python", 0)
+        self.assertLessEqual(len(name), len("a" * 30 + ".py"))
+
+
+class RunAgentUntaggedTests(unittest.TestCase):
+    def test_untagged_block_prompts_for_name_then_writes(self):
+        with tempfile.TemporaryDirectory() as d:
+            def fake_call(host, model, messages, think, options, timeout=None):
+                return _reply("```python\nprint('hi')\n```")
+
+            inputs = iter(["sudoku.py", "y", "done"])
+            rc = ollama_agent.run_agent(
+                _args(output_dir=d, task="build a sudoku solver"),
+                input_fn=lambda _p: next(inputs), call_fn=fake_call)
+            self.assertEqual(rc, 0)
+            with open(os.path.join(d, "sudoku.py")) as f:
+                self.assertEqual(f.read(), "print('hi')\n")
+
+    def test_untagged_block_uses_default_on_empty_answer(self):
+        with tempfile.TemporaryDirectory() as d:
+            def fake_call(host, model, messages, think, options, timeout=None):
+                return _reply("```python\nprint('hi')\n```")
+
+            inputs = iter(["", "y", "done"])
+            rc = ollama_agent.run_agent(
+                _args(output_dir=d, task="build a thing"),
+                input_fn=lambda _p: next(inputs), call_fn=fake_call)
+            self.assertEqual(rc, 0)
+            self.assertTrue(os.path.exists(os.path.join(d, "build_a_thing.py")))
+
+    def test_untagged_block_skip_writes_nothing(self):
+        with tempfile.TemporaryDirectory() as d:
+            def fake_call(host, model, messages, think, options, timeout=None):
+                return _reply("```python\nprint('hi')\n```")
+
+            inputs = iter(["skip", "done"])
+            rc = ollama_agent.run_agent(
+                _args(output_dir=d), input_fn=lambda _p: next(inputs),
+                call_fn=fake_call)
+            self.assertEqual(rc, 0)
+            self.assertEqual(os.listdir(d), [])
+
+    def test_untagged_block_auto_yes_uses_suggested_name(self):
+        with tempfile.TemporaryDirectory() as d:
+            def fake_call(host, model, messages, think, options, timeout=None):
+                return _reply("```python\nprint('hi')\n```")
+
+            rc = ollama_agent.run_agent(
+                _args(output_dir=d, task="build a thing", yes=True),
+                input_fn=lambda _p: "done", call_fn=fake_call)
+            self.assertEqual(rc, 0)
+            self.assertTrue(os.path.exists(os.path.join(d, "build_a_thing.py")))
+
+    def test_unsafe_typed_name_is_refused(self):
+        with tempfile.TemporaryDirectory() as d:
+            def fake_call(host, model, messages, think, options, timeout=None):
+                return _reply("```python\nprint('hi')\n```")
+
+            inputs = iter(["../evil.py", "y", "done"])
+            rc = ollama_agent.run_agent(
+                _args(output_dir=d), input_fn=lambda _p: next(inputs),
+                call_fn=fake_call)
+            self.assertEqual(rc, 0)
+            self.assertFalse(os.path.exists(os.path.join(d, "..", "evil.py")))
+            self.assertEqual(os.listdir(d), [])
+
+
 if __name__ == "__main__":
     unittest.main()

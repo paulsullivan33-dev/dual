@@ -12,8 +12,9 @@ fenced code block, tagged with the language AND the file's path:
     print("hello")
     ```
 
-Only fences tagged like ```lang:path become files. A plain ```python
-fence with no path is treated as an illustrative snippet and ignored.
+Fences tagged like ```lang:path become files automatically. If the model
+forgets the path and writes a plain ```python fence, the script asks you
+for a filename instead of silently dropping the code.
 
 Safety rules (deliberate, not accidental):
   * Every file lands inside --output-dir. Paths with ".." or absolute
@@ -43,9 +44,13 @@ from ollama_common import (
 )
 
 # A fence that carries a file looks like ```python:src/main.py --
-# language, colon, relative path. Plain ```python fences (no colon+path)
-# are snippets, not files, and are ignored by extract_files().
+# language, colon, relative path.
 FILE_FENCE_RE = re.compile(r"^```[\w+.-]*:([^\s`]+)\s*$")
+
+# A fence with no path tag looks like ```python -- language only, no
+# colon+path. These are collected separately by extract_untagged_fences()
+# so the agent can ask the user for a filename instead of dropping the code.
+UNTAGGED_FENCE_RE = re.compile(r"^```([\w+.-]*)\s*$")
 
 SYSTEM_PROMPT = """\
 You are a coding assistant. A scaffold program extracts files from your
@@ -56,6 +61,8 @@ Rules:
   fenced code block.
 - Tag the fence with the language and the file's relative path, like:
   ```python:hello.py
+- The :path tag is required. A fence without it will not be saved as a
+  file automatically.
 - Paths are relative to the project directory. Never use absolute paths
   or "..".
 - Keep the prose outside the fences brief: what you built and how to run it.
@@ -66,34 +73,54 @@ DONE_WORDS = {"done", "quit", "exit", "q"}
 MAX_CONTEXT_CHARS = 4000  # per-file cap when sending project files back
 
 
-def extract_files(text):
-    """Pull (relative_path, content) pairs out of ```lang:path fences.
+def _fence_blocks(text):
+    """Yield (rel_path_or_None, lang, content) for each closed fence block.
 
-    Only fences tagged with a colon+path become files; plain fences are
-    ignored. An unclosed fence is ignored too (better to drop a file
-    than to write half of one).
+    Tagged ```lang:path fences yield their path; untagged ```lang fences
+    yield None as the path with the language captured. An unclosed fence
+    is skipped (better to drop a block than to write half of one).
     """
-    files = []
     lines = text.split("\n")
     i = 0
     while i < len(lines):
-        match = FILE_FENCE_RE.match(lines[i])
-        if match:
-            rel_path = match.group(1)
+        tagged = FILE_FENCE_RE.match(lines[i])
+        untagged = UNTAGGED_FENCE_RE.match(lines[i]) if tagged is None else None
+        if tagged is None and untagged is None:
             i += 1
-            body = []
-            closed = False
-            while i < len(lines):
-                if lines[i].strip() == "```":
-                    closed = True
-                    break
-                body.append(lines[i])
-                i += 1
-            if closed:
-                content = "\n".join(body)
-                files.append((rel_path, content + "\n" if content else ""))
+            continue
+        rel_path = tagged.group(1) if tagged else None
+        lang = untagged.group(1) if untagged else ""
         i += 1
-    return files
+        body = []
+        closed = False
+        while i < len(lines):
+            if lines[i].strip() == "```":
+                closed = True
+                break
+            body.append(lines[i])
+            i += 1
+        if closed:
+            content = "\n".join(body)
+            yield rel_path, lang, content + "\n" if content else ""
+        i += 1
+
+
+def extract_files(text):
+    """Pull (relative_path, content) pairs out of ```lang:path fences.
+
+    Only fences tagged with a colon+path become files here; untagged
+    fences are collected separately by extract_untagged_fences().
+    """
+    return [(p, c) for p, _lang, c in _fence_blocks(text) if p is not None]
+
+
+def extract_untagged_fences(text):
+    """Pull (language, content) pairs out of ```lang fences with no path.
+
+    These are code blocks the model forgot to tag with a file path --
+    the agent asks the user where to save them instead of dropping them.
+    """
+    return [(lang, c) for p, lang, c in _fence_blocks(text) if p is None]
 
 
 def resolve_path(output_dir, rel_path):
@@ -172,6 +199,57 @@ def write_files(output_dir, files):
     return written, rejected
 
 
+LANG_EXTENSIONS = {
+    "python": ".py", "py": ".py",
+    "javascript": ".js", "js": ".js",
+    "typescript": ".ts", "ts": ".ts",
+    "html": ".html", "css": ".css", "json": ".json",
+    "bash": ".sh", "sh": ".sh", "shell": ".sh",
+    "rust": ".rs", "go": ".go", "java": ".java",
+    "c": ".c", "cpp": ".cpp",
+    "ruby": ".rb", "php": ".php", "sql": ".sql",
+    "yaml": ".yaml", "yml": ".yml", "toml": ".toml",
+    "markdown": ".md", "md": ".md", "text": ".txt", "txt": ".txt",
+}
+
+
+def suggest_filename(task, lang, index):
+    """Default filename for an untagged code block.
+
+    Built from the task description plus an extension guessed from the
+    fence language; later blocks get a _2, _3 suffix so names stay unique.
+    """
+    slug = re.sub(r"[^a-z0-9]+", "_", task.lower()).strip("_")[:30].strip("_")
+    slug = slug or "output"
+    ext = LANG_EXTENSIONS.get((lang or "").lower(), ".txt")
+    suffix = f"_{index + 1}" if index else ""
+    return f"{slug}{suffix}{ext}"
+
+
+def name_untagged_blocks(blocks, task, auto_yes, input_fn):
+    """Ask the user for filenames for code blocks the model didn't tag.
+
+    Returns [(rel_path, content)] just like extract_files, so the normal
+    preview/confirm/write flow applies. A user-typed name still goes
+    through the output-dir safety check in write_files().
+    """
+    named = []
+    for index, (lang, content) in enumerate(blocks):
+        default = suggest_filename(task, lang, index)
+        label = lang or "code"
+        if auto_yes:
+            print(f"\n[untagged {label} block -> {default}]")
+            named.append((default, content))
+            continue
+        answer = input_fn(
+            f"\nThe model didn't name this {label} block.\n"
+            f"Save it as [{default}] (or 'skip'): ").strip()
+        if answer.lower() == "skip":
+            continue
+        named.append((answer or default, content))
+    return named
+
+
 def run_agent(args, input_fn=input, call_fn=call_chat):
     """Main loop. input_fn/call_fn are injectable so tests can drive it."""
     setup_utf8_stdout()
@@ -206,6 +284,12 @@ def run_agent(args, input_fn=input, call_fn=call_chat):
         print(f"\n[{metrics['gen_tps']:.1f} tok/s, {metrics['gen_tokens']} tokens]")
 
         extracted = extract_files(reply)
+        if not extracted:
+            # The model wrote code but forgot the :path tags (common with
+            # smaller models). Ask the user where to save it instead of
+            # silently writing nothing.
+            extracted = name_untagged_blocks(
+                extract_untagged_fences(reply), args.task, args.yes, input_fn)
         if extracted:
             if confirm_write(extracted, args.yes, input_fn):
                 written, rejected = write_files(args.output_dir, extracted)

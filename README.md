@@ -222,10 +222,12 @@ python ollama_agent.py --model qwen2.5-coder:14b --task "a flappy-bird clone in 
 ```
 
 The model hands over files in fenced code blocks tagged with the language
-and path (```` ```python:hello.py ````); plain untagged fences are treated
-as snippets and ignored. Every write is previewed and confirmed unless you
-pass `--yes`, and paths are confined to `--output-dir` — `..` and absolute
-paths are refused. Nothing is ever executed; running the code is your job.
+and path (```` ```python:hello.py ````). If the model forgets the path tag
+and writes a plain fence, the agent asks you for a filename instead of
+dropping the code (handy with smaller models). Every write is previewed
+and confirmed unless you pass `--yes`, and paths are confined to
+`--output-dir` — `..` and absolute paths are refused. Nothing is ever
+executed; running the code is your job.
 After each round, describe a change or type `done` to finish; the model
 sees the current files on every turn, so it can revise its own work.
 
