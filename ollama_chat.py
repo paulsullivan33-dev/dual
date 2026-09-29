@@ -104,8 +104,8 @@ def cmd_duel(args):
     print_duel_header(args.topic, personas, args.turns)
     transcript = []  # list of (speaker_index, text)
     try:
-        model_stats, _ = run_duel(args.host, args.topic, args.turns, personas,
-                                  args.timeout, transcript)
+        model_stats, _, _ = run_duel(args.host, args.topic, args.turns, personas,
+                                     args.timeout, transcript)
         print(f"Done: {len(transcript)} replies.", file=sys.stderr)
         if model_stats:
             print()

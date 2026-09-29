@@ -335,11 +335,17 @@ def run_duel(host, topic, turns, participants, timeout, transcript, matrix=None,
     own previous reply (ignoring whitespace differences) is re-rolled once
     with a bumped temperature; a second duplicate is kept as-is.
 
-    Returns (model_stats, matrix): per-model stats for format_duel_stats,
-    and the LED matrix, or None if there is none or it failed mid-duel.
+    Returns (model_stats, matrix, stop_note): per-model stats for
+    format_duel_stats, the LED matrix (or None if there is none or it
+    failed mid-duel), and why the loop stopped early -- None when all
+    turns completed, otherwise the error or interrupt message. The caller
+    decides where stop_note goes; ollama_duel.py writes it into the log
+    file, because the stderr stop message never reaches the log and a
+    batch run is undebuggable without it.
     """
     model_stats = {}  # model -> {turns, gen_tokens, gen_s, prompt_tokens, prompt_s, truncated}
     prev_replies = {}  # speaker_index -> normalized text of their last reply
+    stop_note = None  # why the loop ended early, when it did
     try:
         for turn in range(turns):
             i = turn % 2
@@ -390,10 +396,12 @@ def run_duel(host, topic, turns, participants, timeout, transcript, matrix=None,
                       f"consider raising max_tokens ---")
                 print()
     except KeyboardInterrupt:
+        stop_note = "interrupted by user (Ctrl-C)"
         print("\nStopped.", file=sys.stderr)
     except OllamaError as e:
+        stop_note = str(e)
         print(f"\n{e}\nStopped.", file=sys.stderr)
-    return model_stats, matrix
+    return model_stats, matrix, stop_note
 
 
 def main():
@@ -506,10 +514,11 @@ def main():
     print_duel_header(topic, participants, turns)
 
     transcript = []  # list of (speaker_index, text)
+    stop_note = None  # why the duel ended early, when it did
     try:
-        model_stats, matrix = run_duel(host, topic, turns, participants, timeout,
-                                       transcript, matrix=matrix,
-                                       dedup_guard=dedup_guard)
+        model_stats, matrix, stop_note = run_duel(host, topic, turns, participants, timeout,
+                                                  transcript, matrix=matrix,
+                                                  dedup_guard=dedup_guard)
         print(f"Done: {len(transcript)} replies.", file=sys.stderr)
         if log_fh is not None:
             print(f"Logging to {log_path}", file=sys.stderr)
@@ -522,6 +531,11 @@ def main():
         matrix = _matrix(matrix, "show_text", "DONE")
         if log_fh is not None:
             sys.stdout = sys.stdout.streams[0]  # unwrap the Tee
+            if stop_note:
+                # The stderr stop message never reaches the log file (only
+                # stdout is mirrored), so record the reason here -- without
+                # it, a batch run that dies early is undebuggable.
+                log_fh.write(f"--- stopped early ---\n{stop_note.strip()}\n")
             stamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             log_fh.write(f"--- session started {start_stamp} ---\n")
             log_fh.write(f"--- session ended {stamp} ({len(transcript)} replies) ---\n")

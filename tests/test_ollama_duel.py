@@ -477,6 +477,82 @@ class SessionMarkerTests(unittest.TestCase):
             self.assertEqual(lines[end_idx - 1], first_start)
 
 
+class StopNoteTests(unittest.TestCase):
+    """When a duel stops early, the reason must reach the log file.
+    Regression test: a batch run on the Arduino Uno Q kept dying with
+    "(0 replies)" and no reason, because the OllamaError message only
+    went to stderr, which the log file never mirrors."""
+
+    @staticmethod
+    def _canned(*args, **kwargs):
+        metrics = {"gen_tokens": 10, "gen_s": 1.0,
+                   "prompt_tokens": 20, "prompt_s": 0.5}
+        return "", "canned reply", "stop", metrics
+
+    def _logged_run(self, d, fake_call_chat, **overrides):
+        """Run main() with call_chat faked; return the log file's text.
+        The config lives in its own temp dir so `d` holds only the log."""
+        cfg = minimal_config(log_file=os.path.join(d, "duel.log"), **overrides)
+        with tempfile.TemporaryDirectory() as cfg_dir:
+            path = write_json(cfg_dir, "cfg.json", cfg)
+            with mock.patch.object(sys, "argv", ["ollama_duel.py", path]), \
+                 mock.patch.object(ollama_duel, "call_chat", fake_call_chat):
+                ollama_duel.main()
+        logs = os.listdir(d)
+        self.assertEqual(len(logs), 1)
+        with open(os.path.join(d, logs[0]), encoding="utf-8") as f:
+            return f.read()
+
+    def test_ollama_error_reason_reaches_log_file(self):
+        def boom(*args, **kwargs):
+            raise ollama_duel.OllamaError("Cannot reach Ollama at http://x")
+
+        with tempfile.TemporaryDirectory() as d:
+            contents = self._logged_run(d, boom, turns=3)
+        self.assertIn("(0 replies)", contents)
+        self.assertIn("--- stopped early ---", contents)
+        self.assertIn("Cannot reach Ollama at http://x", contents)
+
+    def test_keyboard_interrupt_reason_reaches_log_file(self):
+        def intr(*args, **kwargs):
+            raise KeyboardInterrupt()
+
+        with tempfile.TemporaryDirectory() as d:
+            contents = self._logged_run(d, intr, turns=3)
+        self.assertIn("(0 replies)", contents)
+        self.assertIn("--- stopped early ---", contents)
+        self.assertIn("interrupted by user", contents)
+
+    def test_clean_duel_writes_no_stop_marker(self):
+        with tempfile.TemporaryDirectory() as d:
+            contents = self._logged_run(d, self._canned, turns=1)
+        self.assertIn("(1 replies)", contents)
+        self.assertNotIn("stopped early", contents)
+
+    def test_run_duel_returns_stop_note(self):
+        def boom(host, model, messages, think, options, timeout=None):
+            raise ollama_duel.OllamaError("nope")
+
+        participants = [
+            {"name": "One", "model": "m1", "system": None, "think": False,
+             "options": {"num_predict": 50}, "turn_prompt": ""},
+            {"name": "Two", "model": "m2", "system": None, "think": False,
+             "options": {"num_predict": 50}, "turn_prompt": ""},
+        ]
+        transcript = []
+        with mock.patch.object(ollama_duel, "call_chat", boom):
+            _, _, stop_note = ollama_duel.run_duel(
+                "http://x", "topic", 2, participants, 60, transcript)
+        self.assertEqual(stop_note, "nope")
+        self.assertEqual(transcript, [])
+
+    def test_run_duel_returns_none_when_all_turns_complete(self):
+        with tempfile.TemporaryDirectory() as d:
+            contents = self._logged_run(d, self._canned, turns=2)
+        self.assertIn("(2 replies)", contents)
+        self.assertNotIn("stopped early", contents)
+
+
 class DedupGuardTests(unittest.TestCase):
     """If a speaker repeats its own previous reply verbatim, the turn is
     re-rolled once with a bumped temperature. Regression test: smollm2:1.7b
@@ -574,7 +650,7 @@ class DedupGuardTests(unittest.TestCase):
         def fake_run_duel(host, topic, turns, participants, timeout,
                           transcript, matrix=None, dedup_guard=True):
             seen["dedup_guard"] = dedup_guard
-            return {}, None
+            return {}, None, None
 
         with tempfile.TemporaryDirectory() as d:
             path = write_json(d, "cfg.json",
