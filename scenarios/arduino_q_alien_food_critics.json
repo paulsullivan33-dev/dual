@@ -16,7 +16,7 @@
       "temperature": 0.95
     }
   ],
-  "num_ctx": 8192,
+  "num_ctx": 4096,
   "temperature": 0.95,
   "think": false,
   "topic": "Tonight's assignment: review the human dish called 'pizza.' Zorp, your opening review?",

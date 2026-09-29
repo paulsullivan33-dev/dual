@@ -4,7 +4,7 @@
   "turns": 10,
   "think": false,
   "max_tokens": 4096,
-  "num_ctx": 16384,
+  "num_ctx": 4096,
   "temperature": 0.5,
   "log_file": "logs/tic_tac_toe_game.log",
   "models": [

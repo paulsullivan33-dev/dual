@@ -1,7 +1,7 @@
 {
   "host": "http://localhost:11434",
   "max_tokens": 16384,
-  "num_ctx": 16384,
+  "num_ctx": 4096,
   "models": [
     {
       "max_tokens": 1300,

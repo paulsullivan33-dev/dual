@@ -16,7 +16,7 @@
       "temperature": 0.8
     }
   ],
-  "num_ctx": 8192,
+  "num_ctx": 4096,
   "temperature": 0.8,
   "think": false,
   "topic": "The eternal question, settled tonight: Vim or Emacs - which is the superior editor for a serious programmer?",

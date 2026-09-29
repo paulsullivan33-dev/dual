@@ -16,7 +16,7 @@
       "temperature": 0.85
     }
   ],
-  "num_ctx": 8192,
+  "num_ctx": 4096,
   "temperature": 0.9,
   "think": false,
   "topic": "You awaken in a torchlit stone chamber with no memory of how you got there. A heavy iron door lies ahead, and something scratches at it from the other side. What do you do?",

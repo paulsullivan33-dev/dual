@@ -16,7 +16,7 @@
       "temperature": 0.85
     }
   ],
-  "num_ctx": 8192,
+  "num_ctx": 4096,
   "temperature": 0.8,
   "think": false,
   "topic": "The first formal session begins. Envoy Zyx, your delegation requested this meeting \u2014 what does the Vellari Concordance propose?",

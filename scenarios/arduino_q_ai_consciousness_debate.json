@@ -16,7 +16,7 @@
       "temperature": 0.85
     }
   ],
-  "num_ctx": 8192,
+  "num_ctx": 4096,
   "temperature": 0.85,
   "think": false,
   "topic": "Can a large language model ever be conscious, or is it just simulating the appearance of understanding convincingly? Make your case, and respond directly to the other's strongest point.",

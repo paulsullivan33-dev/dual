@@ -16,7 +16,7 @@
       "temperature": 0.7
     }
   ],
-  "num_ctx": 8192,
+  "num_ctx": 4096,
   "temperature": 0.7,
   "think": false,
   "topic": "We need to ship the new checkout flow by Friday. Walk me through what's realistic and what we need to cut or change to make that happen.",
