@@ -7,8 +7,8 @@ Usage:
     python3 ollama_duel.py duel.json --turns 10 --topic "A different question"
 
 Globals in the JSON (host, topic, turns, think, max_tokens, temperature,
-num_ctx, repeat_penalty, turn_prompt, log_file, save_json, timeout, display)
-act as defaults; anything set inside a "models" entry overrides the global for
+num_ctx, repeat_penalty, turn_prompt, log_file, save_json, timeout, display,
+dedup_guard) act as defaults; anything set inside a "models" entry overrides the global for
 that model only (think, max_tokens, temperature, num_ctx, repeat_penalty,
 turn_prompt only -- the rest are duel-wide). "models" must contain exactly 2
 entries.
@@ -23,6 +23,7 @@ the duel ends, including after a stopped-early error or Ctrl-C.
 import argparse
 import json
 import os
+import re
 import sys
 from datetime import datetime
 
@@ -41,7 +42,7 @@ from ollama_common import (
 TOP_LEVEL_KEYS = {
     "host", "topic", "turns", "think", "max_tokens", "temperature",
     "num_ctx", "repeat_penalty", "turn_prompt", "log_file", "save_json", "timeout",
-    "display", "models",
+    "display", "dedup_guard", "models",
 }
 MODEL_KEYS = {"model", "name", "system", "think", "max_tokens", "temperature",
               "num_ctx", "repeat_penalty", "turn_prompt"}
@@ -64,6 +65,18 @@ DEFAULT_TURN_PROMPT = (
     "Do not repeat or summarize what has already been said; move the "
     "exchange forward."
 )
+
+# Dedup guard: if a speaker's reply is identical (modulo whitespace) to its
+# own previous reply, the turn is re-rolled once with a bumped temperature.
+# Small models at low temperature otherwise get stuck echoing themselves
+# verbatim -- repeat_penalty only covers the last ~64 tokens, so a whole
+# earlier reply sails through unpenalized. Only one retry: a second
+# duplicate is accepted, so a stuck model can't spin forever. Disable with
+# "dedup_guard": false in the scenario JSON.
+DEDUP_RETRY_TEMP_BUMP = 0.3
+DEDUP_RETRY_TEMP_CAP = 1.5
+# Ollama's server-side default temperature when the config doesn't set one.
+ASSUMED_DEFAULT_TEMPERATURE = 0.8
 
 # Ollama's context window when num_ctx is unset is a server-side default of a
 # few thousand tokens; a larger max_tokens than that can't all be used.
@@ -150,6 +163,7 @@ def load_config(path):
     _validate_field(cfg, "save_json", "str", "top level")
     _validate_field(cfg, "timeout", "number", "top level", minimum=1)
     _validate_field(cfg, "display", "bool", "top level")
+    _validate_field(cfg, "dedup_guard", "bool", "top level")
     for m in models:
         label = f'model "{m["name"]}"'
         _validate_field(m, "think", "bool", label)
@@ -172,6 +186,12 @@ def render_turn_prompt(template, name, other):
     """Fill {name}/{other} in a turn prompt. Plain replace rather than
     str.format, so any other braces in the text are left alone."""
     return template.replace("{name}", name).replace("{other}", other)
+
+
+def normalize_reply(text):
+    """Collapse all whitespace for duplicate detection, so a re-rolled
+    reply that differs only in line breaks still counts as a repeat."""
+    return re.sub(r"\s+", " ", text).strip()
 
 
 def context_warning(name, max_tokens, num_ctx):
@@ -302,7 +322,8 @@ def print_duel_header(topic, participants, turns):
     print(f"[{a['model']} as {a['name']}] vs [{b['model']} as {b['name']}] -- {turns} turns\n")
 
 
-def run_duel(host, topic, turns, participants, timeout, transcript, matrix=None):
+def run_duel(host, topic, turns, participants, timeout, transcript, matrix=None,
+             dedup_guard=True):
     """Run the duel's turn loop, printing each reply as it arrives.
 
     Each participant is a dict with name, model, system, think, options and
@@ -310,10 +331,15 @@ def run_duel(host, topic, turns, participants, timeout, transcript, matrix=None)
     (speaker_index, text) so that whatever was generated survives an early
     stop. Ctrl-C or an OllamaError stops the loop gracefully.
 
+    When dedup_guard is on, a turn whose reply duplicates that speaker's
+    own previous reply (ignoring whitespace differences) is re-rolled once
+    with a bumped temperature; a second duplicate is kept as-is.
+
     Returns (model_stats, matrix): per-model stats for format_duel_stats,
     and the LED matrix, or None if there is none or it failed mid-duel.
     """
     model_stats = {}  # model -> {turns, gen_tokens, gen_s, prompt_tokens, prompt_s, truncated}
+    prev_replies = {}  # speaker_index -> normalized text of their last reply
     try:
         for turn in range(turns):
             i = turn % 2
@@ -325,6 +351,21 @@ def run_duel(host, topic, turns, participants, timeout, transcript, matrix=None)
             thinking, reply, done_reason, metrics = call_chat(host, me["model"], messages,
                                                              me["think"], me["options"],
                                                              timeout=timeout)
+            norm = normalize_reply(reply)
+            if dedup_guard and norm and norm == prev_replies.get(i):
+                retry_options = dict(me["options"])
+                base_temp = retry_options.get("temperature",
+                                              ASSUMED_DEFAULT_TEMPERATURE)
+                retry_options["temperature"] = min(base_temp + DEDUP_RETRY_TEMP_BUMP,
+                                                   DEDUP_RETRY_TEMP_CAP)
+                print(f"--- DEDUP GUARD: {me['name']} repeated its previous reply; "
+                      f"re-rolling once at temperature "
+                      f"{retry_options['temperature']:.2f} ---")
+                thinking, reply, done_reason, metrics = call_chat(
+                    host, me["model"], messages, me["think"], retry_options,
+                    timeout=timeout)
+                norm = normalize_reply(reply)
+            prev_replies[i] = norm
             # Ollama's measured generation speed (exact token count over
             # generation time, excluding model load and prompt reading).
             if matrix is not None:
@@ -391,6 +432,7 @@ def main():
     timeout = first_not_none(args.timeout, cfg.get("timeout"), DEFAULT_TIMEOUT)
     save_json_path = first_not_none(args.save_json, cfg.get("save_json"))
     want_display = first_not_none(args.display, cfg.get("display"), False)
+    dedup_guard = first_not_none(cfg.get("dedup_guard"), True)
 
     # Optional log file: everything printed to stdout is mirrored there.
     # (stderr progress lines like "(waiting for reply...)" stay console-only.)
@@ -466,7 +508,8 @@ def main():
     transcript = []  # list of (speaker_index, text)
     try:
         model_stats, matrix = run_duel(host, topic, turns, participants, timeout,
-                                       transcript, matrix=matrix)
+                                       transcript, matrix=matrix,
+                                       dedup_guard=dedup_guard)
         print(f"Done: {len(transcript)} replies.", file=sys.stderr)
         if log_fh is not None:
             print(f"Logging to {log_path}", file=sys.stderr)

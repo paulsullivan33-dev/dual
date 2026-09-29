@@ -477,5 +477,125 @@ class SessionMarkerTests(unittest.TestCase):
             self.assertEqual(lines[end_idx - 1], first_start)
 
 
+class DedupGuardTests(unittest.TestCase):
+    """If a speaker repeats its own previous reply verbatim, the turn is
+    re-rolled once with a bumped temperature. Regression test: smollm2:1.7b
+    once echoed its whole previous reply word-for-word on a later turn."""
+
+    METRICS = {"gen_tokens": 10, "gen_s": 1.0,
+               "prompt_tokens": 20, "prompt_s": 0.5}
+
+    def _participants(self, temperature=None):
+        opts = {"num_predict": 50}
+        if temperature is not None:
+            opts["temperature"] = temperature
+        return [
+            {"name": "One", "model": "m1", "system": None, "think": False,
+             "options": dict(opts), "turn_prompt": ""},
+            {"name": "Two", "model": "m2", "system": None, "think": False,
+             "options": dict(opts), "turn_prompt": ""},
+        ]
+
+    def _run(self, turns, replies, participants=None, dedup_guard=True):
+        """Drive run_duel with a canned reply script; return (transcript,
+        calls, options_seen). The script is consumed in order; extra turns
+        reuse the last entry."""
+        script = list(replies)
+        calls = []
+        options_seen = []
+
+        def fake_call_chat(host, model, messages, think, options, timeout=None):
+            options_seen.append(dict(options))
+            calls.append(model)
+            text = script[min(len(calls) - 1, len(script) - 1)]
+            return "", text, "stop", dict(self.METRICS)
+
+        transcript = []
+        with mock.patch.object(ollama_duel, "call_chat", fake_call_chat):
+            ollama_duel.run_duel(
+                "http://x", "topic", turns,
+                participants or self._participants(),
+                60, transcript, dedup_guard=dedup_guard)
+        return transcript, calls, options_seen
+
+    def test_duplicate_triggers_one_reroll(self):
+        # Turn 3 (speaker One) repeats its turn-1 reply; the re-roll wins.
+        transcript, calls, _ = self._run(3, ["aaa", "bbb", "aaa", "ccc"])
+        self.assertEqual(len(calls), 4)  # 3 turns + 1 retry
+        self.assertEqual([t for _, t in transcript],
+                         ["aaa", "bbb", "ccc"])
+
+    def test_reroll_uses_bumped_temperature(self):
+        _, _, options_seen = self._run(3, ["aaa", "bbb", "aaa", "ccc"])
+        # First three calls carry no temperature (Ollama default); the
+        # re-roll (4th call) bumps it by DEDUP_RETRY_TEMP_BUMP.
+        self.assertNotIn("temperature", options_seen[0])
+        self.assertAlmostEqual(
+            options_seen[3]["temperature"],
+            ollama_duel.ASSUMED_DEFAULT_TEMPERATURE
+            + ollama_duel.DEDUP_RETRY_TEMP_BUMP)
+
+    def test_reroll_bumps_explicit_temperature(self):
+        _, _, options_seen = self._run(
+            3, ["aaa", "bbb", "aaa", "ccc"],
+            participants=self._participants(temperature=0.2))
+        self.assertAlmostEqual(options_seen[0]["temperature"], 0.2)
+        self.assertAlmostEqual(options_seen[3]["temperature"], 0.5)
+
+    def test_second_duplicate_is_accepted(self):
+        # The re-roll duplicates again; it is kept rather than retried
+        # forever.
+        transcript, calls, _ = self._run(3, ["aaa", "bbb", "aaa", "aaa"])
+        self.assertEqual(len(calls), 4)
+        self.assertEqual([t for _, t in transcript],
+                         ["aaa", "bbb", "aaa"])
+
+    def test_distinct_replies_never_reroll(self):
+        transcript, calls, options_seen = self._run(3, ["aaa", "bbb", "ccc"])
+        self.assertEqual(len(calls), 3)
+        self.assertTrue(all("temperature" not in o for o in options_seen))
+
+    def test_whitespace_only_difference_still_counts(self):
+        transcript, calls, _ = self._run(
+            3, ["aaa bbb", "xyz", "aaa\nbbb", "ccc"])
+        self.assertEqual(len(calls), 4)
+        self.assertEqual(transcript[2][1], "ccc")
+
+    def test_guard_can_be_disabled(self):
+        transcript, calls, _ = self._run(3, ["aaa", "bbb", "aaa"],
+                                         dedup_guard=False)
+        self.assertEqual(len(calls), 3)
+        self.assertEqual([t for _, t in transcript],
+                         ["aaa", "bbb", "aaa"])
+
+    def test_config_knob_reaches_run_duel(self):
+        seen = {}
+
+        def fake_run_duel(host, topic, turns, participants, timeout,
+                          transcript, matrix=None, dedup_guard=True):
+            seen["dedup_guard"] = dedup_guard
+            return {}, None
+
+        with tempfile.TemporaryDirectory() as d:
+            path = write_json(d, "cfg.json",
+                              minimal_config(turns=1, dedup_guard=False))
+            with mock.patch.object(sys, "argv", ["ollama_duel.py", path]), \
+                 mock.patch.object(ollama_duel, "run_duel", fake_run_duel):
+                ollama_duel.main()
+        self.assertFalse(seen["dedup_guard"])
+
+    def test_bad_config_knob_exits(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = write_json(d, "cfg.json",
+                              minimal_config(turns=1, dedup_guard="yes"))
+            with mock.patch.object(sys, "argv", ["ollama_duel.py", path]):
+                with self.assertRaises(SystemExit):
+                    ollama_duel.load_config(path)
+
+    def test_normalize_reply(self):
+        self.assertEqual(ollama_duel.normalize_reply("  a\n b\tc "),
+                         "a b c")
+
+
 if __name__ == "__main__":
     unittest.main()
