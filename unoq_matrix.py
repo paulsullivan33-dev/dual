@@ -110,14 +110,14 @@ class UnoQMatrix:
             try:
                 self._bus = smbus.SMBus(bus_number)
             except OSError as e:
-                raise DisplayUnavailable(f"cannot open I2C bus {bus_number}: {e}")
+                raise DisplayUnavailable(f"cannot open I2C bus {bus_number}: {e}") from e
         # Probe the device with a clear; a missing device fails here.
         try:
             self.clear()
         except OSError as e:
             raise DisplayUnavailable(
                 f"no LED matrix at I2C address 0x{address:02x}: {e}"
-            )
+            ) from e
 
     def _write(self, columns):
         """Write one 13-column frame; each value is a column, LSB = top."""
@@ -126,7 +126,7 @@ class UnoQMatrix:
         try:
             self._bus.write_i2c_block_data(self.address, 0x00, frame)
         except OSError as e:
-            raise DisplayUnavailable(f"I2C write failed: {e}")
+            raise DisplayUnavailable(f"I2C write failed: {e}") from e
 
     def clear(self):
         """Blank the matrix."""

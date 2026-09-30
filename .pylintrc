@@ -1,0 +1,45 @@
+[MAIN]
+# Pylint configuration for the dual repo.
+# The GitHub workflow runs `pylint $(git ls-files '*.py')` with no flags,
+# so this file is what stands between us and 400 style nitpicks.
+# Disabled checks are deliberate project conventions, documented below.
+
+[MESSAGES CONTROL]
+disable =
+    # Docstrings: this codebase documents via README + comments, not
+    # docstrings on every function/class/module.
+    C0114,  # missing-module-docstring
+    C0115,  # missing-class-docstring
+    C0116,  # missing-function-docstring
+    # Test doubles, callbacks and CLI handlers often take arguments they
+    # don't use; the parameter has to exist for the signature to match.
+    W0613,  # unused-argument
+    # Duel/agent CLIs are config-heavy; long parameter lists are clearer
+    # than stuffing everything into an options bag.
+    R0913,  # too-many-arguments
+    R0917,  # too-many-positional-arguments
+    # Tests legitimately poke at internals (mocking, white-box checks).
+    W0212,  # protected-access
+    # Imports are placed where they're needed: unoq_matrix is imported
+    # lazily inside a function because it's optional hardware support.
+    C0413,  # wrong-import-position
+    C0415,  # import-outside-toplevel
+    # Turn-loop and CLI main() functions are long by nature; splitting
+    # them further would hurt readability, not help it.
+    R0912,  # too-many-branches
+    R0914,  # too-many-locals
+    R0915,  # too-many-statements
+    # Small shared snippets (e.g. the urllib POST block) are intentionally
+    # duplicated rather than abstracted across the CLI tools.
+    R0801,  # duplicate-code
+    # The LED-matrix helper deliberately catches broad Exception around
+    # optional hardware: any display failure must never kill a duel.
+    W0718,  # broad-exception-caught
+    # The duel log file handle is intentionally long-lived (it backs
+    # sys.stdout for the whole run); `with` would close it too early.
+    R1732,  # consider-using-with
+    # Short separator names like `bar` are fine here.
+    C0104,  # disallowed-name
+
+[FORMAT]
+max-line-length = 120

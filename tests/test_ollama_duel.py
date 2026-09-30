@@ -629,7 +629,7 @@ class DedupGuardTests(unittest.TestCase):
                          ["aaa", "bbb", "aaa"])
 
     def test_distinct_replies_never_reroll(self):
-        transcript, calls, options_seen = self._run(3, ["aaa", "bbb", "ccc"])
+        _transcript, calls, options_seen = self._run(3, ["aaa", "bbb", "ccc"])
         self.assertEqual(len(calls), 3)
         self.assertTrue(all("temperature" not in o for o in options_seen))
 

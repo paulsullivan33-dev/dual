@@ -74,7 +74,7 @@ def test_show_text_static_when_it_fits():
 
 
 def test_show_text_scrolls_when_too_long():
-    import unittest.mock as mock
+    from unittest import mock
 
     bus = FakeBus()
     m = UnoQMatrix(bus_obj=bus)

@@ -33,7 +33,6 @@ import os
 import re
 import sys
 
-import ollama_common
 from ollama_common import (
     DEFAULT_HOST,
     DEFAULT_TIMEOUT,

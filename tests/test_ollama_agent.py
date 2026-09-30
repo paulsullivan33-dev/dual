@@ -17,7 +17,7 @@ class ExtractFilesTests(unittest.TestCase):
                          [("hello.py", 'print("hi")\n')])
 
     def test_multiple_files(self):
-        text = ("```python:a.py\n1\n```\n```js:src/b.js\n2\n```")
+        text = "```python:a.py\n1\n```\n```js:src/b.js\n2\n```"
         self.assertEqual(ollama_agent.extract_files(text),
                          [("a.py", "1\n"), ("src/b.js", "2\n")])
 
@@ -73,7 +73,7 @@ class WriteFilesTests(unittest.TestCase):
                 d, [("src/a.py", "x=1\n"), ("b.txt", "hi\n")])
             self.assertEqual(sorted(written), ["b.txt", "src/a.py"])
             self.assertEqual(rejected, [])
-            with open(os.path.join(d, "src", "a.py")) as f:
+            with open(os.path.join(d, "src", "a.py"), encoding="utf-8") as f:
                 self.assertEqual(f.read(), "x=1\n")
 
     def test_unsafe_paths_rejected(self):
@@ -102,9 +102,9 @@ class ConfirmWriteTests(unittest.TestCase):
 
 def _args(**overrides):
     import argparse
-    base = dict(task="build a thing", model="m", output_dir=".", host="h",
-                max_tokens=100, temperature=None, num_ctx=None,
-                timeout=60, yes=False)
+    base = {"task": "build a thing", "model": "m", "output_dir": ".", "host": "h",
+            "max_tokens": 100, "temperature": None, "num_ctx": None,
+            "timeout": 60, "yes": False}
     base.update(overrides)
     return argparse.Namespace(**base)
 
@@ -128,7 +128,7 @@ class RunAgentTests(unittest.TestCase):
                 _args(output_dir=d), input_fn=lambda _p: next(inputs),
                 call_fn=fake_call)
             self.assertEqual(rc, 0)
-            with open(os.path.join(d, "hello.py")) as f:
+            with open(os.path.join(d, "hello.py"), encoding="utf-8") as f:
                 self.assertEqual(f.read(), "print('hi')\n")
             self.assertEqual(len(calls), 1)  # one model call before "done"
 
@@ -148,7 +148,7 @@ class RunAgentTests(unittest.TestCase):
             self.assertEqual(len(seen), 2)
             self.assertIn("make it v2", seen[1])
             self.assertIn("hello.py", seen[1])  # snapshot of current files
-            with open(os.path.join(d, "hello.py")) as f:
+            with open(os.path.join(d, "hello.py"), encoding="utf-8") as f:
                 self.assertEqual(f.read(), "print('v2')\n")
 
     def test_declined_write_keeps_looping(self):
@@ -237,7 +237,7 @@ class RunAgentUntaggedTests(unittest.TestCase):
                 _args(output_dir=d, task="build a sudoku solver"),
                 input_fn=lambda _p: next(inputs), call_fn=fake_call)
             self.assertEqual(rc, 0)
-            with open(os.path.join(d, "sudoku.py")) as f:
+            with open(os.path.join(d, "sudoku.py"), encoding="utf-8") as f:
                 self.assertEqual(f.read(), "print('hi')\n")
 
     def test_untagged_block_uses_default_on_empty_answer(self):
