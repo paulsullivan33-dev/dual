@@ -178,6 +178,37 @@ class MainTurnsValidationTests(unittest.TestCase):
                     ollama_duel.main()
 
 
+class MainMaxTokensValidationTests(unittest.TestCase):
+    def test_cli_max_tokens_override_below_one_exits(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = write_json(d, "cfg.json", minimal_config())
+            with mock.patch.object(sys, "argv",
+                                   ["ollama_duel.py", path, "--max-tokens", "0"]):
+                with self.assertRaises(SystemExit):
+                    ollama_duel.main()
+
+    def test_cli_max_tokens_overrides_config(self):
+        seen_options = []
+
+        def fake_call_chat(host, model, messages, think, options, timeout=None):
+            seen_options.append(options)
+            metrics = {"gen_tokens": 10, "gen_s": 1.0,
+                       "prompt_tokens": 20, "prompt_s": 0.5}
+            return "", "canned reply", "stop", metrics
+
+        with tempfile.TemporaryDirectory() as d:
+            path = write_json(d, "cfg.json",
+                              minimal_config(turns=2, max_tokens=300))
+            with mock.patch.object(sys, "argv",
+                                   ["ollama_duel.py", path,
+                                    "--max-tokens", "1234"]), \
+                 mock.patch.object(ollama_duel, "call_chat", fake_call_chat):
+                ollama_duel.main()
+        self.assertTrue(seen_options)
+        for options in seen_options:
+            self.assertEqual(options["num_predict"], 1234)
+
+
 class TurnNudgeTests(unittest.TestCase):
     """From turn 2 on, each turn's prompt must end with a nudge telling the
     model to reply directly to the other participant. Regression test: small

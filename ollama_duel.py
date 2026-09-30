@@ -469,6 +469,8 @@ def main():
     ap.add_argument("config", help="path to JSON config file")
     ap.add_argument("--topic", default=None, help="override the config topic")
     ap.add_argument("--turns", type=int, default=None, help="override the config turn count")
+    ap.add_argument("--max-tokens", type=int, default=None,
+                    help="override the config max_tokens per turn")
     ap.add_argument("--host", default=None, help="override the config host")
     ap.add_argument("--think", dest="think", action="store_true", default=None,
                     help="force thinking display on")
@@ -502,6 +504,8 @@ def main():
     turns = first_not_none(args.turns, cfg.get("turns"), 6)
     if turns < 1:
         sys.exit(f'"turns" must be >= 1, got {turns}.')
+    if args.max_tokens is not None and args.max_tokens < 1:
+        sys.exit(f'"--max-tokens" must be >= 1, got {args.max_tokens}.')
     timeout = first_not_none(args.timeout, cfg.get("timeout"), DEFAULT_TIMEOUT)
     save_json_path = first_not_none(args.save_json, cfg.get("save_json"))
     want_display = first_not_none(args.display, cfg.get("display"), False)
@@ -553,7 +557,7 @@ def main():
     for entry in cfg["models"]:
         think = first_not_none(args.think, entry.get("think"), cfg.get("think"), False)
         max_tokens = first_not_none(
-            entry.get("max_tokens"), cfg.get("max_tokens"),
+            args.max_tokens, entry.get("max_tokens"), cfg.get("max_tokens"),
             2048 if think else 300,  # thinking eats the same token budget
         )
         temperature = first_not_none(entry.get("temperature"), cfg.get("temperature"))
