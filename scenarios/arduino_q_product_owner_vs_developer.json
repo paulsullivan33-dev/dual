@@ -3,7 +3,7 @@
   "topic": "Build a command-line to-do list tool in Python. It stores tasks in a todo.json file next to the script and supports 'add <text>', 'list', and 'done <number>' commands via argparse. The Developer writes the first version; after that, the Product Owner adds or changes one requirement per turn and the Developer implements it.",
   "turns": 10,
   "think": false,
-  "max_tokens": 4096,
+  "max_tokens": 2048,
   "num_ctx": 4096,
   "temperature": 0.5,
   "log_file": "logs/product_owner_vs_developer.log",
@@ -22,5 +22,6 @@
       "system": "You are a product owner for a command-line to-do tool. You do not write code. Each turn you reply in two or three plain sentences with exactly one new or changed requirement, sometimes changing your mind about an earlier one, the way real users do. Keep requirements realistic and testable.",
       "turn_prompt": "Look at {other}'s latest program and give exactly one new or changed requirement in two or three plain sentences. Do not write code."
     }
-  ]
+  ],
+  "timeout": 1500
 }

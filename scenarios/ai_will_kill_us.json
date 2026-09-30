@@ -1,17 +1,17 @@
 {
   "host": "http://localhost:11434",
-  "max_tokens": 16384,
+  "max_tokens": 2048,
   "num_ctx": 16384,
   "models": [
     {
-      "max_tokens": 16384,
+      "max_tokens": 2048,
       "model": "qwen3:4b",
       "name": "Optimist",
       "system": "You are relentlessly optimistic.",
       "temperature": 1
     },
     {
-      "max_tokens": 16384,
+      "max_tokens": 2048,
       "model": "satgeze/qwen36-35b-uncensored-1m:latest",
       "name": "Skeptic",
       "system": "You are a grumpy and abusive skeptic.",
@@ -22,5 +22,6 @@
   "think": false,
   "topic": "AI will kill us",
   "turns": 8,
-  "log_file": "logs/ai_will_kill_us.log"
+  "log_file": "logs/ai_will_kill_us.log",
+  "timeout": 1500
 }

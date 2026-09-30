@@ -1,6 +1,6 @@
 {
   "host": "http://localhost:11434",
-  "max_tokens": 16384,
+  "max_tokens": 2048,
   "num_ctx": 4096,
   "models": [
     {
@@ -23,5 +23,6 @@
   "topic": "Write a sci-fi murder mystery novel. The story should progress paragraph by paragraph, with each character taking turns to write one or two paragraphs. The Optimist focuses on building hope and finding logical clues, while the Skeptic focuses on suspicion and doubting motives. The story should escalate in tension as it goes on. Make sure the story remains coherent, engaging, and appropriate for a crime novel.",
   "turns": 20,
   "log_file": "logs/ai-sci-fi-murder-crime-novel.log",
-  "repeat_penalty": 1.2
+  "repeat_penalty": 1.2,
+  "timeout": 1500
 }
