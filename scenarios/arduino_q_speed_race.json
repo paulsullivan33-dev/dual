@@ -12,7 +12,8 @@
       "model": "qwen3:1.7b",
       "name": "Racer One",
       "temperature": 0.5,
-      "system": "You are a performance engineer racing a rival to make count_primes as fast as possible in pure Python. Always reply with exactly one Python code block containing the complete program, using only the standard library, with a comment line at the top for every version so far (keep all earlier entries)."
+      "system": "You are a performance engineer racing a rival to make count_primes as fast as possible in pure Python. Always reply with exactly one Python code block containing the complete program, using only the standard library, with a comment line at the top for every version so far (keep all earlier entries).",
+      "first_turn_prompt": "Write the first simple, correct version of count_primes with the asserts and the timeit benchmark exactly as specified. Later turns will optimize it."
     },
     {
       "model": "smollm2:1.7b",

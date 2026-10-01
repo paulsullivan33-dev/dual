@@ -518,6 +518,9 @@ def main():
                          "8x13 LED matrix (needs python3-smbus on the Uno Q)")
     ap.add_argument("--no-display", dest="display", action="store_false",
                     help="force the LED matrix display off")
+    ap.add_argument("--dry-run", action="store_true",
+                    help="print the exact messages turn 1 would send and exit "
+                         "without calling Ollama")
     args = ap.parse_args()
 
     setup_utf8_stdout()
@@ -546,9 +549,10 @@ def main():
     # Optional log file: everything printed to stdout is mirrored there.
     # (stderr progress lines like "(waiting for reply...)" stay console-only.)
     # The stamp prepended to the file name keeps each run in its own file.
+    # A dry run never opens one -- it should not leave log artifacts behind.
     log_path = first_not_none(args.log_file, cfg.get("log_file"))
     log_fh = None
-    if log_path:
+    if log_path and not args.dry_run:
         log_path = timestamped_log_path(log_path)
         try:
             # Scenarios log to logs/...; create the folder on first use.
@@ -616,6 +620,18 @@ def main():
         })
 
     print_duel_header(topic, participants, turns)
+
+    if args.dry_run:
+        # Show exactly what the opening turn would send, then stop before
+        # any Ollama call. Handy when writing or debugging scenarios.
+        opener = participants[0]
+        print(f"--- dry run: turn 1 messages for {opener['name']} "
+              f"({opener['model']}) ---")
+        for m in build_turn_messages(participants, 0, topic, []):
+            print(f"[{m['role']}]")
+            print(m["content"])
+            print()
+        return
 
     transcript = []  # list of (speaker_index, text)
     stop_note = None  # why the duel ended early, when it did

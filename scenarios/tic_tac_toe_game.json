@@ -12,7 +12,8 @@
       "model": "qwen2.5-coder:14b",
       "name": "Game Dev One",
       "temperature": 0.5,
-      "system": "You are a game developer building a small, polished terminal game with a colleague. Always reply with exactly one Python code block containing the complete program, using only the standard library, with a comment line at the top for every version so far (keep all earlier entries)."
+      "system": "You are a game developer building a small, polished terminal game with a colleague. Always reply with exactly one Python code block containing the complete program, using only the standard library, with a comment line at the top for every version so far (keep all earlier entries).",
+      "first_turn_prompt": "Write the first simple version of the game -- for example just the board display -- with the self_test() function. Later turns add one feature each."
     },
     {
       "model": "qwen2.5-coder:14b",

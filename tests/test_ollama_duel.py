@@ -345,6 +345,39 @@ class TurnPromptTests(unittest.TestCase):
                 ollama_duel.load_config(path)
 
 
+class DryRunTests(unittest.TestCase):
+    """--dry-run prints the exact turn-1 messages and exits without
+    calling Ollama."""
+
+    def test_dry_run_prints_turn_one_and_makes_no_calls(self):
+        import contextlib
+        import io
+        calls = []
+        metrics = {"gen_tokens": 10, "gen_s": 1.0,
+                   "prompt_tokens": 20, "prompt_s": 0.5}
+
+        def fake_call_chat(host, model, messages, think, options,
+                           timeout=None):
+            calls.append(messages)
+            return "", "canned reply", "stop", metrics
+
+        buf = io.StringIO()
+        with tempfile.TemporaryDirectory() as d:
+            path = write_json(d, "cfg.json", minimal_config(turns=2))
+            with mock.patch.object(sys, "argv",
+                                   ["ollama_duel.py", path, "--dry-run",
+                                    "--no-results-log"]), \
+                 mock.patch.object(ollama_duel, "call_chat", fake_call_chat), \
+                 contextlib.redirect_stdout(buf):
+                ollama_duel.main()
+        self.assertEqual(calls, [])
+        out = buf.getvalue()
+        self.assertIn("test topic", out)
+        self.assertIn("[user]", out)
+        self.assertIn("You are m1.", out)
+        self.assertIn("Write only m1's own words and actions", out)
+
+
 class ContextWarningTests(unittest.TestCase):
     def test_max_tokens_above_num_ctx_warns(self):
         w = ollama_duel.context_warning("A", 8000, 4096)

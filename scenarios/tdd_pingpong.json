@@ -12,7 +12,8 @@
       "model": "qwen2.5-coder:14b",
       "name": "Ping",
       "temperature": 0.4,
-      "system": "You are a disciplined test-driven developer pairing with a colleague. Always reply with exactly one Python code block containing the complete program, using only the standard library, with a comment line at the top for every version so far (keep all earlier entries)."
+      "system": "You are a disciplined test-driven developer pairing with a colleague. Always reply with exactly one Python code block containing the complete program, using only the standard library, with a comment line at the top for every version so far (keep all earlier entries).",
+      "first_turn_prompt": "Write the first failing test only, with a to_roman stub that returns an empty string. {other} will make it pass and add the next test."
     },
     {
       "model": "qwen2.5-coder:14b",

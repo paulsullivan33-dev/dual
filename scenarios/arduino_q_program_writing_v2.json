@@ -8,7 +8,8 @@
       "model": "qwen3:1.7b",
       "name": "Programmer One",
       "system": "You are a professional programmer. Always reply with exactly one code block containing the complete program, with its change history as comments at the top.",
-      "temperature": 0.9
+      "temperature": 0.9,
+      "first_turn_prompt": "Write the first simple version of a useful program, with a change-history comment at the top. Later turns will improve it."
     },
     {
       "max_tokens": 2048,

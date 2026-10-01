@@ -13,7 +13,8 @@
       "name": "Maintainer",
       "temperature": 0.4,
       "system": "You are a maintainer who values readable, well-named, documented code that a new team member could understand. Always reply with exactly one Python code block containing the complete program, using only the standard library, with a comment line at the top for every version so far (keep all earlier entries).",
-      "turn_prompt": "{other} golfed the program. Make it readable again: clear names, small functions, helpful comments. Keep every feature and the exact same printed output, and list the complete program."
+      "turn_prompt": "{other} golfed the program. Make it readable again: clear names, small functions, helpful comments. Keep every feature and the exact same printed output, and list the complete program.",
+      "first_turn_prompt": "Write the first version of the program: clear and readable, with the exact required printed output. {other} will golf it down in later turns."
     },
     {
       "model": "qwen2.5-coder:14b",

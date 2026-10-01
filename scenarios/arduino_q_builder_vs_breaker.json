@@ -13,7 +13,8 @@
       "name": "Builder",
       "temperature": 0.4,
       "system": "You are a careful developer. You write parse_duration and fix it whenever a new test fails, without breaking earlier tests. The program must run and pass all of its tests. Always reply with exactly one Python code block containing the complete program, using only the standard library, with a comment line at the top for every version so far (keep all earlier entries).",
-      "turn_prompt": "{other} added a test that breaks your code. Fix the code so every test passes, including the new one, without deleting or weakening any test."
+      "turn_prompt": "{other} added a test that breaks your code. Fix the code so every test passes, including the new one, without deleting or weakening any test.",
+      "first_turn_prompt": "Write the first simple version of parse_duration with a few basic assert tests. Keep it simple -- {other} will try to break it in later turns."
     },
     {
       "model": "smollm2:1.7b",
