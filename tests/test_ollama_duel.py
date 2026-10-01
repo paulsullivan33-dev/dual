@@ -231,10 +231,18 @@ class TurnNudgeTests(unittest.TestCase):
                 ollama_duel.main()
         return seen
 
-    def test_first_turn_has_topic_and_no_nudge(self):
+    def test_first_turn_ends_with_opening_nudge(self):
+        # The opening speaker used to get no nudge at all, so it would
+        # script-write both sides of the debate on turn 1. Now the first
+        # turn closes with the first-turn nudge instead of the bare topic.
         seen = self._run_two_turns()
         self.assertEqual(len(seen), 2)
-        self.assertEqual(seen[0][-1], "test topic")
+        self.assertEqual(seen[0][0], "test topic")
+        nudge = seen[0][-1]
+        self.assertIn("You are m1.", nudge)
+        self.assertIn("Write only m1's own words and actions", nudge)
+        self.assertIn("never write", nudge)
+        self.assertIn("dialogue or actions for Two", nudge)
 
     def test_later_turns_nudge_a_direct_reply(self):
         seen = self._run_two_turns()
@@ -311,6 +319,28 @@ class TurnPromptTests(unittest.TestCase):
     def test_non_string_turn_prompt_exits(self):
         with tempfile.TemporaryDirectory() as d:
             path = write_json(d, "cfg.json", minimal_config(turn_prompt=5))
+            with self.assertRaises(SystemExit):
+                ollama_duel.load_config(path)
+
+    def test_first_turn_prompt_replaces_default_opening_nudge(self):
+        seen = run_duel(minimal_config(
+            turns=2, first_turn_prompt="Open strong, {name}."))
+        self.assertEqual(seen[0][-1], "Open strong, m1.")
+
+    def test_per_model_first_turn_prompt_wins_over_top_level(self):
+        cfg = minimal_config(turns=2, first_turn_prompt="top level")
+        cfg["models"][0]["first_turn_prompt"] = "model one"
+        seen = run_duel(cfg)
+        self.assertEqual(seen[0][-1], "model one")
+
+    def test_empty_first_turn_prompt_disables_opening_nudge(self):
+        seen = run_duel(minimal_config(turns=2, first_turn_prompt=""))
+        self.assertEqual(seen[0][-1], "test topic")
+
+    def test_non_string_first_turn_prompt_exits(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = write_json(d, "cfg.json",
+                              minimal_config(first_turn_prompt=5))
             with self.assertRaises(SystemExit):
                 ollama_duel.load_config(path)
 

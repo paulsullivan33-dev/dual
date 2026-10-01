@@ -7,11 +7,11 @@ Usage:
     python3 ollama_duel.py duel.json --turns 10 --topic "A different question"
 
 Globals in the JSON (host, topic, turns, think, max_tokens, temperature,
-num_ctx, repeat_penalty, turn_prompt, log_file, save_json, timeout, display,
-dedup_guard) act as defaults; anything set inside a "models" entry overrides the global for
-that model only (think, max_tokens, temperature, num_ctx, repeat_penalty,
-turn_prompt only -- the rest are duel-wide). "models" must contain exactly 2
-entries.
+num_ctx, repeat_penalty, turn_prompt, first_turn_prompt, log_file, save_json,
+timeout, display, dedup_guard) act as defaults; anything set inside a "models"
+entry overrides the global for that model only (think, max_tokens,
+temperature, num_ctx, repeat_penalty, turn_prompt, first_turn_prompt only --
+the rest are duel-wide). "models" must contain exactly 2 entries.
 If "log_file" is set, everything printed to stdout is mirrored to a
 timestamped copy of that file: the current date/time is prepended to the
 file name (e.g. "duel.log" -> "20260925-084500-duel.log") so each run gets
@@ -47,11 +47,12 @@ from ollama_common import (
 
 TOP_LEVEL_KEYS = {
     "host", "topic", "turns", "think", "max_tokens", "temperature",
-    "num_ctx", "repeat_penalty", "turn_prompt", "log_file", "save_json", "timeout",
+    "num_ctx", "repeat_penalty", "turn_prompt", "first_turn_prompt",
+    "log_file", "save_json", "timeout",
     "display", "dedup_guard", "results_log", "models",
 }
 MODEL_KEYS = {"model", "name", "system", "think", "max_tokens", "temperature",
-              "num_ctx", "repeat_penalty", "turn_prompt"}
+              "num_ctx", "repeat_penalty", "turn_prompt", "first_turn_prompt"}
 
 # Sent as the last message on every turn after the first, to nudge the model
 # to answer the other participant instead of starting a fresh parallel
@@ -70,6 +71,19 @@ DEFAULT_TURN_PROMPT = (
     "dialogue or actions for {other}. Keep it to a few short paragraphs. "
     "Do not repeat or summarize what has already been said; move the "
     "exchange forward."
+)
+
+# Sent as the last message on the first turn only. Without it the opening
+# speaker sees both sides' positions in the topic and no contrary
+# instruction, so it tends to script-write the whole debate -- both voices
+# -- instead of just its own opening. {name} and {other} are replaced like
+# in DEFAULT_TURN_PROMPT. Overridable per model or top level via
+# "first_turn_prompt"; "" disables it.
+DEFAULT_FIRST_TURN_PROMPT = (
+    "You are {name}. Open the exchange with your own position, staying in "
+    "character. Write only {name}'s own words and actions -- never write "
+    "dialogue or actions for {other}; {other} will speak for themselves. "
+    "Keep it to a few short paragraphs."
 )
 
 # Dedup guard: if a speaker's reply is identical (modulo whitespace) to its
@@ -165,6 +179,7 @@ def load_config(path):
     _validate_field(cfg, "num_ctx", "int", "top level", minimum=1)
     _validate_field(cfg, "repeat_penalty", "number", "top level", minimum=1)
     _validate_field(cfg, "turn_prompt", "str", "top level")
+    _validate_field(cfg, "first_turn_prompt", "str", "top level")
     _validate_field(cfg, "log_file", "str", "top level")
     _validate_field(cfg, "save_json", "str", "top level")
     _validate_field(cfg, "timeout", "number", "top level", minimum=1)
@@ -179,6 +194,7 @@ def load_config(path):
         _validate_field(m, "num_ctx", "int", label, minimum=1)
         _validate_field(m, "repeat_penalty", "number", label, minimum=1)
         _validate_field(m, "turn_prompt", "str", label)
+        _validate_field(m, "first_turn_prompt", "str", label)
     return cfg
 
 
@@ -357,7 +373,10 @@ def build_turn_messages(participants, i, topic, transcript):
     conversation, so both speakers see it on every turn -- otherwise the
     second speaker never sees it at all and the first loses it after turn 1.
     After the first turn, the speaker's turn_prompt (see DEFAULT_TURN_PROMPT)
-    closes the list; an empty turn_prompt disables it.
+    closes the list; an empty turn_prompt disables it. On the first turn the
+    speaker's first_turn_prompt (see DEFAULT_FIRST_TURN_PROMPT) closes the
+    list instead, so the opener stays in character rather than script-writing
+    both sides; an empty first_turn_prompt disables it.
     """
     me = participants[i]
     messages = []
@@ -367,10 +386,17 @@ def build_turn_messages(participants, i, topic, transcript):
     for spk, text in transcript:
         role = "assistant" if spk == i else "user"
         messages.append({"role": role, "content": text})
+    first_nudge = me.get("first_turn_prompt", DEFAULT_FIRST_TURN_PROMPT)
     if transcript and me["turn_prompt"]:
         messages.append({
             "role": "user",
             "content": render_turn_prompt(me["turn_prompt"], me["name"],
+                                          participants[1 - i]["name"]),
+        })
+    elif not transcript and first_nudge:
+        messages.append({
+            "role": "user",
+            "content": render_turn_prompt(first_nudge, me["name"],
                                           participants[1 - i]["name"]),
         })
     return messages
@@ -386,8 +412,8 @@ def run_duel(host, topic, turns, participants, timeout, transcript, matrix=None,
              dedup_guard=True):
     """Run the duel's turn loop, printing each reply as it arrives.
 
-    Each participant is a dict with name, model, system, think, options and
-    turn_prompt. Replies are appended to the caller's `transcript` list as
+    Each participant is a dict with name, model, system, think, options,
+    turn_prompt and first_turn_prompt. Replies are appended to the caller's `transcript` list as
     (speaker_index, text) so that whatever was generated survives an early
     stop. Ctrl-C or an OllamaError stops the loop gracefully.
 
@@ -584,6 +610,9 @@ def main():
             "turn_prompt": first_not_none(entry.get("turn_prompt"),
                                           cfg.get("turn_prompt"),
                                           DEFAULT_TURN_PROMPT),
+            "first_turn_prompt": first_not_none(entry.get("first_turn_prompt"),
+                                               cfg.get("first_turn_prompt"),
+                                               DEFAULT_FIRST_TURN_PROMPT),
         })
 
     print_duel_header(topic, participants, turns)
