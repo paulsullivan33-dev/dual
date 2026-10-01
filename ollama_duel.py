@@ -87,14 +87,24 @@ DEFAULT_FIRST_TURN_PROMPT = (
 )
 
 # Dedup guard: if a speaker's reply is identical (modulo whitespace) to its
-# own previous reply, the turn is re-rolled once with a bumped temperature.
-# Small models at low temperature otherwise get stuck echoing themselves
-# verbatim -- repeat_penalty only covers the last ~64 tokens, so a whole
-# earlier reply sails through unpenalized. Only one retry: a second
-# duplicate is accepted, so a stuck model can't spin forever. Disable with
-# "dedup_guard": false in the scenario JSON.
+# own previous reply, the turn is re-rolled once with a bumped temperature
+# and an explicit no-repeat nudge appended to the messages. Small models at
+# low temperature otherwise get stuck echoing themselves verbatim --
+# repeat_penalty only covers the last ~64 tokens, so a whole earlier reply
+# sails through unpenalized, and a bare temperature bump often isn't enough
+# to knock the model out of the rut because the prompt itself is unchanged.
+# Detection stays exact-match on purpose: in code-duel scenarios a speaker's
+# consecutive replies are legitimately 95%+ similar (the whole program
+# re-listed with a small change), so fuzzy matching would misfire there.
+# Only one retry: a second duplicate is accepted (with a note), so a stuck
+# model can't spin forever. Disable with "dedup_guard": false in the
+# scenario JSON.
 DEDUP_RETRY_TEMP_BUMP = 0.3
 DEDUP_RETRY_TEMP_CAP = 1.5
+DEDUP_RETRY_NUDGE = (
+    "That reply repeated what you just said. Say something new -- "
+    "do not repeat your previous reply."
+)
 # Ollama's server-side default temperature when the config doesn't set one.
 ASSUMED_DEFAULT_TEMPERATURE = 0.8
 
@@ -419,7 +429,8 @@ def run_duel(host, topic, turns, participants, timeout, transcript, matrix=None,
 
     When dedup_guard is on, a turn whose reply duplicates that speaker's
     own previous reply (ignoring whitespace differences) is re-rolled once
-    with a bumped temperature; a second duplicate is kept as-is.
+    with a bumped temperature and an explicit no-repeat nudge appended to
+    the messages; a second duplicate is kept as-is, with a note.
 
     Returns (model_stats, matrix, stop_note): per-model stats for
     format_duel_stats, the LED matrix (or None if there is none or it
@@ -450,13 +461,21 @@ def run_duel(host, topic, turns, participants, timeout, transcript, matrix=None,
                                               ASSUMED_DEFAULT_TEMPERATURE)
                 retry_options["temperature"] = min(base_temp + DEDUP_RETRY_TEMP_BUMP,
                                                    DEDUP_RETRY_TEMP_CAP)
+                # A bare temperature bump often isn't enough: the prompt is
+                # unchanged, so a stuck model happily repeats itself again.
+                # The explicit nudge breaks the loop far more reliably.
+                retry_messages = messages + [{"role": "user",
+                                              "content": DEDUP_RETRY_NUDGE}]
                 print(f"--- DEDUP GUARD: {me['name']} repeated its previous reply; "
-                      f"re-rolling once at temperature "
+                      f"re-rolling once with a no-repeat nudge at temperature "
                       f"{retry_options['temperature']:.2f} ---")
                 thinking, reply, done_reason, metrics = call_chat(
-                    host, me["model"], messages, me["think"], retry_options,
+                    host, me["model"], retry_messages, me["think"], retry_options,
                     timeout=timeout)
                 norm = normalize_reply(reply)
+                if norm and norm == prev_replies.get(i):
+                    print(f"--- DEDUP GUARD: {me['name']} repeated again; "
+                          f"keeping the retry as-is ---")
             prev_replies[i] = norm
             # Ollama's measured generation speed (exact token count over
             # generation time, excluding model load and prompt reading).

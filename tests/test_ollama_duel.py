@@ -722,6 +722,45 @@ class DedupGuardTests(unittest.TestCase):
         self.assertEqual([t for _, t in transcript],
                          ["aaa", "bbb", "aaa"])
 
+    def test_reroll_appends_no_repeat_nudge(self):
+        # The retry must carry an explicit no-repeat instruction: a bare
+        # temperature bump with an unchanged prompt often repeats again.
+        script = ["aaa", "bbb", "aaa", "ccc"]
+        calls = []
+        messages_seen = []
+
+        def fake_call_chat(host, model, messages, think, options,
+                           timeout=None):
+            calls.append(model)
+            messages_seen.append(list(messages))
+            text = script[min(len(calls) - 1, len(script) - 1)]
+            return "", text, "stop", dict(self.METRICS)
+
+        transcript = []
+        with mock.patch.object(ollama_duel, "call_chat", fake_call_chat):
+            ollama_duel.run_duel("http://x", "topic", 3,
+                                 self._participants(), 60, transcript)
+        self.assertEqual(len(calls), 4)
+        retry_messages = messages_seen[3]
+        self.assertEqual(retry_messages[-1],
+                         {"role": "user",
+                          "content": ollama_duel.DEDUP_RETRY_NUDGE})
+        # The nudge is appended to a copy; the original messages are
+        # untouched.
+        self.assertEqual(retry_messages[:-1], messages_seen[2])
+
+    def test_second_duplicate_prints_note(self):
+        import contextlib
+        import io
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            transcript, calls, _ = self._run(
+                3, ["aaa", "bbb", "aaa", "aaa"])
+        self.assertEqual(len(calls), 4)
+        self.assertIn("repeated again", buf.getvalue())
+        self.assertEqual([t for _, t in transcript],
+                         ["aaa", "bbb", "aaa"])
+
     def test_distinct_replies_never_reroll(self):
         _transcript, calls, options_seen = self._run(3, ["aaa", "bbb", "ccc"])
         self.assertEqual(len(calls), 3)
