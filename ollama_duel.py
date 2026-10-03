@@ -386,16 +386,20 @@ def notify_duel_done(url, config_path, participants, turns, transcript,
     """POST a short completion notice to ntfy. Best-effort: any failure
     warns on stderr and never fails the run."""
     import urllib.request  # stdlib; imported here so --help stays instant
+    import socket
     scenario = os.path.basename(config_path)
+    host = socket.gethostname()
     duration_s = (datetime.now() - run_started).total_seconds()
     a, b = participants
     if crashed:
-        title, result, tags = f"duel crashed: {scenario}", "CRASHED", "warning"
+        title, result, tags = (f"duel crashed: {scenario} [{host}]",
+                               "CRASHED", "warning")
     elif stop_note:
-        title, result, tags = (f"duel stopped early: {scenario}",
+        title, result, tags = (f"duel stopped early: {scenario} [{host}]",
                                "STOPPED EARLY", "warning")
     else:
-        title, result, tags = f"duel finished: {scenario}", "OK", "tada"
+        title, result, tags = (f"duel finished: {scenario} [{host}]",
+                               "OK", "tada")
     body = "\n".join([
         f"{scenario}: {result}",
         f"{a['model']} ({a['name']}) vs {b['model']} ({b['name']})",

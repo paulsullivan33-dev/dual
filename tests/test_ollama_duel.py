@@ -1014,6 +1014,7 @@ class NtfyTests(unittest.TestCase):
 
     def test_notify_posts_title_and_body(self):
         import urllib.request
+        import socket
         seen = {}
 
         class FakeResp:
@@ -1034,12 +1035,14 @@ class NtfyTests(unittest.TestCase):
                 self._participants(), 8, [(0, "hi"), (1, "yo")],
                 started, None, False)
         self.assertEqual(seen["url"], "https://ntfy.sh/topic")
-        self.assertEqual(seen["title"], "duel finished: duel.json")
+        self.assertEqual(seen["title"],
+                         f"duel finished: duel.json [{socket.gethostname()}]")
         self.assertIn("m1 (Alice) vs m2 (Bob)", seen["data"])
         self.assertIn("2/8 turns", seen["data"])
 
     def test_notify_stopped_early_title(self):
         import urllib.request
+        import socket
 
         class FakeResp:
             def __enter__(self): return self
@@ -1057,7 +1060,8 @@ class NtfyTests(unittest.TestCase):
                 "https://ntfy.sh/topic", "/scen/duel.json",
                 self._participants(), 8, [(0, "hi")],
                 started, "boom went the model", False)
-        self.assertEqual(seen["title"], "duel stopped early: duel.json")
+        self.assertEqual(seen["title"],
+                         f"duel stopped early: duel.json [{socket.gethostname()}]")
 
     def test_notify_failure_warns_without_raising(self):
         import urllib.request
