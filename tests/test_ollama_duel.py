@@ -1063,6 +1063,55 @@ class NtfyTests(unittest.TestCase):
         self.assertEqual(seen["title"],
                          f"duel stopped early: duel.json [{socket.gethostname()}]")
 
+    def test_notify_includes_token_stats(self):
+        import urllib.request
+
+        class FakeResp:
+            def __enter__(self): return self
+            def __exit__(self, *a): return False
+            def read(self): return b"ok"
+
+        seen = {}
+        def fake_urlopen(req, timeout=None):
+            seen["data"] = req.data.decode("utf-8")
+            return FakeResp()
+
+        stats = {
+            "m1": {"turns": 2, "gen_tokens": 100, "gen_s": 50.0,
+                   "prompt_tokens": 200, "prompt_s": 10.0, "truncated": 0},
+            "m2": {"turns": 2, "gen_tokens": 80, "gen_s": 40.0,
+                   "prompt_tokens": 190, "prompt_s": 9.5, "truncated": 1},
+        }
+        started = ollama_duel.datetime.now()
+        with mock.patch.object(urllib.request, "urlopen", fake_urlopen):
+            ollama_duel.notify_duel_done(
+                "https://ntfy.sh/topic", "/scen/duel.json",
+                self._participants(), 8, [(0, "hi"), (1, "yo")],
+                started, None, False, model_stats=stats)
+        self.assertIn("tokens: m1 100 tok @ 2.0 tok/s, "
+                      "m2 80 tok @ 2.0 tok/s", seen["data"])
+
+    def test_notify_without_stats_omits_token_line(self):
+        import urllib.request
+
+        class FakeResp:
+            def __enter__(self): return self
+            def __exit__(self, *a): return False
+            def read(self): return b"ok"
+
+        seen = {}
+        def fake_urlopen(req, timeout=None):
+            seen["data"] = req.data.decode("utf-8")
+            return FakeResp()
+
+        started = ollama_duel.datetime.now()
+        with mock.patch.object(urllib.request, "urlopen", fake_urlopen):
+            ollama_duel.notify_duel_done(
+                "https://ntfy.sh/topic", "/scen/duel.json",
+                self._participants(), 8, [(0, "hi")],
+                started, None, False)
+        self.assertNotIn("tokens:", seen["data"])
+
     def test_notify_failure_warns_without_raising(self):
         import urllib.request
         started = ollama_duel.datetime.now()

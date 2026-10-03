@@ -381,8 +381,21 @@ def load_default_ntfy_url():
     return ""
 
 
+def format_token_stats_line(model_stats):
+    """One-line per-model token summary for notifications, e.g.
+    'tokens: m1 100 tok @ 2.0 tok/s, m2 80 tok @ 1.6 tok/s'.
+    Returns "" when no stats are available."""
+    if not model_stats:
+        return ""
+    parts = []
+    for model, s in model_stats.items():
+        gen_tps = s["gen_tokens"] / s["gen_s"] if s["gen_s"] > 0 else 0.0
+        parts.append(f"{model} {s['gen_tokens']} tok @ {gen_tps:.1f} tok/s")
+    return "tokens: " + ", ".join(parts)
+
+
 def notify_duel_done(url, config_path, participants, turns, transcript,
-                     run_started, stop_note, crashed):
+                     run_started, stop_note, crashed, model_stats=None):
     """POST a short completion notice to ntfy. Best-effort: any failure
     warns on stderr and never fails the run."""
     import urllib.request  # stdlib; imported here so --help stays instant
@@ -405,6 +418,9 @@ def notify_duel_done(url, config_path, participants, turns, transcript,
         f"{a['model']} ({a['name']}) vs {b['model']} ({b['name']})",
         f"{len(transcript)}/{turns} turns in {duration_s:.0f}s",
     ])
+    stats_line = format_token_stats_line(model_stats)
+    if stats_line:
+        body += "\n" + stats_line
     if stop_note and not crashed:
         body += "\n" + stop_note.strip().splitlines()[0][:200]
     try:
@@ -775,7 +791,8 @@ def main():
             # the duel, so it never notifies.
             crashed_now = stop_note is None and sys.exc_info()[0] is not None
             notify_duel_done(ntfy_url, args.config, participants, turns,
-                             transcript, run_started, stop_note, crashed_now)
+                             transcript, run_started, stop_note, crashed_now,
+                             model_stats=model_stats)
 
 
 if __name__ == "__main__":
