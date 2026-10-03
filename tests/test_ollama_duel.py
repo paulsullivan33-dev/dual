@@ -1,3 +1,4 @@
+import io
 import json
 import os
 import sys
@@ -959,6 +960,115 @@ class RunSummaryTests(unittest.TestCase):
                 contents = f.read()
         self.assertIn("Result: CRASHED", contents)
         self.assertIn("kaboom", contents)
+
+
+class NtfyTests(unittest.TestCase):
+    def _home_with(self, files):
+        d = tempfile.TemporaryDirectory()
+        self.addCleanup(d.cleanup)
+        for name, text in files.items():
+            with open(os.path.join(d.name, name), "w",
+                      encoding="utf-8") as f:
+                f.write(text)
+        return d
+
+    def test_default_url_missing_file(self):
+        d = self._home_with({})
+        with mock.patch.dict(os.environ, {"HOME": d.name}):
+            self.assertEqual(ollama_duel.load_default_ntfy_url(), "")
+
+    def test_default_url_valid_file(self):
+        d = self._home_with(
+            {".dual.conf": json.dumps({"ntfy_url": "https://ntfy.sh/x"})})
+        with mock.patch.dict(os.environ, {"HOME": d.name}):
+            self.assertEqual(ollama_duel.load_default_ntfy_url(),
+                             "https://ntfy.sh/x")
+
+    def test_default_url_bad_files_treated_as_unset(self):
+        for text in ('{not json', '[1, 2]', '{"ntfy_url": 42}',
+                     '{"other": "x"}', '{"ntfy_url": "   "}'):
+            d = self._home_with({".dual.conf": text})
+            with mock.patch.dict(os.environ, {"HOME": d.name}):
+                self.assertEqual(ollama_duel.load_default_ntfy_url(), "",
+                                 f"for {text!r}")
+
+    def test_config_accepts_ntfy_url(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = write_json(d, "cfg.json",
+                              minimal_config(ntfy_url="https://ntfy.sh/x"))
+            cfg = ollama_duel.load_config(path)
+            self.assertEqual(cfg["ntfy_url"], "https://ntfy.sh/x")
+
+    def test_config_rejects_non_string_ntfy_url(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = write_json(d, "cfg.json",
+                              minimal_config(ntfy_url=123))
+            with self.assertRaises(SystemExit):
+                ollama_duel.load_config(path)
+
+    def _participants(self):
+        return [
+            {"name": "Alice", "model": "m1"},
+            {"name": "Bob", "model": "m2"},
+        ]
+
+    def test_notify_posts_title_and_body(self):
+        import urllib.request
+        seen = {}
+
+        class FakeResp:
+            def __enter__(self): return self
+            def __exit__(self, *a): return False
+            def read(self): return b"ok"
+
+        def fake_urlopen(req, timeout=None):
+            seen["url"] = req.full_url
+            seen["title"] = req.get_header("Title")
+            seen["data"] = req.data.decode("utf-8")
+            return FakeResp()
+
+        started = ollama_duel.datetime.now()
+        with mock.patch.object(urllib.request, "urlopen", fake_urlopen):
+            ollama_duel.notify_duel_done(
+                "https://ntfy.sh/topic", "/scen/duel.json",
+                self._participants(), 8, [(0, "hi"), (1, "yo")],
+                started, None, False)
+        self.assertEqual(seen["url"], "https://ntfy.sh/topic")
+        self.assertEqual(seen["title"], "duel finished: duel.json")
+        self.assertIn("m1 (Alice) vs m2 (Bob)", seen["data"])
+        self.assertIn("2/8 turns", seen["data"])
+
+    def test_notify_stopped_early_title(self):
+        import urllib.request
+
+        class FakeResp:
+            def __enter__(self): return self
+            def __exit__(self, *a): return False
+            def read(self): return b"ok"
+
+        seen = {}
+        def fake_urlopen(req, timeout=None):
+            seen["title"] = req.get_header("Title")
+            return FakeResp()
+
+        started = ollama_duel.datetime.now()
+        with mock.patch.object(urllib.request, "urlopen", fake_urlopen):
+            ollama_duel.notify_duel_done(
+                "https://ntfy.sh/topic", "/scen/duel.json",
+                self._participants(), 8, [(0, "hi")],
+                started, "boom went the model", False)
+        self.assertEqual(seen["title"], "duel stopped early: duel.json")
+
+    def test_notify_failure_warns_without_raising(self):
+        import urllib.request
+        started = ollama_duel.datetime.now()
+        with mock.patch.object(urllib.request, "urlopen",
+                               side_effect=OSError("nope")), \
+             mock.patch("sys.stderr", new_callable=io.StringIO) as err:
+            ollama_duel.notify_duel_done(
+                "https://ntfy.sh/topic", "/scen/duel.json",
+                self._participants(), 8, [], started, None, False)
+        self.assertIn("ntfy notification failed", err.getvalue())
 
 
 if __name__ == "__main__":

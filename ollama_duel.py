@@ -8,7 +8,7 @@ Usage:
 
 Globals in the JSON (host, topic, turns, think, max_tokens, temperature,
 num_ctx, repeat_penalty, turn_prompt, first_turn_prompt, log_file, save_json,
-timeout, display, dedup_guard) act as defaults; anything set inside a "models"
+timeout, display, dedup_guard, ntfy_url) act as defaults; anything set inside a "models"
 entry overrides the global for that model only (think, max_tokens,
 temperature, num_ctx, repeat_penalty, turn_prompt, first_turn_prompt only --
 the rest are duel-wide). "models" must contain exactly 2 entries.
@@ -49,7 +49,7 @@ TOP_LEVEL_KEYS = {
     "host", "topic", "turns", "think", "max_tokens", "temperature",
     "num_ctx", "repeat_penalty", "turn_prompt", "first_turn_prompt",
     "log_file", "save_json", "timeout",
-    "display", "dedup_guard", "results_log", "models",
+    "display", "dedup_guard", "results_log", "ntfy_url", "models",
 }
 MODEL_KEYS = {"model", "name", "system", "think", "max_tokens", "temperature",
               "num_ctx", "repeat_penalty", "turn_prompt", "first_turn_prompt"}
@@ -196,6 +196,7 @@ def load_config(path):
     _validate_field(cfg, "display", "bool", "top level")
     _validate_field(cfg, "dedup_guard", "bool", "top level")
     _validate_field(cfg, "results_log", "str", "top level")
+    _validate_field(cfg, "ntfy_url", "str", "top level")
     for m in models:
         label = f'model "{m["name"]}"'
         _validate_field(m, "think", "bool", label)
@@ -359,6 +360,58 @@ def append_run_summary(path, entry):
     except OSError as e:
         print(f"Warning: could not write run summary to {path}: {e}",
               file=sys.stderr)
+
+
+def load_default_ntfy_url():
+    """Read the ntfy topic URL from the default config file ~/.dual.conf.
+
+    The file is a JSON object, e.g. {"ntfy_url": "https://ntfy.sh/my-topic"}.
+    Returns "" when the file is missing, unreadable, not JSON, or has no
+    usable ntfy_url -- the caller then skips notifications silently.
+    """
+    path = os.path.join(os.path.expanduser("~"), ".dual.conf")
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        return ""
+    if isinstance(data, dict):
+        url = data.get("ntfy_url")
+        return url if isinstance(url, str) and url.strip() else ""
+    return ""
+
+
+def notify_duel_done(url, config_path, participants, turns, transcript,
+                     run_started, stop_note, crashed):
+    """POST a short completion notice to ntfy. Best-effort: any failure
+    warns on stderr and never fails the run."""
+    import urllib.request  # stdlib; imported here so --help stays instant
+    scenario = os.path.basename(config_path)
+    duration_s = (datetime.now() - run_started).total_seconds()
+    a, b = participants
+    if crashed:
+        title, result, tags = f"duel crashed: {scenario}", "CRASHED", "warning"
+    elif stop_note:
+        title, result, tags = (f"duel stopped early: {scenario}",
+                               "STOPPED EARLY", "warning")
+    else:
+        title, result, tags = f"duel finished: {scenario}", "OK", "tada"
+    body = "\n".join([
+        f"{scenario}: {result}",
+        f"{a['model']} ({a['name']}) vs {b['model']} ({b['name']})",
+        f"{len(transcript)}/{turns} turns in {duration_s:.0f}s",
+    ])
+    if stop_note and not crashed:
+        body += "\n" + stop_note.strip().splitlines()[0][:200]
+    try:
+        req = urllib.request.Request(url, data=body.encode("utf-8"),
+                                     method="POST")
+        req.add_header("Title", title)
+        req.add_header("Tags", tags)
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            resp.read()
+    except Exception as e:  # noqa: BLE001 -- notification must not fail the run
+        print(f"Warning: ntfy notification failed: {e}", file=sys.stderr)
 
 
 def _matrix(matrix, method, *args):
@@ -530,6 +583,11 @@ def main():
                          "to this file; default run_results.log)")
     ap.add_argument("--no-results-log", dest="results_log", action="store_false",
                     help="do not write the run summary file")
+    ap.add_argument("--ntfy-url", default=None,
+                    help="send an ntfy notification when the duel ends "
+                         "(overrides the scenario config and ~/.dual.conf)")
+    ap.add_argument("--no-ntfy", dest="ntfy", action="store_false",
+                    help="do not send ntfy notifications even if configured")
     ap.add_argument("--timeout", type=float, default=None,
                     help="override the config timeout, in seconds")
     ap.add_argument("--display", dest="display", action="store_true", default=None,
@@ -564,6 +622,14 @@ def main():
     # false-y CLI value) disables it.
     results_log_path = first_not_none(args.results_log, cfg.get("results_log"),
                                       "run_results.log")
+
+    # ntfy: explicit CLI flag wins, then the scenario config, then the
+    # default ~/.dual.conf. Undefined everywhere -> ntfy_url stays None
+    # and notifications are skipped silently.
+    ntfy_url = first_not_none(args.ntfy_url, cfg.get("ntfy_url"),
+                              load_default_ntfy_url() or None)
+    if not args.ntfy:
+        ntfy_url = None
 
     # Optional log file: everything printed to stdout is mirrored there.
     # (stderr progress lines like "(waiting for reply...)" stay console-only.)
@@ -698,6 +764,14 @@ def main():
                                        crash_note or stop_note,
                                        crashed=crashed)
             append_run_summary(results_log_path, entry)
+        if ntfy_url:
+            # Completion notice: OK, stopped early, or crashed. Best-effort
+            # (notify_duel_done never raises); skipped silently when no
+            # ntfy URL is configured anywhere. --dry-run returns before
+            # the duel, so it never notifies.
+            crashed_now = stop_note is None and sys.exc_info()[0] is not None
+            notify_duel_done(ntfy_url, args.config, participants, turns,
+                             transcript, run_started, stop_note, crashed_now)
 
 
 if __name__ == "__main__":

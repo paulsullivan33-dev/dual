@@ -111,6 +111,7 @@ The JSON must be an object with exactly two entries in `models`. Each entry requ
 | `log_file` | Top level | Optional path for the transcript; a date/time stamp is prepended to the file name so each run gets its own log. The included scenarios write to `logs/`; missing folders are created |
 | `save_json` | Top level | Optional path to write the structured transcript (`speaker`/`model`/`text` per reply) as JSON when the duel ends, including after an early stop |
 | `results_log` | Top level | Optional path for the run summary; defaults to `run_results.log` in the current directory. After every duel a one-block entry is appended: date/time, config, models, turns completed, and the per-model stats table on success or the error message when the duel stopped early. Missing folders are created; pass `--no-results-log` to disable |
+| `ntfy_url` | Top level | Optional ntfy topic URL; when set, the script POSTs a short completion notice (finished / stopped early / crashed, with models and turns) after every duel. Resolution order: `--ntfy-url`, the scenario file, then `~/.dual.conf` (`{"ntfy_url": "https://ntfy.sh/my-topic"}`). Undefined everywhere means notifications are skipped silently; pass `--no-ntfy` to force them off. Notification failures warn on stderr and never fail the run |
 | `timeout` | Top level | Per-request timeout in seconds; defaults to 1200 |
 | `display` | Top level | Show live duel stats on the Arduino Uno Q's built-in 8x13 LED matrix; defaults to false. Needs `python3-smbus` on the Uno Q. The script runs headless with a warning anywhere the matrix is unreachable, so this is safe to leave on in shared configs |
 | `think` | Top level or model entry | Request and display thinking; defaults to false |
@@ -121,7 +122,7 @@ The JSON must be an object with exactly two entries in `models`. Each entry requ
 | `first_turn_prompt` | Top level or model entry | Instruction added as the last message on the first turn only, so the opening speaker stays in character instead of script-writing both sides of the debate. Same `{name}`/`{other}` replacement as `turn_prompt`. Defaults to an opening-statement nudge of a few short paragraphs; set to `""` to turn it off |
 | `repeat_penalty` | Top level or model entry | Passed to Ollama if specified; must be at least 1. Values above 1 (e.g. `1.1`–`1.3`) discourage the model from repeating itself; `1` means no penalty |
 
-Model-level `think`, `max_tokens`, `temperature`, `num_ctx`, `repeat_penalty`, `turn_prompt`, and `first_turn_prompt` override their top-level values. The CLI supports `--topic`, `--turns`, `--max-tokens`, `--host`, `--log-file`, `--save-json`, `--results-log`, `--no-results-log`, `--timeout`, `--think`, `--no-think`, and `--dry-run`; these override the corresponding configuration values (except `--dry-run`, which prints the exact messages turn 1 would send and exits without calling Ollama). The two thinking flags apply to both participants, and `--max-tokens` sets the per-turn token budget for both participants, overriding per-model and top-level `max_tokens` — handy for longer turns on a fast machine without editing the scenario file. Change model identifiers in JSON; `ollama_duel.py` has no `--model` option.
+Model-level `think`, `max_tokens`, `temperature`, `num_ctx`, `repeat_penalty`, `turn_prompt`, and `first_turn_prompt` override their top-level values. The CLI supports `--topic`, `--turns`, `--max-tokens`, `--host`, `--log-file`, `--save-json`, `--results-log`, `--no-results-log`, `--ntfy-url`, `--no-ntfy`, `--timeout`, `--think`, `--no-think`, and `--dry-run`; these override the corresponding configuration values (except `--dry-run`, which prints the exact messages turn 1 would send and exits without calling Ollama). The two thinking flags apply to both participants, and `--max-tokens` sets the per-turn token budget for both participants, overriding per-model and top-level `max_tokens` — handy for longer turns on a fast machine without editing the scenario file. Change model identifiers in JSON; `ollama_duel.py` has no `--model` option.
 
 Invalid settings (an unrecognized key, wrong type, a `turns`/`max_tokens`/`num_ctx` less than 1, a negative `temperature`, or a `repeat_penalty` below 1) are rejected with an error naming the offending key before any request is sent — a typo like `"temprature"` fails loudly instead of silently falling back to a default.
 
@@ -183,6 +184,30 @@ The programming scenarios (`factorial.json`, `program_writing*.json`, and the se
 
 Most use `qwen2.5-coder:14b`; `builder_vs_breaker.json`, `speed_race.json`, and `product_owner_vs_developer.json` also use `qwen3:14b` for the second role, so different models catch different mistakes.
 | `baseball_mvp_debate.json` | A stat-head and an old-school analyst debate the MVP |
+
+### Small-model scenarios
+
+The `small_*.json` scenarios are tuned for 1–2B models on weak hardware
+(`qwen3:1.7b` vs `smollm2:1.7b`, `num_ctx` 4096, short turns, no thinking):
+playful, concrete roles that stay on track at a few tokens per second.
+
+| File | Scenario |
+| --- | --- |
+| `small_haiku_battle.json` | Two haiku masters duel in strict 5-7-5 |
+| `small_limerick_duel.json` | Limerick battle about modern annoyances |
+| `small_ghost_roommates.json` | Two ghosts bicker over haunting rights to an apartment |
+| `small_dragon_shark_tank.json` | A dragon pitches a treasure-guarding startup to a skeptical investor |
+| `small_coffee_vs_tea.json` | A barista and a tea master debate the perfect morning drink |
+| `small_sidekick_interview.json` | A superhero interviews an overconfident sidekick candidate |
+| `small_toaster_therapy.json` | A toaster in therapy for an existential crisis |
+| `small_invention_pitch.json` | Rival inventors pitch absurd gadgets and trash-talk |
+| `small_recipe_showdown.json` | Two chefs, same three mystery ingredients |
+| `small_apology_duel.json` | Competing apologies for the eaten leftovers |
+| `small_alien_tour_guides.json` | Rival alien guides describe the Grand Canyon |
+| `small_squirrel_interrogation.json` | Good cop / bad cop interrogate a silent squirrel |
+| `small_time_capsule.json` | Fight over which 3 items represent 2026 |
+| `small_movie_ending_rewrite.json` | Competing better endings for *Titanic* |
+| `small_pet_debate.json` | A dog and a cat debate the better pet |
 
 ## Conversation behavior and logs
 
