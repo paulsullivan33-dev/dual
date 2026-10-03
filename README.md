@@ -70,6 +70,20 @@ python ollama_duel.py scenarios/salesperson_vs_customer.json --log-file logs/neg
 python ollama_duel.py scenarios/duel-example.json --topic "Should a small team adopt AI coding tools?" --turns 6
 ```
 
+## Run a batch of scenarios
+
+Pass a directory to run every `*.json` scenario inside it, or a glob pattern
+to run the matches (quote the pattern so your shell doesn't expand it first).
+Each scenario runs as its own process — its own log file, its own completion
+notice, its own entry in `run_results.log` — and a failed scenario is
+reported and skipped while the rest of the batch continues. CLI overrides
+apply to every scenario in the batch; Ctrl-C stops the whole batch.
+
+```shell
+python ollama_duel.py scenarios/
+python ollama_duel.py "scenarios/small_*"
+```
+
 Before running a supplied scenario, inspect its `models` entries and pull those exact models, or replace them with models available on your server. For example, `duel-example.json` uses both `qwen3:4b` and `qwen3:8b`.
 
 ### Create your own configuration

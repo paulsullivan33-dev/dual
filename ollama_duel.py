@@ -582,9 +582,58 @@ def run_duel(host, topic, turns, participants, timeout, transcript, matrix=None,
     return model_stats, matrix, stop_note
 
 
+def expand_configs(config_arg):
+    """Expand the config argument into a list of scenario files.
+
+    A directory yields every *.json inside it (sorted); a glob pattern
+    yields every match (sorted) -- quote it so the shell doesn't expand
+    it first. Anything else is returned as the single path, validated
+    later by load_config exactly as before.
+    """
+    import glob as globmod
+    if os.path.isdir(config_arg):
+        paths = sorted(globmod.glob(os.path.join(config_arg, "*.json")))
+        if not paths:
+            sys.exit(f"No .json scenario files in directory: {config_arg}")
+        return paths
+    if globmod.has_magic(config_arg):
+        paths = sorted(globmod.glob(config_arg))
+        if not paths:
+            sys.exit(f"Glob matched no files: {config_arg}")
+        return paths
+    return [config_arg]
+
+
+def run_batch(configs, config_arg):
+    """Run each scenario as its own child process (re-exec of this script).
+
+    Each duel then behaves exactly like a single-duel run: its own log
+    file, its own ntfy notice, its own run_results.log entry, and its own
+    process command line for external monitors. A failed scenario is
+    reported and skipped; the rest of the batch continues. Ctrl+C aborts
+    the whole batch. Returns the process exit status.
+    """
+    import subprocess
+    script = os.path.abspath(__file__)
+    rest = [a for a in sys.argv[1:] if a != config_arg]
+    failures = 0
+    for i, cfg_path in enumerate(configs, 1):
+        print(f"=== batch {i}/{len(configs)}: {cfg_path} ===", file=sys.stderr)
+        rc = subprocess.run([sys.executable, script, cfg_path] + rest).returncode
+        if rc != 0:
+            failures += 1
+            print(f"--- {cfg_path} exited with status {rc}; continuing ---",
+                  file=sys.stderr)
+    print(f"=== batch done: {len(configs) - failures}/{len(configs)} ok ===",
+          file=sys.stderr)
+    return 1 if failures else 0
+
+
 def main():
     ap = argparse.ArgumentParser(description="Two Ollama models converse, configured from a JSON file.")
-    ap.add_argument("config", help="path to JSON config file")
+    ap.add_argument("config", help="path to a JSON config file, a directory "
+                    "(runs every *.json inside it), or a glob pattern "
+                    "(quote it so the shell doesn't expand it first)")
     ap.add_argument("--topic", default=None, help="override the config topic")
     ap.add_argument("--turns", type=int, default=None, help="override the config turn count")
     ap.add_argument("--max-tokens", type=int, default=None,
@@ -621,6 +670,10 @@ def main():
     args = ap.parse_args()
 
     setup_utf8_stdout()
+
+    configs = expand_configs(args.config)
+    if len(configs) > 1:
+        sys.exit(run_batch(configs, args.config))
 
     cfg = load_config(args.config)
     host = first_not_none(args.host, cfg.get("host"), DEFAULT_HOST)

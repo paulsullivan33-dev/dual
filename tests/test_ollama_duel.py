@@ -1,6 +1,7 @@
 import io
 import json
 import os
+import shutil
 import sys
 import tempfile
 import unittest
@@ -1123,6 +1124,99 @@ class NtfyTests(unittest.TestCase):
                 self._participants(), 8, [], started, None, False)
         self.assertIn("ntfy notification failed", err.getvalue())
 
+
+class BatchModeTests(unittest.TestCase):
+    def _make_dir(self, files):
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, True)
+        for f in files:
+            open(os.path.join(d, f), "w").write("{}")
+        return d
+
+    def test_expand_plain_path_unchanged(self):
+        self.assertEqual(ollama_duel.expand_configs("scenarios/duel.json"),
+                         ["scenarios/duel.json"])
+
+    def test_expand_directory_lists_json_sorted(self):
+        d = self._make_dir(["b.json", "a.json", "notes.txt"])
+        self.assertEqual(ollama_duel.expand_configs(d),
+                         [os.path.join(d, "a.json"),
+                          os.path.join(d, "b.json")])
+
+    def test_expand_directory_empty_exits(self):
+        d = self._make_dir(["notes.txt"])
+        with self.assertRaises(SystemExit):
+            ollama_duel.expand_configs(d)
+
+    def test_expand_glob_matches_sorted(self):
+        d = self._make_dir(["small_b.json", "small_a.json", "other.json"])
+        pat = os.path.join(d, "small_*.json")
+        self.assertEqual(ollama_duel.expand_configs(pat),
+                         [os.path.join(d, "small_a.json"),
+                          os.path.join(d, "small_b.json")])
+
+    def test_expand_glob_no_match_exits(self):
+        d = self._make_dir(["a.json"])
+        with self.assertRaises(SystemExit):
+            ollama_duel.expand_configs(os.path.join(d, "zzz_*.json"))
+
+    def test_run_batch_reexecs_each_scenario(self):
+        import subprocess
+        calls = []
+
+        class FakeCompleted:
+            def __init__(self, rc): self.returncode = rc
+
+        def fake_run(argv, **kw):
+            calls.append(argv)
+            return FakeCompleted(0)
+
+        configs = ["scenarios/a.json", "scenarios/b.json"]
+        with mock.patch.object(subprocess, "run", fake_run), \
+             mock.patch.object(sys, "argv",
+                               ["ollama_duel.py", "--turns", "8",
+                                "scenarios/small_*"]), \
+             mock.patch("sys.stderr", new_callable=io.StringIO):
+            rc = ollama_duel.run_batch(configs, "scenarios/small_*")
+        self.assertEqual(rc, 0)
+        self.assertEqual(len(calls), 2)
+        for argv, cfg in zip(calls, configs):
+            self.assertEqual(argv[0], sys.executable)
+            self.assertTrue(argv[1].endswith("ollama_duel.py"))
+            self.assertEqual(argv[2], cfg)
+            # CLI overrides are carried through; the glob itself is not
+            self.assertEqual(argv[3:], ["--turns", "8"])
+
+    def test_run_batch_counts_failures_and_continues(self):
+        import subprocess
+        calls = []
+
+        class FakeCompleted:
+            def __init__(self, rc): self.returncode = rc
+
+        def fake_run(argv, **kw):
+            calls.append(argv[2])
+            return FakeCompleted(3 if "bad" in argv[2] else 0)
+
+        configs = ["a.json", "bad.json", "c.json"]
+        with mock.patch.object(subprocess, "run", fake_run), \
+             mock.patch.object(sys, "argv", ["ollama_duel.py", "somedir"]), \
+             mock.patch("sys.stderr", new_callable=io.StringIO):
+            rc = ollama_duel.run_batch(configs, "somedir")
+        self.assertEqual(rc, 1)
+        self.assertEqual(calls, configs)  # all three attempted
+
+    def test_run_batch_ctrl_c_propagates(self):
+        import subprocess
+
+        def fake_run(argv, **kw):
+            raise KeyboardInterrupt
+
+        with mock.patch.object(subprocess, "run", fake_run), \
+             mock.patch.object(sys, "argv", ["ollama_duel.py", "somedir"]), \
+             mock.patch("sys.stderr", new_callable=io.StringIO):
+            with self.assertRaises(KeyboardInterrupt):
+                ollama_duel.run_batch(["a.json", "b.json"], "somedir")
 
 if __name__ == "__main__":
     unittest.main()
