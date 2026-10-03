@@ -1,3 +1,6 @@
+# pylint: disable=too-many-lines
+"""Tests for ollama_duel.py live in this single module by convention;
+the 1000-line pylint cap is waived for it."""
 import io
 import json
 import os
@@ -353,7 +356,6 @@ class DryRunTests(unittest.TestCase):
 
     def test_dry_run_prints_turn_one_and_makes_no_calls(self):
         import contextlib
-        import io
         calls = []
         metrics = {"gen_tokens": 10, "gen_s": 1.0,
                    "prompt_tokens": 20, "prompt_s": 0.5}
@@ -753,7 +755,6 @@ class DedupGuardTests(unittest.TestCase):
 
     def test_second_duplicate_prints_note(self):
         import contextlib
-        import io
         buf = io.StringIO()
         with contextlib.redirect_stdout(buf):
             transcript, calls, _ = self._run(
@@ -915,7 +916,6 @@ class RunSummaryTests(unittest.TestCase):
             self.assertFalse(os.path.exists(cfg_path))
 
     def test_unwritable_path_warns_but_does_not_crash(self):
-        import io
         with tempfile.TemporaryDirectory() as d:
             blocker = os.path.join(d, "blocker")
             with open(blocker, "w", encoding="utf-8") as f:
@@ -1019,9 +1019,14 @@ class NtfyTests(unittest.TestCase):
         seen = {}
 
         class FakeResp:
-            def __enter__(self): return self
-            def __exit__(self, *a): return False
-            def read(self): return b"ok"
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+            def read(self):
+                return b"ok"
 
         def fake_urlopen(req, timeout=None):
             seen["url"] = req.full_url
@@ -1046,9 +1051,14 @@ class NtfyTests(unittest.TestCase):
         import socket
 
         class FakeResp:
-            def __enter__(self): return self
-            def __exit__(self, *a): return False
-            def read(self): return b"ok"
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+            def read(self):
+                return b"ok"
 
         seen = {}
         def fake_urlopen(req, timeout=None):
@@ -1068,9 +1078,14 @@ class NtfyTests(unittest.TestCase):
         import urllib.request
 
         class FakeResp:
-            def __enter__(self): return self
-            def __exit__(self, *a): return False
-            def read(self): return b"ok"
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+            def read(self):
+                return b"ok"
 
         seen = {}
         def fake_urlopen(req, timeout=None):
@@ -1096,9 +1111,14 @@ class NtfyTests(unittest.TestCase):
         import urllib.request
 
         class FakeResp:
-            def __enter__(self): return self
-            def __exit__(self, *a): return False
-            def read(self): return b"ok"
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+            def read(self):
+                return b"ok"
 
         seen = {}
         def fake_urlopen(req, timeout=None):
@@ -1130,7 +1150,7 @@ class BatchModeTests(unittest.TestCase):
         d = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, d, True)
         for f in files:
-            open(os.path.join(d, f), "w").write("{}")
+            open(os.path.join(d, f), "w", encoding="utf-8").write("{}")
         return d
 
     def test_expand_plain_path_unchanged(self):
@@ -1164,12 +1184,9 @@ class BatchModeTests(unittest.TestCase):
         import subprocess
         calls = []
 
-        class FakeCompleted:
-            def __init__(self, rc): self.returncode = rc
-
         def fake_run(argv, **kw):
             calls.append(argv)
-            return FakeCompleted(0)
+            return mock.Mock(returncode=0)
 
         configs = ["scenarios/a.json", "scenarios/b.json"]
         with mock.patch.object(subprocess, "run", fake_run), \
@@ -1191,12 +1208,9 @@ class BatchModeTests(unittest.TestCase):
         import subprocess
         calls = []
 
-        class FakeCompleted:
-            def __init__(self, rc): self.returncode = rc
-
         def fake_run(argv, **kw):
             calls.append(argv[2])
-            return FakeCompleted(3 if "bad" in argv[2] else 0)
+            return mock.Mock(returncode=3 if "bad" in argv[2] else 0)
 
         configs = ["a.json", "bad.json", "c.json"]
         with mock.patch.object(subprocess, "run", fake_run), \

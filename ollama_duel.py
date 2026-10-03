@@ -619,7 +619,8 @@ def run_batch(configs, config_arg):
     failures = 0
     for i, cfg_path in enumerate(configs, 1):
         print(f"=== batch {i}/{len(configs)}: {cfg_path} ===", file=sys.stderr)
-        rc = subprocess.run([sys.executable, script, cfg_path] + rest).returncode
+        rc = subprocess.run([sys.executable, script, cfg_path] + rest,
+                            check=False).returncode
         if rc != 0:
             failures += 1
             print(f"--- {cfg_path} exited with status {rc}; continuing ---",
