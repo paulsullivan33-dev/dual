@@ -1014,8 +1014,8 @@ class NtfyTests(unittest.TestCase):
         ]
 
     def test_notify_posts_title_and_body(self):
-        import urllib.request
         import socket
+        import urllib.request
         seen = {}
 
         class FakeResp:
@@ -1047,8 +1047,8 @@ class NtfyTests(unittest.TestCase):
         self.assertIn("2/8 turns", seen["data"])
 
     def test_notify_stopped_early_title(self):
-        import urllib.request
         import socket
+        import urllib.request
 
         class FakeResp:
             def __enter__(self):

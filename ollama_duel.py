@@ -398,8 +398,8 @@ def notify_duel_done(url, config_path, participants, turns, transcript,
                      run_started, stop_note, crashed, model_stats=None):
     """POST a short completion notice to ntfy. Best-effort: any failure
     warns on stderr and never fails the run."""
-    import urllib.request  # stdlib; imported here so --help stays instant
     import socket
+    import urllib.request  # stdlib; imported here so --help stays instant
     scenario = os.path.basename(config_path)
     host = socket.gethostname()
     duration_s = (datetime.now() - run_started).total_seconds()
