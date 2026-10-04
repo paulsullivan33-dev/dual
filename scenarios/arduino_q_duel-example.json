@@ -18,7 +18,7 @@
     }
   ],
   "temperature": 0.7,
-  "think": true,
+  "think": false,
   "topic": "Should we rewrite it in Rust?",
   "turns": 8,
   "log_file": "logs/duel.log"
