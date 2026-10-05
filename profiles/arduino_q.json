@@ -1,0 +1,5 @@
+{
+  "models": ["qwen3:1.7b", "smollm2:1.7b"],
+  "num_ctx": 4096,
+  "think": false
+}
