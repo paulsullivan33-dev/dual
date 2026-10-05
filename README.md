@@ -136,7 +136,7 @@ The JSON must be an object with exactly two entries in `models`. Each entry requ
 | `first_turn_prompt` | Top level or model entry | Instruction added as the last message on the first turn only, so the opening speaker stays in character instead of script-writing both sides of the debate. Same `{name}`/`{other}` replacement as `turn_prompt`. Defaults to an opening-statement nudge of a few short paragraphs; set to `""` to turn it off |
 | `repeat_penalty` | Top level or model entry | Passed to Ollama if specified; must be at least 1. Values above 1 (e.g. `1.1`–`1.3`) discourage the model from repeating itself; `1` means no penalty |
 
-Model-level `think`, `max_tokens`, `temperature`, `num_ctx`, `repeat_penalty`, `turn_prompt`, and `first_turn_prompt` override their top-level values. The CLI supports `--topic`, `--turns`, `--max-tokens`, `--host`, `--log-file`, `--save-json`, `--results-log`, `--no-results-log`, `--ntfy-url`, `--no-ntfy`, `--timeout`, `--think`, `--no-think`, and `--dry-run`; these override the corresponding configuration values (except `--dry-run`, which prints the exact messages turn 1 would send and exits without calling Ollama). The two thinking flags apply to both participants, and `--max-tokens` sets the per-turn token budget for both participants, overriding per-model and top-level `max_tokens` — handy for longer turns on a fast machine without editing the scenario file. Change model identifiers in JSON; `ollama_duel.py` has no `--model` option.
+Model-level `think`, `max_tokens`, `temperature`, `num_ctx`, `repeat_penalty`, `turn_prompt`, and `first_turn_prompt` override their top-level values. The CLI supports `--topic`, `--turns`, `--max-tokens`, `--num-ctx`, `--model-a`, `--model-b`, `--profile`, `--host`, `--log-file`, `--save-json`, `--results-log`, `--no-results-log`, `--ntfy-url`, `--no-ntfy`, `--timeout`, `--think`, `--no-think`, and `--dry-run`; these override the corresponding configuration values (except `--dry-run`, which prints the exact messages turn 1 would send and exits without calling Ollama). The two thinking flags apply to both participants, and `--max-tokens` sets the per-turn token budget for both participants, overriding per-model and top-level `max_tokens` — handy for longer turns on a fast machine without editing the scenario file. `--model-a` and `--model-b` swap a participant's model, and `--num-ctx` sets the context window for both participants; see [Running a scenario on a different machine](#running-a-scenario-on-a-different-machine).
 
 Invalid settings (an unrecognized key, wrong type, a `turns`/`max_tokens`/`num_ctx` less than 1, a negative `temperature`, or a `repeat_penalty` below 1) are rejected with an error naming the offending key before any request is sent — a typo like `"temprature"` fails loudly instead of silently falling back to a default.
 
@@ -232,20 +232,58 @@ playful, concrete roles that stay on track at a few tokens per second.
 | `small_movie_ending_rewrite.json` | Competing better endings for *Titanic* |
 | `small_pet_debate.json` | A dog and a cat debate the better pet |
 
-### Machine-specific variants
+### Running a scenario on a different machine
 
-Two sets of files rerun scenarios from the tables above on smaller models,
-keeping the topic and personas and changing only the models and a few
-generation settings.
+A scenario names the models it was written for, but you don't need a copy
+of the file to run it on other hardware. Swap the models from the command
+line:
 
-**`arduino_q_*.json`** — one for each of the first 40 scenarios in the
-main table (`duel-example.json` through `baseball_mvp_debate.json`), under
-the same name with an `arduino_q_` prefix. Both participants are swapped to
-`qwen3:1.7b` and `smollm2:1.7b`, thinking is off, and most set `num_ctx` to
-4096. Run the whole set with `python ollama_duel.py "scenarios/arduino_q_*"`.
+```shell
+python ollama_duel.py scenarios/roast_battle.json --model-a qwen3:1.7b --model-b smollm2:1.7b --num-ctx 4096 --no-think
+```
 
-**`mac_*.json`** — five scenarios on 3–4B models, with different models on
-each side:
+Or keep the swap in a small JSON *profile* and reuse it:
+
+```shell
+python ollama_duel.py scenarios/roast_battle.json --profile profiles/arduino_q.json
+python ollama_duel.py "scenarios/s*" --profile profiles/arduino_q.json
+```
+
+`profiles/arduino_q.json` is the included profile for the Arduino Uno Q
+and similar single-board computers. It puts `qwen3:1.7b` and
+`smollm2:1.7b` in the two seats, sets `num_ctx` to 4096, and turns
+thinking off:
+
+```json
+{
+  "models": ["qwen3:1.7b", "smollm2:1.7b"],
+  "num_ctx": 4096,
+  "think": false
+}
+```
+
+A profile may set `models` (exactly two model names, first participant
+first; use `null` to keep the scenario's model for that seat), `think`,
+`max_tokens`, and `num_ctx`. Anything else is rejected, like a typo in a
+scenario. Topic, personas, turn count, temperature and the rest still come
+from the scenario.
+
+Profile values and the matching flags apply to both participants and
+replace the scenario's values, including ones set per model. Command-line
+flags win over the profile, so `--profile profiles/arduino_q.json --model-b
+tinyllama:1.1b` changes just the second model. A participant with no
+`name` in the scenario is labelled with whichever model actually runs.
+
+Add `--dry-run` to see the resulting line-up without calling Ollama. In a
+batch, the profile and flags apply to every scenario; a profile passed
+with a whole directory also runs the `small_*` and `mac_*` files, so use a
+glob to pick a subset.
+
+### Machine-specific scenario files
+
+The `mac_*.json` files rerun five scenarios on 3–4B models. Each uses a
+different pair of models, so they stay as separate files rather than one
+profile:
 
 | File | Based on | Models |
 | --- | --- | --- |
@@ -271,14 +309,76 @@ The programming scenario produces code as conversation text. Neither script exec
 
 ## Choosing models
 
-Match the model size to the machine running Ollama. Any model the server
-has pulled works — put its exact name in the scenario's `"model"` field.
+Memory decides which models a machine can run; the processor or GPU
+decides how fast. A model has to fit in RAM (or in video memory, on a
+machine with a dedicated GPU) alongside everything else that is open, so
+start from how much memory the machine has.
 
-| Machine class | Example models | Notes |
+### Recommended models by machine
+
+| Machine | Recommended models | Suggested settings |
 |---|---|---|
-| Memory-constrained single-board computers (a few GB of RAM, weak CPU) | `qwen3:0.6b`, `qwen3:1.7b`, `smollm2:1.7b`, `tinyllama:1.1b` | Expect a few tokens per second. Keep `turns` low and thinking budgets small; turn thinking off if replies get too slow. |
-| Older CPU-only desktops | `qwen3:4b`, `qwen3:8b`, `llama3.1:8b` | 8B models are the sweet spot for CPU-only machines with 12GB+ of RAM. |
-| Modern machines with ample RAM or a GPU | `qwen2.5-coder:14b`, `qwen3:14b`, larger 20B–30B models | Best duel quality. Note: `qwen2.5-coder:14b` rejects thinking-enabled requests, so use `"think": false` with it; the Qwen3 family supports thinking. |
+| **Small-spec machines**: single-board computers such as the Arduino Uno Q or a Raspberry Pi, with 2–4 GB of RAM | `qwen3:1.7b` and `smollm2:1.7b`. With only 2 GB, drop to `qwen3:0.6b` or `tinyllama:1.1b` | `num_ctx` 4096, thinking off, `max_tokens` around 200–300, 6–8 turns. Expect a few tokens per second |
+| **Laptops with 8 GB of RAM** | `qwen3:4b`, `gemma3:4b`, `llama3.2:3b`, `phi3`; `qwen2.5-coder:3b` for the programming scenarios | `num_ctx` 8192, thinking off or a small budget. An 8B model will load but leaves little room for anything else |
+| **Laptops and desktops with 16 GB of RAM** | `qwen3:8b`, `llama3.1:8b`, `dolphin3:8b` | Most included scenarios were written for `qwen3:8b` and run as they are. A 14B model will load but is slow without a GPU |
+| **Laptops with 32 GB of RAM and integrated graphics**, for example an Intel Core Ultra 200V series laptop with Arc 140V graphics | `qwen3:8b` or `dolphin3:8b` for everyday duels. `qwen2.5-coder:14b`, `qwen3:14b` and `gemma3:12b` also fit, at a slower pace | `num_ctx` 8192. Every included scenario fits in memory, so run them as written. 20B+ models load but are usually too slow for a multi-turn duel |
+| **Machines with a dedicated GPU with 12 GB+ of video memory, or desktops with 32 GB of RAM or more** | `qwen2.5-coder:14b`, `qwen3:14b`, `gemma3:12b`, and larger 20B–35B models | Best duel quality, and the programming scenarios run as written. Raise `num_ctx` to 8192–16384 for long turns |
+
+A few notes on laptops:
+
+- Apple Silicon Macs share one pool of memory between the processor and
+  the GPU, so Ollama uses the GPU automatically and the RAM figure above
+  is the one that matters.
+- Integrated graphics (Intel Arc, AMD Radeon) have no memory of their own
+  and borrow system RAM. Windows reports this as a small "dedicated"
+  figure plus a large "shared" one, typically half the installed RAM: 16
+  GB shared on a 32 GB laptop. That is normal, and the RAM figure above
+  is still the one that matters.
+- Recent Ollama versions can use integrated GPUs on Windows and Linux
+  through Vulkan; otherwise the model runs on the processor. While a
+  model is loaded, `ollama ps` shows which one it is using. Either way,
+  expect less speed than a dedicated GPU, so pick from the row above
+  yours if replies drag.
+- Leave a few GB free for the browser and everything else you have open,
+  and run long duels plugged in.
+
+Two model-specific notes: `qwen2.5-coder` models reject thinking-enabled
+requests, so use `"think": false` (or `--no-think`) with them; the Qwen3
+family supports thinking.
+
+### Trying a recommendation
+
+You don't need to edit a scenario to try a different model. Swap models
+on the command line, or save the swap as a profile (see
+[Running a scenario on a different machine](#running-a-scenario-on-a-different-machine)):
+
+```shell
+python ollama_duel.py scenarios/roast_battle.json --model-a qwen3:4b --model-b gemma3:4b --num-ctx 8192
+python ollama_duel.py scenarios/roast_battle.json --profile profiles/arduino_q.json
+```
+
+For a machine you use often, make your own profile. For example, save
+this as `profiles/laptop_8gb.json` for an 8 GB laptop:
+
+```json
+{
+  "models": ["qwen3:4b", "gemma3:4b"],
+  "num_ctx": 8192,
+  "think": false
+}
+```
+
+Scenarios already matched to a machine class are included: the
+`small_*.json` files for small-spec machines and the `mac_*.json` files
+for 3–4B laptop models.
+
+To check a choice, measure it: `python ollama_bench.py qwen3:4b qwen3:8b`
+prints tokens per second for each model on your machine (see
+[Benchmarking model speed](#benchmarking-model-speed)). If a model
+generates fewer than about five tokens per second, a full duel will take
+a long time; step down a size or shorten the duel.
+
+### Slow machines
 
 On a slow machine, prefer shorter `max_tokens` values and fewer turns — a
 duel that takes minutes on a fast machine can take an hour or more on a
@@ -349,7 +449,7 @@ python ollama_duel.py --help
 
 ## Running the tests
 
-The `tests/` directory has stdlib-only `unittest` coverage for the shared helpers (`ollama_common.py`), config loading and validation (`ollama_duel.py`), CLI argument handling (`ollama_chat.py`), benchmarking (`ollama_bench.py`), the coding agent (`ollama_agent.py`), and the LED matrix driver (`unoq_matrix.py`) — no live Ollama server required; network calls are mocked. It also checks that every included scenario JSON file loads and validates.
+The `tests/` directory has stdlib-only `unittest` coverage for the shared helpers (`ollama_common.py`), config loading and validation (`ollama_duel.py`), CLI argument handling (`ollama_chat.py`), benchmarking (`ollama_bench.py`), the coding agent (`ollama_agent.py`), and the LED matrix driver (`unoq_matrix.py`) — no live Ollama server required; network calls are mocked. It also checks that every included scenario JSON file and machine profile loads and validates.
 
 ```shell
 python -m unittest discover -s tests

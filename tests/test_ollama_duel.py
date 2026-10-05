@@ -504,6 +504,187 @@ class ScenarioFilesValidateTests(unittest.TestCase):
                                     f'log_file {cfg["log_file"]!r} should be under logs/')
 
 
+class ApplyOverridesTests(unittest.TestCase):
+    """Model and limit overrides let one scenario run on any machine."""
+
+    def test_models_are_swapped_per_seat(self):
+        cfg = minimal_config()
+        ollama_duel.apply_overrides(cfg, models=("x1", "x2"))
+        self.assertEqual([m["model"] for m in cfg["models"]], ["x1", "x2"])
+
+    def test_none_keeps_the_scenario_model(self):
+        cfg = minimal_config()
+        ollama_duel.apply_overrides(cfg, models=(None, "x2"))
+        self.assertEqual([m["model"] for m in cfg["models"]], ["m1", "x2"])
+
+    def test_defaulted_name_follows_the_model_but_explicit_name_stays(self):
+        with tempfile.TemporaryDirectory() as d:
+            cfg = ollama_duel.load_config(write_json(d, "c.json", minimal_config()))
+        ollama_duel.apply_overrides(cfg, models=("x1", "x2"))
+        self.assertEqual([m["name"] for m in cfg["models"]], ["x1", "Two"])
+
+    def test_setting_replaces_top_level_and_per_model_values(self):
+        cfg = minimal_config(num_ctx=16384, think=True)
+        cfg["models"][1]["num_ctx"] = 8192
+        cfg["models"][0]["think"] = True
+        ollama_duel.apply_overrides(cfg, num_ctx=4096, think=False)
+        self.assertEqual(cfg["num_ctx"], 4096)
+        self.assertIs(cfg["think"], False)
+        for m in cfg["models"]:
+            self.assertNotIn("num_ctx", m)
+            self.assertNotIn("think", m)
+
+    def test_unset_settings_leave_the_config_alone(self):
+        cfg = minimal_config(num_ctx=16384)
+        cfg["models"][0]["max_tokens"] = 77
+        ollama_duel.apply_overrides(cfg)
+        self.assertEqual(cfg["num_ctx"], 16384)
+        self.assertEqual(cfg["models"][0]["max_tokens"], 77)
+
+
+class LoadProfileTests(unittest.TestCase):
+    def _load(self, data):
+        with tempfile.TemporaryDirectory() as d:
+            return ollama_duel.load_profile(write_json(d, "p.json", data))
+
+    def test_valid_profile(self):
+        data = {"models": ["a", None], "num_ctx": 4096, "think": False,
+                "max_tokens": 200}
+        self.assertEqual(self._load(data), data)
+
+    def test_empty_profile_is_allowed(self):
+        self.assertEqual(self._load({}), {})
+
+    def test_missing_file_exits(self):
+        with self.assertRaises(SystemExit):
+            ollama_duel.load_profile("/no/such/profile.json")
+
+    def test_invalid_json_exits(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "p.json")
+            with open(path, "w", encoding="utf-8") as f:
+                f.write("{not json")
+            with self.assertRaises(SystemExit):
+                ollama_duel.load_profile(path)
+
+    def test_bad_profiles_exit(self):
+        bad = [
+            ["a", "b"],                      # not an object
+            {"modles": ["a", "b"]},          # typo
+            {"temperature": 0.5},            # not a profile setting
+            {"models": ["a"]},               # wrong count
+            {"models": "a"},                 # not a list
+            {"models": ["a", 3]},            # not a name
+            {"models": ["a", ""]},           # empty name
+            {"num_ctx": 0},
+            {"max_tokens": "big"},
+            {"think": "no"},
+        ]
+        for data in bad:
+            with self.subTest(data=data):
+                with self.assertRaises(SystemExit):
+                    self._load(data)
+
+
+class MachineOverrideCliTests(unittest.TestCase):
+    """--profile, --model-a/--model-b and --num-ctx reach the Ollama calls."""
+
+    def _run(self, cfg, extra_argv, profile=None):
+        calls = []
+
+        def fake_call_chat(host, model, messages, think, options, timeout=None):
+            calls.append({"model": model, "think": think, "options": options})
+            metrics = {"gen_tokens": 10, "gen_s": 1.0,
+                       "prompt_tokens": 20, "prompt_s": 0.5}
+            return "", f"reply {len(calls)}", "stop", metrics
+
+        with tempfile.TemporaryDirectory() as d:
+            argv = ["ollama_duel.py", write_json(d, "cfg.json", cfg),
+                    "--no-results-log", "--no-ntfy"]
+            if profile is not None:
+                argv += ["--profile", write_json(d, "profile.json", profile)]
+            with mock.patch.object(sys, "argv", argv + list(extra_argv)), \
+                 mock.patch.object(ollama_duel, "call_chat", fake_call_chat), \
+                 mock.patch("sys.stdout", io.StringIO()), \
+                 mock.patch("sys.stderr", io.StringIO()):
+                ollama_duel.main()
+        return calls
+
+    def test_cli_flags_swap_models_and_context(self):
+        cfg = minimal_config(turns=2, num_ctx=16384)
+        calls = self._run(cfg, ["--model-a", "x1", "--model-b", "x2",
+                                "--num-ctx", "2048"])
+        self.assertEqual([c["model"] for c in calls], ["x1", "x2"])
+        for c in calls:
+            self.assertEqual(c["options"]["num_ctx"], 2048)
+
+    def test_profile_overrides_scenario_including_per_model_values(self):
+        cfg = minimal_config(turns=2, think=True, max_tokens=300)
+        cfg["models"][0]["num_ctx"] = 16384
+        cfg["models"][1]["think"] = True
+        calls = self._run(cfg, [], profile={"models": ["p1", "p2"],
+                                            "num_ctx": 4096, "think": False,
+                                            "max_tokens": 150})
+        self.assertEqual([c["model"] for c in calls], ["p1", "p2"])
+        for c in calls:
+            self.assertEqual(c["options"]["num_ctx"], 4096)
+            self.assertEqual(c["options"]["num_predict"], 150)
+            self.assertIs(c["think"], False)
+
+    def test_cli_flags_win_over_profile(self):
+        cfg = minimal_config(turns=2, max_tokens=300)
+        calls = self._run(cfg, ["--model-b", "cli2", "--num-ctx", "1024",
+                                "--think", "--max-tokens", "99"],
+                          profile={"models": ["p1", "p2"], "num_ctx": 4096,
+                                   "think": False, "max_tokens": 150})
+        self.assertEqual([c["model"] for c in calls], ["p1", "cli2"])
+        for c in calls:
+            self.assertEqual(c["options"]["num_ctx"], 1024)
+            self.assertEqual(c["options"]["num_predict"], 99)
+            self.assertIs(c["think"], True)
+
+    def test_num_ctx_below_one_exits(self):
+        with self.assertRaises(SystemExit):
+            self._run(minimal_config(), ["--num-ctx", "0"])
+
+
+class ProfileFilesValidateTests(unittest.TestCase):
+    """Every shipped machine profile must load, and must work on top of
+    every shipped scenario."""
+
+    ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+    def _paths(self, folder):
+        root = os.path.join(self.ROOT, folder)
+        return sorted(os.path.join(root, name) for name in os.listdir(root)
+                      if name.endswith(".json"))
+
+    def test_all_profiles_load_and_apply_to_every_scenario(self):
+        profiles = self._paths("profiles")
+        self.assertGreater(len(profiles), 0, "expected at least one profile")
+        for profile_path in profiles:
+            profile = ollama_duel.load_profile(profile_path)
+            for scenario_path in self._paths("scenarios"):
+                with self.subTest(profile=os.path.basename(profile_path),
+                                  scenario=os.path.basename(scenario_path)):
+                    cfg = ollama_duel.load_config(scenario_path)
+                    ollama_duel.apply_overrides(
+                        cfg, models=profile.get("models") or (None, None),
+                        think=profile.get("think"),
+                        max_tokens=profile.get("max_tokens"),
+                        num_ctx=profile.get("num_ctx"))
+                    for want, entry in zip(profile.get("models") or (None, None),
+                                           cfg["models"]):
+                        if want is not None:
+                            self.assertEqual(entry["model"], want)
+
+    def test_arduino_q_profile_matches_its_documented_settings(self):
+        profile = ollama_duel.load_profile(
+            os.path.join(self.ROOT, "profiles", "arduino_q.json"))
+        self.assertEqual(profile, {"models": ["qwen3:1.7b", "smollm2:1.7b"],
+                                   "num_ctx": 4096, "think": False})
+
+
 class LogDirectoryTests(unittest.TestCase):
     def test_missing_log_directory_is_created(self):
         with tempfile.TemporaryDirectory() as d:

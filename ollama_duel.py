@@ -5,6 +5,8 @@ ollama_duel.py -- two AI models converse with each other, configured from JSON.
 Usage:
     python3 ollama_duel.py duel.json
     python3 ollama_duel.py duel.json --turns 10 --topic "A different question"
+    python3 ollama_duel.py duel.json --model-a qwen3:1.7b --model-b smollm2:1.7b
+    python3 ollama_duel.py duel.json --profile profiles/arduino_q.json
 
 Globals in the JSON (host, topic, turns, think, max_tokens, temperature,
 num_ctx, repeat_penalty, turn_prompt, first_turn_prompt, log_file, save_json,
@@ -18,6 +20,14 @@ file name (e.g. "duel.log" -> "20260925-084500-duel.log") so each run gets
 its own log instead of appending to a previous run's. If "save_json" is set,
 the transcript (speaker/model/text per turn) is written there as JSON when
 the duel ends, including after a stopped-early error or Ctrl-C.
+
+To run a scenario on a different machine without copying it, swap the
+models from the command line (--model-a, --model-b, --num-ctx) or keep the
+swap in a small JSON "profile" and pass --profile. A profile may set
+"models" (a list of two model names; null keeps the scenario's model),
+"think", "max_tokens", and "num_ctx". Profile and CLI values replace the
+scenario's top-level AND per-model values, and CLI flags win over the
+profile.
 
 After every run the script also appends a one-block summary to
 "run_results.log" in the current directory (override with the top-level
@@ -206,6 +216,67 @@ def load_config(path):
         _validate_field(m, "repeat_penalty", "number", label, minimum=1)
         _validate_field(m, "turn_prompt", "str", label)
         _validate_field(m, "first_turn_prompt", "str", label)
+    return cfg
+
+
+PROFILE_KEYS = {"models", "think", "max_tokens", "num_ctx"}
+# Settings a profile or CLI flag overrides for both participants at once.
+OVERRIDE_SETTINGS = ("think", "max_tokens", "num_ctx")
+
+
+def load_profile(path):
+    """Load a machine profile: a small JSON object that swaps a scenario's
+    models and generation limits without editing the scenario file."""
+    try:
+        with open(path, encoding="utf-8") as f:
+            profile = json.load(f)
+    except FileNotFoundError:
+        sys.exit(f"Profile file not found: {path}")
+    except UnicodeDecodeError as e:
+        sys.exit(f"Profile {path} is not valid UTF-8: {e}")
+    except json.JSONDecodeError as e:
+        sys.exit(f"Invalid JSON in profile {path}: {e}")
+    if not isinstance(profile, dict):
+        sys.exit(f"Profile {path} must be a JSON object.")
+    _check_unknown_keys(profile, PROFILE_KEYS, "profile")
+    models = profile.get("models")
+    if models is not None:
+        if not isinstance(models, list) or len(models) != 2:
+            sys.exit('"models" in profile must be a list of exactly 2 model '
+                     'names (use null to keep the scenario\'s model).')
+        for name in models:
+            if name is not None and (not isinstance(name, str) or not name):
+                sys.exit(f'"models" in profile must hold model names or '
+                         f'null, got {name!r}.')
+    _validate_field(profile, "think", "bool", "profile")
+    _validate_field(profile, "max_tokens", "int", "profile", minimum=1)
+    _validate_field(profile, "num_ctx", "int", "profile", minimum=1)
+    return profile
+
+
+def apply_overrides(cfg, models=(None, None), **settings):
+    """Apply machine overrides to a loaded config, in place.
+
+    `models` holds a replacement model name per participant (None keeps the
+    scenario's). Each non-None setting in OVERRIDE_SETTINGS is set at the
+    top level and removed from both model entries, so it applies to both
+    participants even where the scenario set it per model.
+    """
+    for entry, model in zip(cfg["models"], models):
+        if model is None:
+            continue
+        # A name that was only ever the model identifier follows the swap,
+        # so the transcript doesn't credit a model that never ran.
+        if entry.get("name") == entry["model"]:
+            entry["name"] = model
+        entry["model"] = model
+    for key in OVERRIDE_SETTINGS:
+        value = settings.get(key)
+        if value is None:
+            continue
+        cfg[key] = value
+        for entry in cfg["models"]:
+            entry.pop(key, None)
     return cfg
 
 
@@ -640,6 +711,16 @@ def main():
     ap.add_argument("--max-tokens", type=int, default=None,
                     help="override the config max_tokens per turn")
     ap.add_argument("--host", default=None, help="override the config host")
+    ap.add_argument("--profile", default=None,
+                    help="JSON machine profile that swaps the models and/or "
+                         "sets think, max_tokens and num_ctx for both "
+                         "participants (e.g. profiles/arduino_q.json)")
+    ap.add_argument("--model-a", default=None,
+                    help="override the first participant's model")
+    ap.add_argument("--model-b", default=None,
+                    help="override the second participant's model")
+    ap.add_argument("--num-ctx", type=int, default=None,
+                    help="override num_ctx for both participants")
     ap.add_argument("--think", dest="think", action="store_true", default=None,
                     help="force thinking display on")
     ap.add_argument("--no-think", dest="think", action="store_false",
@@ -676,7 +757,22 @@ def main():
     if len(configs) > 1:
         sys.exit(run_batch(configs, args.config))
 
+    if args.num_ctx is not None and args.num_ctx < 1:
+        sys.exit(f'"--num-ctx" must be >= 1, got {args.num_ctx}.')
     cfg = load_config(args.config)
+    # Machine overrides: the profile first, then explicit CLI flags on top.
+    # (--think/--no-think and --max-tokens are applied further down, where
+    # they already win over everything.)
+    profile = load_profile(args.profile) if args.profile else {}
+    profile_models = profile.get("models") or (None, None)
+    apply_overrides(
+        cfg,
+        models=(first_not_none(args.model_a, profile_models[0]),
+                first_not_none(args.model_b, profile_models[1])),
+        think=profile.get("think"),
+        max_tokens=profile.get("max_tokens"),
+        num_ctx=first_not_none(args.num_ctx, profile.get("num_ctx")),
+    )
     host = first_not_none(args.host, cfg.get("host"), DEFAULT_HOST)
     topic = first_not_none(args.topic, cfg.get("topic"))
     if not topic:
