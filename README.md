@@ -309,14 +309,68 @@ The programming scenario produces code as conversation text. Neither script exec
 
 ## Choosing models
 
-Match the model size to the machine running Ollama. Any model the server
-has pulled works — put its exact name in the scenario's `"model"` field.
+Memory decides which models a machine can run; the processor or GPU
+decides how fast. A model has to fit in RAM (or in video memory, on a
+machine with a dedicated GPU) alongside everything else that is open, so
+start from how much memory the machine has.
 
-| Machine class | Example models | Notes |
+### Recommended models by machine
+
+| Machine | Recommended models | Suggested settings |
 |---|---|---|
-| Memory-constrained single-board computers (a few GB of RAM, weak CPU) | `qwen3:0.6b`, `qwen3:1.7b`, `smollm2:1.7b`, `tinyllama:1.1b` | Expect a few tokens per second. Keep `turns` low and thinking budgets small; turn thinking off if replies get too slow. |
-| Older CPU-only desktops | `qwen3:4b`, `qwen3:8b`, `llama3.1:8b` | 8B models are the sweet spot for CPU-only machines with 12GB+ of RAM. |
-| Modern machines with ample RAM or a GPU | `qwen2.5-coder:14b`, `qwen3:14b`, larger 20B–30B models | Best duel quality. Note: `qwen2.5-coder:14b` rejects thinking-enabled requests, so use `"think": false` with it; the Qwen3 family supports thinking. |
+| **Small-spec machines**: single-board computers such as the Arduino Uno Q or a Raspberry Pi, with 2–4 GB of RAM | `qwen3:1.7b` and `smollm2:1.7b`. With only 2 GB, drop to `qwen3:0.6b` or `tinyllama:1.1b` | `num_ctx` 4096, thinking off, `max_tokens` around 200–300, 6–8 turns. Expect a few tokens per second |
+| **Laptops with 8 GB of RAM** | `qwen3:4b`, `gemma3:4b`, `llama3.2:3b`, `phi3`; `qwen2.5-coder:3b` for the programming scenarios | `num_ctx` 8192, thinking off or a small budget. An 8B model will load but leaves little room for anything else |
+| **Laptops and desktops with 16 GB of RAM** | `qwen3:8b`, `llama3.1:8b`, `dolphin3:8b` | Most included scenarios were written for `qwen3:8b` and run as they are. A 14B model will load but is slow without a GPU |
+| **Machines with 32 GB of RAM or more, or a GPU with 12 GB+ of video memory** | `qwen2.5-coder:14b`, `qwen3:14b`, `gemma3:12b`, and larger 20B–35B models | Best duel quality, and the programming scenarios run as written. Raise `num_ctx` to 8192–16384 for long turns |
+
+A few notes on laptops:
+
+- Apple Silicon Macs share one pool of memory between the processor and
+  the GPU, so Ollama uses the GPU automatically and the RAM figure above
+  is the one that matters.
+- On a laptop with no dedicated GPU, models run on the processor. The
+  same models fit, but expect them to be slower, so pick from the row
+  below your RAM if replies drag.
+- Leave a few GB free for the browser and everything else you have open,
+  and run long duels plugged in.
+
+Two model-specific notes: `qwen2.5-coder` models reject thinking-enabled
+requests, so use `"think": false` (or `--no-think`) with them; the Qwen3
+family supports thinking.
+
+### Trying a recommendation
+
+You don't need to edit a scenario to try a different model. Swap models
+on the command line, or save the swap as a profile (see
+[Running a scenario on a different machine](#running-a-scenario-on-a-different-machine)):
+
+```shell
+python ollama_duel.py scenarios/roast_battle.json --model-a qwen3:4b --model-b gemma3:4b --num-ctx 8192
+python ollama_duel.py scenarios/roast_battle.json --profile profiles/arduino_q.json
+```
+
+For a machine you use often, make your own profile. For example, save
+this as `profiles/laptop_8gb.json` for an 8 GB laptop:
+
+```json
+{
+  "models": ["qwen3:4b", "gemma3:4b"],
+  "num_ctx": 8192,
+  "think": false
+}
+```
+
+Scenarios already matched to a machine class are included: the
+`small_*.json` files for small-spec machines and the `mac_*.json` files
+for 3–4B laptop models.
+
+To check a choice, measure it: `python ollama_bench.py qwen3:4b qwen3:8b`
+prints tokens per second for each model on your machine (see
+[Benchmarking model speed](#benchmarking-model-speed)). If a model
+generates fewer than about five tokens per second, a full duel will take
+a long time; step down a size or shorten the duel.
+
+### Slow machines
 
 On a slow machine, prefer shorter `max_tokens` values and fewer turns — a
 duel that takes minutes on a fast machine can take an hour or more on a
