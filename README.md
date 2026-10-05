@@ -187,6 +187,16 @@ These live in the `scenarios/` folder.
 | `salary_negotiation.json` | A DevOps candidate negotiates an offer with a hiring manager |
 | `alien_food_critics.json` | Two rival alien critics review human cuisine |
 | `vim_vs_emacs.json` | Lifelong believers argue the eternal editor war |
+| `baseball_mvp_debate.json` | A stat-head and an old-school analyst debate the MVP |
+| `brutal_code_review.json` | A defensive author and a merciless reviewer fight over a flawed pull request, with the reviewer on `dolphin3:8b` |
+| `coder_vs_qwen_open_weights.json` | `qwen2.5-coder:14b` argues that frontier models should be open-weight; a safety researcher argues against |
+| `glimmer_vs_qwen_open_weights.json` | The same open-weight debate with `muse-glimmer` arguing in favor |
+| `dolphin3_vs_qwen_moderation.json` | An uncensored model and a safety researcher debate content moderation guardrails |
+| `defend_indefensible.json` | A true believer argues pineapple on pizza should be a crime; a debunker dismantles the case |
+| `do_pineapples_bite.json` | A believer and a skeptic debate whether pineapples bite people |
+| `hot_takes_interview.json` | A tech journalist interviews an unfiltered guest about unpopular tech opinions |
+| `roast_battle_uncensored.json` | A no-filter comic and a clean comic roast each other's kind of AI model |
+| `support_no_patience.json` | A furious customer meets a support rep who has run out of patience |
 
 ### Programming scenarios
 
@@ -197,7 +207,6 @@ The programming scenarios (`factorial.json`, `program_writing*.json`, and the se
 - **Programs check themselves** with `assert` statements or a self-test, so you can copy a turn's code out of the log and run it to see whether that turn broke anything. The scripts never run generated code themselves.
 
 Most use `qwen2.5-coder:14b`; `builder_vs_breaker.json`, `speed_race.json`, and `product_owner_vs_developer.json` also use `qwen3:14b` for the second role, so different models catch different mistakes.
-| `baseball_mvp_debate.json` | A stat-head and an old-school analyst debate the MVP |
 
 ### Small-model scenarios
 
@@ -222,6 +231,29 @@ playful, concrete roles that stay on track at a few tokens per second.
 | `small_time_capsule.json` | Fight over which 3 items represent 2026 |
 | `small_movie_ending_rewrite.json` | Competing better endings for *Titanic* |
 | `small_pet_debate.json` | A dog and a cat debate the better pet |
+
+### Machine-specific variants
+
+Two sets of files rerun scenarios from the tables above on smaller models,
+keeping the topic and personas and changing only the models and a few
+generation settings.
+
+**`arduino_q_*.json`** — one for each of the first 40 scenarios in the
+main table (`duel-example.json` through `baseball_mvp_debate.json`), under
+the same name with an `arduino_q_` prefix. Both participants are swapped to
+`qwen3:1.7b` and `smollm2:1.7b`, thinking is off, and most set `num_ctx` to
+4096. Run the whole set with `python ollama_duel.py "scenarios/arduino_q_*"`.
+
+**`mac_*.json`** — five scenarios on 3–4B models, with different models on
+each side:
+
+| File | Based on | Models |
+| --- | --- | --- |
+| `mac_builder_vs_breaker.json` | `builder_vs_breaker.json` | `qwen2.5-coder:3b`, `phi3` |
+| `mac_defend_indefensible.json` | `defend_indefensible.json` | `huihui_ai/qwen3-abliterated:4b`, `llama3.2:3b` |
+| `mac_hot_takes.json` | `hot_takes_interview.json` | `gemma3:4b`, `huihui_ai/qwen3-abliterated:4b` |
+| `mac_pineapples_bite.json` | `do_pineapples_bite.json` | `qwen3:4b`, `phi3` |
+| `mac_roast_battle.json` | `roast_battle_uncensored.json` | `huihui_ai/qwen3-abliterated:4b`, `phi3` |
 
 ## Conversation behavior and logs
 
@@ -322,3 +354,5 @@ The `tests/` directory has stdlib-only `unittest` coverage for the shared helper
 ```shell
 python -m unittest discover -s tests
 ```
+
+GitHub Actions runs the same command on every push (`.github/workflows/tests.yml`), alongside the pylint check.
