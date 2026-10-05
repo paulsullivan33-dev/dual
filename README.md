@@ -321,16 +321,24 @@ start from how much memory the machine has.
 | **Small-spec machines**: single-board computers such as the Arduino Uno Q or a Raspberry Pi, with 2–4 GB of RAM | `qwen3:1.7b` and `smollm2:1.7b`. With only 2 GB, drop to `qwen3:0.6b` or `tinyllama:1.1b` | `num_ctx` 4096, thinking off, `max_tokens` around 200–300, 6–8 turns. Expect a few tokens per second |
 | **Laptops with 8 GB of RAM** | `qwen3:4b`, `gemma3:4b`, `llama3.2:3b`, `phi3`; `qwen2.5-coder:3b` for the programming scenarios | `num_ctx` 8192, thinking off or a small budget. An 8B model will load but leaves little room for anything else |
 | **Laptops and desktops with 16 GB of RAM** | `qwen3:8b`, `llama3.1:8b`, `dolphin3:8b` | Most included scenarios were written for `qwen3:8b` and run as they are. A 14B model will load but is slow without a GPU |
-| **Machines with 32 GB of RAM or more, or a GPU with 12 GB+ of video memory** | `qwen2.5-coder:14b`, `qwen3:14b`, `gemma3:12b`, and larger 20B–35B models | Best duel quality, and the programming scenarios run as written. Raise `num_ctx` to 8192–16384 for long turns |
+| **Laptops with 32 GB of RAM and integrated graphics**, for example an Intel Core Ultra 200V series laptop with Arc 140V graphics | `qwen3:8b` or `dolphin3:8b` for everyday duels. `qwen2.5-coder:14b`, `qwen3:14b` and `gemma3:12b` also fit, at a slower pace | `num_ctx` 8192. Every included scenario fits in memory, so run them as written. 20B+ models load but are usually too slow for a multi-turn duel |
+| **Machines with a dedicated GPU with 12 GB+ of video memory, or desktops with 32 GB of RAM or more** | `qwen2.5-coder:14b`, `qwen3:14b`, `gemma3:12b`, and larger 20B–35B models | Best duel quality, and the programming scenarios run as written. Raise `num_ctx` to 8192–16384 for long turns |
 
 A few notes on laptops:
 
 - Apple Silicon Macs share one pool of memory between the processor and
   the GPU, so Ollama uses the GPU automatically and the RAM figure above
   is the one that matters.
-- On a laptop with no dedicated GPU, models run on the processor. The
-  same models fit, but expect them to be slower, so pick from the row
-  below your RAM if replies drag.
+- Integrated graphics (Intel Arc, AMD Radeon) have no memory of their own
+  and borrow system RAM. Windows reports this as a small "dedicated"
+  figure plus a large "shared" one, typically half the installed RAM: 16
+  GB shared on a 32 GB laptop. That is normal, and the RAM figure above
+  is still the one that matters.
+- Recent Ollama versions can use integrated GPUs on Windows and Linux
+  through Vulkan; otherwise the model runs on the processor. While a
+  model is loaded, `ollama ps` shows which one it is using. Either way,
+  expect less speed than a dedicated GPU, so pick from the row above
+  yours if replies drag.
 - Leave a few GB free for the browser and everything else you have open,
   and run long duels plugged in.
 
