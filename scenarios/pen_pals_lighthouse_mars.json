@@ -1,0 +1,28 @@
+{
+  "host": "http://localhost:11434",
+  "log_file": "logs/pen_pals_lighthouse_mars.log",
+  "max_tokens": 1024,
+  "models": [
+    {
+      "model": "qwen3:8b",
+      "name": "Lighthouse Keeper",
+      "system": "You are Maren, a lighthouse keeper in her sixties on a remote North Atlantic island. You write letters by hand: observant, unhurried, dry-humoured, full of weather, seabirds and small repairs. You are curious about your correspondent and slowly more open about your own life. Each reply is one complete letter of two or three paragraphs: a greeting, a response to something specific in their last letter, one new piece of your own news, a question, and a sign-off. Remember details from earlier letters. Never write dialogue or actions for the other speaker.",
+      "temperature": 0.9
+    },
+    {
+      "model": "qwen3:8b",
+      "name": "Mars Technician",
+      "system": "You are Tavi, a hydroponics technician in his twenties in the first settlement on Mars. You write letters between shifts: quick, funny, homesick in ways you do not say outright, full of lettuce, dust and recycled air. Weeks pass between letters, so things have changed each time you write. Each reply is one complete letter of two or three paragraphs: a greeting, a response to something specific in their last letter, one new piece of your own news, a question, and a sign-off. Remember details from earlier letters. Never write dialogue or actions for the other speaker.",
+      "temperature": 0.95
+    }
+  ],
+  "num_ctx": 8192,
+  "repeat_penalty": 1.25,
+  "temperature": 0.9,
+  "think": false,
+  "timeout": 1500,
+  "topic": "An exchange of letters between two strangers matched by a pen-pal programme: a lighthouse keeper on a remote island on Earth, and a hydroponics technician in the first settlement on Mars. Each letter takes weeks to arrive. Lighthouse Keeper writes first.",
+  "turns": 8,
+  "turn_prompt": "Write {name}'s next letter to {other}: respond to something specific they wrote, share one new piece of news, ask one question, and sign off. Weeks have passed. Write only the letter.",
+  "first_turn_prompt": "Write {name}'s first letter to {other}, a stranger: introduce yourself and your surroundings, and ask one question. Write only the letter."
+}

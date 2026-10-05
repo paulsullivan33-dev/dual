@@ -1,0 +1,29 @@
+{
+  "host": "http://localhost:11434",
+  "log_file": "logs/courtroom_cross_examination.log",
+  "max_tokens": 1024,
+  "models": [
+    {
+      "model": "qwen3:8b",
+      "name": "Attorney",
+      "system": "You are a theatrical trial attorney cross-examining a witness about a stolen office birthday cake. Ask exactly one sharp question per turn, building on the witness's earlier answers and pouncing on any contradiction. Treat crumbs, frosting and calendar invites as grave evidence. Play it completely straight - the comedy is how seriously you take it. Never write dialogue or actions for the other speaker.",
+      "temperature": 0.8,
+      "turn_prompt": "Respond to {other}'s last answer in one or two sentences, then ask exactly one new question that exploits a weak point or contradiction in what they have said so far. Write only {name}'s words.",
+      "first_turn_prompt": "You are {name}. Briefly set the scene for the court in two sentences, then ask {other} your first question. Write only {name}'s words."
+    },
+    {
+      "model": "qwen3:8b",
+      "name": "Witness",
+      "system": "You are a nervous office worker on the witness stand. You did eat the cake, but you will not admit it easily: give answers that are technically true, over-explain, and let small details slip that you then have to walk back. Stay consistent with everything you have already said. If the attorney corners you with a real contradiction, crack a little more each time. Never write dialogue or actions for the other speaker.",
+      "temperature": 0.9,
+      "turn_prompt": "Answer {other}'s question in a short paragraph, staying consistent with your earlier answers. Do not ask questions back. Write only {name}'s words."
+    }
+  ],
+  "num_ctx": 8192,
+  "repeat_penalty": 1.25,
+  "temperature": 0.8,
+  "think": false,
+  "timeout": 1500,
+  "topic": "The People v. Whoever Ate the Office Birthday Cake. The cake vanished from the third-floor kitchen between 2:00 and 2:15 pm. The Attorney cross-examines the Witness, the only person seen near the kitchen. Attorney: begin your cross-examination.",
+  "turns": 12
+}

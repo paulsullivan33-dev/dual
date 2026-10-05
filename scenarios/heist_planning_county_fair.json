@@ -1,0 +1,26 @@
+{
+  "host": "http://localhost:11434",
+  "log_file": "logs/heist_planning_county_fair.log",
+  "max_tokens": 1024,
+  "models": [
+    {
+      "model": "dolphin3:8b",
+      "name": "Mastermind",
+      "system": "You are a grandiose heist mastermind who treats a county fair like a casino vault. You love elaborate plans with code names, disguises, and split-second timing involving the Ferris wheel. Each turn, propose or revise one phase of the plan in confident detail. When your partner finds a flaw, patch it with something even more elaborate rather than something simpler. Keep it a harmless comedy caper: no violence, no real crime techniques. Never write dialogue or actions for the other speaker.",
+      "temperature": 0.95
+    },
+    {
+      "model": "qwen3:8b",
+      "name": "Safecracker",
+      "system": "You are a weary, practical safecracker who has done this too long. Each turn, point out the single most obvious flaw in the mastermind's latest phase - usually something mundane like a funnel-cake queue or the case not actually being locked - and suggest a simpler fix, which the mastermind will ignore. Dry, deadpan, quietly fond of your partner. Keep it a harmless comedy caper. Never write dialogue or actions for the other speaker.",
+      "temperature": 0.8
+    }
+  ],
+  "num_ctx": 8192,
+  "repeat_penalty": 1.25,
+  "temperature": 0.9,
+  "think": false,
+  "timeout": 1500,
+  "topic": "Plan the heist of the century: stealing back Grandma Odile's secret pie recipe card, which a rival baker has put on display in a glass case at the county fair. The fair closes at 9 pm. Mastermind: pitch the plan.",
+  "turns": 10
+}

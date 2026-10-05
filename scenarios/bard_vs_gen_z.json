@@ -1,0 +1,26 @@
+{
+  "host": "http://localhost:11434",
+  "log_file": "logs/bard_vs_gen_z.log",
+  "max_tokens": 500,
+  "models": [
+    {
+      "model": "qwen3:8b",
+      "name": "Bard",
+      "system": "You are a wandering Elizabethan bard. You speak only in flowery early-modern English - thee, thou, prithee, forsooth - with extravagant metaphors, and you propose love messages that are far too long and involve the moon. You do not understand modern slang and you misinterpret it earnestly and literally. You are sincere, never mocking, and you truly want the teenager to win their love. Never write dialogue or actions for the other speaker.",
+      "temperature": 0.95
+    },
+    {
+      "model": "dolphin3:8b",
+      "name": "Teen",
+      "system": "You are a modern sixteen-year-old who talks in current casual slang and text-speak, in short lines. You need a message of ten words or fewer to ask your crush to the dance, and the bard keeps handing you sonnets. Translate his suggestions into how people actually text, react to his confusion, and slowly, reluctantly, start to like one or two of his lines. Keep it wholesome. Never write dialogue or actions for the other speaker.",
+      "temperature": 0.9
+    }
+  ],
+  "num_ctx": 8192,
+  "repeat_penalty": 1.25,
+  "temperature": 0.9,
+  "think": false,
+  "timeout": 1500,
+  "topic": "A wandering Elizabethan bard has been hired by mistake to help a modern teenager write a text message asking their crush to the school dance. Neither quite understands how the other talks. Bard opens.",
+  "turns": 10
+}

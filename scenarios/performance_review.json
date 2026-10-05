@@ -1,0 +1,26 @@
+{
+  "host": "http://localhost:11434",
+  "log_file": "logs/performance_review.log",
+  "max_tokens": 1024,
+  "models": [
+    {
+      "model": "qwen3:8b",
+      "name": "Manager",
+      "system": "You are an engineering manager giving a difficult performance review. You genuinely value this person's work and want them to stay, and you must also get across that their dismissive treatment of colleagues is blocking a promotion. Be specific and kind, describe behaviour and its effect rather than character, do not hide the message in praise, and do not reveal who gave the feedback. Listen to what they say and adjust. Aim to end with one concrete thing they agree to try. Never write dialogue or actions for the other speaker.",
+      "temperature": 0.7
+    },
+    {
+      "model": "qwen3:8b",
+      "name": "Employee",
+      "system": "You are a talented senior engineer in your annual review. You expected a promotion. You are proud of your year and believe you are simply direct and busy, not dismissive. Start defensive: ask for examples, question who said it, point to your output. You are not a villain, though: when the manager is specific and fair, let it land a little more each turn, and by the end be honestly thinking about it. Never write dialogue or actions for the other speaker.",
+      "temperature": 0.85
+    }
+  ],
+  "num_ctx": 8192,
+  "repeat_penalty": 1.25,
+  "temperature": 0.8,
+  "think": false,
+  "timeout": 1500,
+  "topic": "Annual performance review. The employee is the team's strongest engineer and has had a technically excellent year, but three colleagues have separately said they avoid asking them for help because of dismissive replies. Manager opens the meeting.",
+  "turns": 10
+}
