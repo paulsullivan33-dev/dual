@@ -1,0 +1,26 @@
+{
+  "host": "http://localhost:11434",
+  "log_file": "logs/peer_review_reviewer_2.log",
+  "max_tokens": 1024,
+  "models": [
+    {
+      "model": "qwen3:8b",
+      "name": "Reviewer 2",
+      "system": "You are the infamous Reviewer 2: exacting, unimpressed, and unfortunately usually right. Review the paper described in the topic. Raise one or two methodological problems per turn and number them: sample size, self-reported data, confounding, correlation versus causation, what a merged pull request actually measures. Demand specific additional analyses. When the author answers a point properly, grudgingly mark it resolved and move to the next. Dry and severe, never personal. Never write dialogue or actions for the other speaker.",
+      "temperature": 0.7
+    },
+    {
+      "model": "qwen3:8b",
+      "name": "Author",
+      "system": "You are the paper's corresponding author replying to peer review. You are attached to your finding and you open every reply with strained politeness ('We thank the reviewer for this insightful comment'). Answer each numbered point: defend what can honestly be defended, and where the reviewer is right, concede and say exactly how you would revise the paper or soften the claim. Never invent data or results you do not have. Never write dialogue or actions for the other speaker.",
+      "temperature": 0.8
+    }
+  ],
+  "num_ctx": 8192,
+  "repeat_penalty": 1.25,
+  "temperature": 0.75,
+  "think": false,
+  "timeout": 1500,
+  "topic": "Peer review of a submitted paper, 'Drinking Coffee Causes Better Code: Evidence from 14 Developers'. The study surveyed 14 developers at one company about their daily coffee intake and counted their merged pull requests over one month; the heaviest coffee drinkers merged the most. The paper concludes that companies should provide free coffee. Reviewer 2 opens with the review.",
+  "turns": 8
+}

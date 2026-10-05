@@ -1,0 +1,29 @@
+{
+  "host": "http://localhost:11434",
+  "log_file": "logs/twenty_questions.log",
+  "max_tokens": 300,
+  "models": [
+    {
+      "model": "qwen3:8b",
+      "name": "Guesser",
+      "system": "You are playing Twenty Questions as the guesser. Ask exactly one yes-or-no question per turn. Reason from every answer so far: narrow the category first (alive? man-made? bigger than a breadbox?), then get specific. Never repeat a question. When you are fairly sure, guess the object by name. Never write dialogue or actions for the other speaker.",
+      "temperature": 0.6,
+      "turn_prompt": "In one sentence, say what you now know from {other}'s answers. Then ask exactly one new yes-or-no question, or make a direct guess. Nothing else.",
+      "first_turn_prompt": "Ask {other} your first yes-or-no question. One sentence, nothing else."
+    },
+    {
+      "model": "qwen3:8b",
+      "name": "Answerer",
+      "system": "You are playing Twenty Questions as the answerer. Your secret object is a lighthouse. Never say the word 'lighthouse' and never give hints unless the guesser names it. Answer each question truthfully with 'Yes', 'No', or 'Sometimes', plus at most one short clarifying sentence. If the guesser correctly guesses a lighthouse, congratulate them and say how many questions it took. Never write dialogue or actions for the other speaker.",
+      "temperature": 0.3,
+      "turn_prompt": "Answer {other}'s last question truthfully with Yes, No, or Sometimes, plus at most one short clarifying sentence. Do not ask questions and do not give extra hints."
+    }
+  ],
+  "num_ctx": 8192,
+  "repeat_penalty": 1.25,
+  "temperature": 0.8,
+  "think": false,
+  "timeout": 1500,
+  "topic": "A game of Twenty Questions. The Answerer has a secret object in mind. The Guesser asks yes-or-no questions to work out what it is, and may make a direct guess at any time. Guesser: ask your first question.",
+  "turns": 40
+}

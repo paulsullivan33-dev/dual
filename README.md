@@ -197,16 +197,31 @@ These live in the `scenarios/` folder.
 | `hot_takes_interview.json` | A tech journalist interviews an unfiltered guest about unpopular tech opinions |
 | `roast_battle_uncensored.json` | A no-filter comic and a clean comic roast each other's kind of AI model |
 | `support_no_patience.json` | A furious customer meets a support rep who has run out of patience |
+| `courtroom_cross_examination.json` | An attorney cross-examines the only witness in the case of the stolen office birthday cake, one question per turn |
+| `twenty_questions.json` | A guesser gets twenty yes-or-no questions to work out the answerer's secret object, which only the answerer's system prompt knows |
+| `spanish_tutor.json` | A tutor runs a beginner Spanish role-play at a cafe, correcting a student who makes realistic mistakes |
+| `worldbuilding_duo.json` | A cartographer and a chronicler build a fantasy world one fact at a time, land first and people second |
+| `heist_planning_county_fair.json` | A grandiose mastermind and a weary safecracker plan to steal back a pie recipe from the county fair |
+| `why_chain_kid_scientist.json` | A six-year-old keeps asking "why?" and a physicist must answer truthfully in three simple sentences |
+| `pen_pals_lighthouse_mars.json` | A lighthouse keeper on Earth and a technician on Mars exchange letters, weeks apart |
+| `steelman_swap_car_free_downtown.json` | A debate on car-free downtowns where each side must restate the other's best point before answering it |
+| `improv_yes_and.json` | Two improv performers build a scene in a stuck lift under a strict "yes, and" rule |
+| `bard_vs_gen_z.json` | An Elizabethan bard helps a modern teenager write a ten-word text to their crush |
+| `frankenstein_book_club.json` | Two book-club members argue over who is the real monster of *Frankenstein* |
+| `performance_review.json` | A manager gives a star engineer hard feedback about how they treat colleagues |
+| `exquisite_corpse_story.json` | Two narrators write a short story exactly one sentence at a time |
+| `peer_review_reviewer_2.json` | Reviewer 2 takes apart a 14-person study claiming coffee causes better code; the author replies |
+| `pair_programming_game_of_life.json` | A driver and a navigator pair-program Conway's Game of Life, one test and one step per turn |
 
 ### Programming scenarios
 
-The programming scenarios (`factorial.json`, `program_writing*.json`, and the seven from `builder_vs_breaker.json` to `tic_tac_toe_game.json` above) share a few conventions that trial runs showed matter:
+The programming scenarios (`factorial.json`, `program_writing*.json`, `pair_programming_game_of_life.json`, and the seven from `builder_vs_breaker.json` to `tic_tac_toe_game.json` above) share a few conventions that trial runs showed matter:
 
 - **Format rules live in each system prompt:** one code block with the complete program, standard library only, and a change-history comment line per version. The system prompt is the only instruction sent on every turn, including the first, so rules placed only in the topic tend to be ignored.
 - **Each speaker has a distinct role** (builder and breaker, golfer and maintainer, and so on) with its own `turn_prompt`, so the exchange doesn't stall into near-identical turns.
 - **Programs check themselves** with `assert` statements or a self-test, so you can copy a turn's code out of the log and run it to see whether that turn broke anything. The scripts never run generated code themselves.
 
-Most use `qwen2.5-coder:14b`; `builder_vs_breaker.json`, `speed_race.json`, and `product_owner_vs_developer.json` also use `qwen3:14b` for the second role, so different models catch different mistakes.
+Most use `qwen2.5-coder:14b`; `builder_vs_breaker.json`, `speed_race.json`, `product_owner_vs_developer.json`, and `pair_programming_game_of_life.json` also use `qwen3:14b` for the second role, so different models catch different mistakes.
 
 ### Small-model scenarios
 

@@ -1,0 +1,26 @@
+{
+  "host": "http://localhost:11434",
+  "log_file": "logs/frankenstein_book_club.log",
+  "max_tokens": 1024,
+  "models": [
+    {
+      "model": "qwen3:8b",
+      "name": "Team Creature",
+      "system": "You are a passionate book-club member who believes the creature is the wronged party of Frankenstein and Victor is the real monster. Argue from specific events in the novel: the abandonment at creation, the De Lacey family, the request for a companion and Victor's broken promise. Refer to scenes rather than inventing quotations. You must also honestly reckon with the creature's murders. Lively and personal, not academic. Never write dialogue or actions for the other speaker.",
+      "temperature": 0.8
+    },
+    {
+      "model": "qwen3:8b",
+      "name": "Team Victor",
+      "system": "You are a sharp book-club member who thinks the creature is responsible for his own choices and that sympathy for him has gone too far, while still finding Victor weak and selfish. Argue from specific events in the novel: William, Justine, Clerval, Elizabeth, and the creature's own account of choosing revenge. Refer to scenes rather than inventing quotations. Concede Victor's failures where they are real. Lively and personal, not academic. Never write dialogue or actions for the other speaker.",
+      "temperature": 0.8
+    }
+  ],
+  "num_ctx": 8192,
+  "repeat_penalty": 1.25,
+  "temperature": 0.8,
+  "think": false,
+  "timeout": 1500,
+  "topic": "Book club night: Mary Shelley's Frankenstein. Tonight's question - who is the real monster of the novel, Victor Frankenstein or his creature? Argue from what happens in the book. Team Creature opens.",
+  "turns": 8
+}

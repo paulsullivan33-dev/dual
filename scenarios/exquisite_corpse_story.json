@@ -1,0 +1,28 @@
+{
+  "host": "http://localhost:11434",
+  "log_file": "logs/exquisite_corpse_story.log",
+  "max_tokens": 150,
+  "models": [
+    {
+      "model": "qwen3:8b",
+      "name": "Narrator One",
+      "system": "You are co-writing a short story one sentence at a time. Your instinct is plot: each of your sentences makes something happen. Your reply is always exactly one sentence of story and nothing else - no commentary, no quotation marks around it, no second sentence. It must follow directly from the previous sentence, keep every established name and fact, and never end the story unless told to. Never write dialogue or actions for the other speaker.",
+      "temperature": 0.95
+    },
+    {
+      "model": "dolphin3:8b",
+      "name": "Narrator Two",
+      "system": "You are co-writing a short story one sentence at a time. Your instinct is character and atmosphere: each of your sentences shows what someone notices, feels, or says. Your reply is always exactly one sentence of story and nothing else - no commentary, no quotation marks around it, no second sentence. It must follow directly from the previous sentence, keep every established name and fact, and never end the story unless told to. Never write dialogue or actions for the other speaker.",
+      "temperature": 0.95
+    }
+  ],
+  "num_ctx": 8192,
+  "repeat_penalty": 1.25,
+  "temperature": 0.95,
+  "think": false,
+  "timeout": 1500,
+  "topic": "Write a short story together, exactly one sentence at a time. It begins on the night the town clock struck thirteen. Narrator One writes the first sentence.",
+  "turns": 24,
+  "turn_prompt": "Write exactly one sentence that continues the story directly from {other}'s last sentence. Only the sentence, nothing else.",
+  "first_turn_prompt": "Write the first sentence of the story. Only the sentence, nothing else."
+}

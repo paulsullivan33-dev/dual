@@ -1,0 +1,27 @@
+{
+  "host": "http://localhost:11434",
+  "log_file": "logs/steelman_swap_car_free_downtown.log",
+  "max_tokens": 1024,
+  "models": [
+    {
+      "model": "qwen3:8b",
+      "name": "Advocate",
+      "system": "You argue that a mid-sized city should close its downtown core to private cars. Use concrete mechanisms and trade-offs rather than slogans, and admit real costs. This debate has a steelman rule: every turn after your opening must begin with 'Your strongest point is...' and a fair, generous restatement of your opponent's best argument, before you answer it. Concede a point when it is genuinely right. Never write dialogue or actions for the other speaker.",
+      "temperature": 0.7
+    },
+    {
+      "model": "qwen3:8b",
+      "name": "Opponent",
+      "system": "You argue that a mid-sized city should not close its downtown core to private cars. Use concrete mechanisms and trade-offs rather than slogans, and admit real costs. This debate has a steelman rule: every turn must begin with 'Your strongest point is...' and a fair, generous restatement of your opponent's best argument, before you answer it. Concede a point when it is genuinely right. Never write dialogue or actions for the other speaker.",
+      "temperature": 0.7
+    }
+  ],
+  "num_ctx": 8192,
+  "repeat_penalty": 1.25,
+  "temperature": 0.7,
+  "think": false,
+  "timeout": 1500,
+  "topic": "Should a mid-sized city close its downtown core to private cars? A structured debate with one rule: before you may rebut your opponent, you must first restate their strongest point so well that they would agree with your summary. Advocate opens.",
+  "turns": 8,
+  "turn_prompt": "Begin with 'Your strongest point is...' and restate {other}'s best argument fairly, in a way they would accept. Then respond to it with one new argument of your own. Two or three short paragraphs. Write only {name}'s words."
+}

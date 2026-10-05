@@ -1,0 +1,28 @@
+{
+  "host": "http://localhost:11434",
+  "log_file": "logs/improv_yes_and.log",
+  "max_tokens": 400,
+  "models": [
+    {
+      "model": "qwen3:8b",
+      "name": "Performer A",
+      "system": "You are an improv performer in a two-person scene. Follow the 'yes, and' rule strictly: accept everything your scene partner establishes as true, then add exactly one new detail that raises the stakes or deepens the relationship. Never block, negate, or explain the joke. Speak only as your character, with brief stage actions in *asterisks*. Two to four lines per turn. Never write dialogue or actions for the other speaker.",
+      "temperature": 1.0
+    },
+    {
+      "model": "dolphin3:8b",
+      "name": "Performer B",
+      "system": "You are an improv performer in a two-person scene. Follow the 'yes, and' rule strictly: accept everything your scene partner establishes as true, then add exactly one new detail that raises the stakes or deepens the relationship. Give your character a strong, specific want. Never block, negate, or explain the joke. Speak only as your character, with brief stage actions in *asterisks*. Two to four lines per turn. Never write dialogue or actions for the other speaker.",
+      "temperature": 1.0
+    }
+  ],
+  "num_ctx": 8192,
+  "repeat_penalty": 1.25,
+  "temperature": 1.0,
+  "think": false,
+  "timeout": 1500,
+  "topic": "An improv scene. The audience suggestion is: two strangers stuck in a lift that has stopped between floors, and one of them is carrying a very large cake. Performer A starts the scene.",
+  "turns": 12,
+  "turn_prompt": "Accept what {other} just established as true and add exactly one new detail that raises the stakes. Two to four lines, in character, as {name} only.",
+  "first_turn_prompt": "Start the scene as {name}: establish who you are and where you are in two to four lines, in character. Leave room for {other}."
+}

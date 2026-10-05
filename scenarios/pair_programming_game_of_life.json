@@ -1,0 +1,28 @@
+{
+  "host": "http://localhost:11434",
+  "log_file": "logs/pair_programming_game_of_life.log",
+  "max_tokens": 2048,
+  "models": [
+    {
+      "model": "qwen2.5-coder:14b",
+      "name": "Driver",
+      "system": "You are the driver in a pair-programming session on Conway's Game of Life. You write the code. Each turn, carry out the one next step your navigator asked for and nothing more, keeping every existing test passing. Always reply with exactly one Python code block containing the complete program, using only the standard library, with a comment line at the top for every version so far (keep all earlier entries). The program must run and pass its own assert tests.",
+      "temperature": 0.4,
+      "turn_prompt": "Do the one next step {other} asked for in a comment at the top of their program, and nothing more. Keep every existing test passing, add a change-history line, and list the complete program.",
+      "first_turn_prompt": "Write the first simple version of step(live_cells) with two or three basic assert tests, such as an empty grid and a single cell dying. Keep it simple -- {other} will direct the next steps."
+    },
+    {
+      "model": "qwen3:14b",
+      "name": "Navigator",
+      "system": "You are the navigator in a pair-programming session on Conway's Game of Life. You do not change the implementation. Each turn, review the driver's latest program, then add exactly one new assert test for behaviour not yet covered - a blinker oscillating, a block staying still, a glider moving after four steps - and write a '# NEXT:' comment at the top naming the one next step for the driver, such as a fix, a helper for running several generations, or a function that prints the grid. Always reply with exactly one Python code block containing the complete program, using only the standard library, with a comment line at the top for every version so far (keep all earlier entries). The program must run and pass its own assert tests.",
+      "temperature": 0.7,
+      "turn_prompt": "Review {other}'s latest program. Add exactly one new assert test for behaviour not yet covered, leave the implementation alone, write a '# NEXT:' comment at the top naming the one next step, and list the complete program."
+    }
+  ],
+  "num_ctx": 16384,
+  "temperature": 0.5,
+  "think": false,
+  "timeout": 1500,
+  "topic": "Pair-program Conway's Game of Life in Python as a single file: a step(live_cells) function that takes a set of (row, col) tuples and returns the next generation on an unbounded grid, plus assert-based tests at the bottom. Work in small steps. Start with one simple first version in a single code block.",
+  "turns": 10
+}
