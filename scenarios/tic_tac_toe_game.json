@@ -1,6 +1,6 @@
 {
   "host": "http://localhost:11434",
-  "topic": "Build a playable terminal tic-tac-toe game in Python, one feature per turn: for example a board display, move input with validation, win and draw detection, a computer opponent, a smarter opponent, and a replay option. Include a self_test() function with assert tests for the game logic, run when the script is started with --test; otherwise start the game. Start with one simple first version in a single code block.",
+  "topic": "Build a playable terminal tic-tac-toe game in Python, one feature per turn: for example a board display, move input with validation, win and draw detection, a computer opponent, a smarter opponent, and a replay option. Include a self_test() function, run when the script is started with --test (otherwise start the game), that checks the game logic case by case, prints PASS or FAIL with the expected and actual result for each, prints a final 'N passed, M failed' line, and exits with sys.exit(1) if any check failed. Start with one simple first version in a single code block.",
   "turns": 10,
   "think": false,
   "max_tokens": 4096,

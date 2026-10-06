@@ -1,6 +1,6 @@
 {
   "host": "http://localhost:11434",
-  "topic": "Ping-pong test-driven development: build to_roman(n), converting integers from 1 to 3999 into Roman numerals, one test at a time. The first speaker writes the first failing test only, with a to_roman stub that returns an empty string. Tests are assert statements at the bottom of the file.",
+  "topic": "Ping-pong test-driven development: build to_roman(n), converting integers from 1 to 3999 into Roman numerals, one test at a time. The first speaker writes the first failing test only, with a to_roman stub that returns an empty string. Put the tests in a run_tests() function that runs every test case even after a failure, prints PASS or FAIL with the input, expected and actual result for each, prints a final 'N passed, M failed' line, and exits with sys.exit(1) if any test failed. Call run_tests() at the bottom of the script.",
   "turns": 12,
   "think": false,
   "max_tokens": 2048,

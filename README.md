@@ -179,7 +179,7 @@ These live in the `scenarios/` folder.
 | `builder_vs_breaker.json` | A Builder writes a duration parser; a Breaker adds one failing test per turn and the Builder fixes it |
 | `tdd_pingpong.json` | Ping-pong test-driven development of a Roman numeral converter: make the last test pass, add the next failing one |
 | `legacy_refactor.json` | Two refactorers clean up deliberately messy invoice code one step at a time while its tests keep passing |
-| `speed_race.json` | Two performance engineers race to speed up a prime counter, with correctness asserts and a `timeit` benchmark |
+| `speed_race.json` | Two performance engineers race to speed up a prime counter, with PASS/FAIL correctness checks and a `timeit` benchmark |
 | `code_golf_vs_maintainer.json` | A golfer shrinks a word-count program; a maintainer makes it readable again, keeping the output identical |
 | `product_owner_vs_developer.json` | A product owner adds or changes one requirement per turn; a developer builds a command-line to-do tool to match |
 | `tic_tac_toe_game.json` | Two game developers build a playable terminal tic-tac-toe game one feature per turn, with a `--test` self-test |
@@ -224,7 +224,7 @@ The programming scenarios (`factorial.json`, `program_writing*.json`, and the se
 
 - **Format rules live in each system prompt:** one code block with the complete program, standard library only, and a change-history comment line per version. The system prompt is the only instruction sent on every turn, including the first, so rules placed only in the topic tend to be ignored.
 - **Each speaker has a distinct role** (builder and breaker, golfer and maintainer, and so on) with its own `turn_prompt`, so the exchange doesn't stall into near-identical turns.
-- **Programs check themselves** with `assert` statements or a self-test, so you can tell whether a turn broke anything. These scenarios also turn on [`run_code`](#running-each-replys-code), so `ollama_duel.py` runs each reply's program and shows the result to both speakers (`speed_race.json` allows 120 seconds per run, `tic_tac_toe_game.json` runs its `--test` mode, and `product_owner_vs_developer.json` runs the tool's `list` command). Pass `--no-run-code` to skip it.
+- **Programs check themselves.** The scenarios with tests ask for a `run_tests()` function (a `self_test()` under `--test` for the tic-tac-toe game) that runs every test even after a failure, prints PASS or FAIL with the expected and actual result for each, and exits with status 1 if any failed. Unlike bare `assert` statements, which stop at the first failure, this shows exactly which tests a turn broke. These scenarios also turn on [`run_code`](#running-each-replys-code), so `ollama_duel.py` runs each reply's program and shows the result to both speakers (`speed_race.json` allows 120 seconds per run, `tic_tac_toe_game.json` runs its `--test` mode, and `product_owner_vs_developer.json` runs the tool's `list` command). Pass `--no-run-code` to skip it.
 
 Most use `qwen2.5-coder:14b`; `builder_vs_breaker.json`, `speed_race.json`, and `product_owner_vs_developer.json` also use `qwen3:14b` for the second role, so different models catch different mistakes.
 
