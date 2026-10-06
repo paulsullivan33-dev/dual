@@ -258,7 +258,7 @@ python ollama_duel.py scenarios/factorial.json --profile arduino_q
 python ollama_duel.py --profile arduino_q
 ```
 
-With no scenario, the profile's own scenario list runs as a batch. `profiles/arduino_q.json` is for the Arduino Uno Q duel box (about 3.6 GB of RAM): the first participant runs `qwen3:1.7b` and the second `smollm2:1.7b`, thinking is off (`smollm2` rejects it), and `num_ctx` is 4096 because the box runs out of memory above that. Its list holds 40 scenarios from the main table. It replaces the earlier `arduino_q_*.json` copies, which differed from their originals only in those settings.
+With no scenario, the profile's own scenario list runs as a batch. `profiles/arduino_q.json` is for the Arduino Uno Q duel box (about 3.6 GB of RAM): the first participant runs `qwen3:1.7b` and the second `smollm2:1.7b`, thinking is off (`smollm2` rejects it), `num_ctx` is 4096 because the box runs out of memory above that, and `history_turns` is 4, so each turn sends only the last four replies and long duels stay inside that window. Its list holds 40 scenarios from the main table. It replaces the earlier `arduino_q_*.json` copies, which differed from their originals only in those settings.
 
 A profile is a JSON object with any of these keys:
 

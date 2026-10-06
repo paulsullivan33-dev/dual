@@ -1,12 +1,13 @@
 {
-  "description": "Arduino Uno Q duel box (about 3.6 GB of RAM): small models on both sides, thinking off (smollm2 rejects it), and a 4096-token context window, since the box runs out of memory above that.",
+  "description": "Arduino Uno Q duel box (about 3.6 GB of RAM): small models on both sides, thinking off (smollm2 rejects it), and a 4096-token context window, since the box runs out of memory above that. Each turn sends only the last 4 replies, so long duels stay inside that window.",
   "models": [
     "qwen3:1.7b",
     "smollm2:1.7b"
   ],
   "settings": {
     "num_ctx": 4096,
-    "think": false
+    "think": false,
+    "history_turns": 4
   },
   "scenarios": [
     "ai_consciousness_debate.json",

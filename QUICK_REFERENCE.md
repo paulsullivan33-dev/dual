@@ -267,7 +267,8 @@ python ollama_duel.py scenarios/factorial.json --profile C:/profiles/laptop.json
 ```
 
 `profiles/arduino_q.json` uses `qwen3:1.7b` and `smollm2:1.7b`, a 4096-token
-context and thinking off. To make your own, add `profiles/<name>.json`:
+context, thinking off, and `history_turns` 4 (only the last four replies are
+sent each turn). To make your own, add `profiles/<name>.json`:
 
 ```json
 {
