@@ -279,7 +279,7 @@ context and thinking off. To make your own, add `profiles/<name>.json`:
 ```
 
 Every key is optional. `settings` may set `num_ctx`, `think`, `max_tokens`,
-`temperature`, `repeat_penalty`, `host` or `timeout`; these override the
+`temperature`, `repeat_penalty`, `history_turns`, `host` or `timeout`; these override the
 scenario's values for both speakers. `scenarios` lists files in
 `scenarios/` to run when you pass `--profile` without a scenario.
 
@@ -391,6 +391,7 @@ entry (that speaker only, overriding the top level).
 | `temperature` | both | server default | Randomness |
 | `num_ctx` | both | server default | Context window in tokens |
 | `repeat_penalty` | both | server default | Above 1 (try 1.1–1.3) discourages repetition |
+| `history_turns` | both | all | Send only the last N replies (plus topic and nudge), so long duels fit a small `num_ctx`. Older turns are forgotten |
 | `first_turn_prompt` | both | an opening-statement nudge | Extra instruction on the first turn only. `{name}` and `{other}` are filled in; `""` turns it off |
 | `turn_prompt` | both | a "reply directly to {other}" nudge | Extra instruction on every later turn. Same placeholders; `""` turns it off |
 | `dedup_guard` | top | true | If a speaker repeats its own previous reply, re-roll that turn once with a no-repeat nudge and slightly higher temperature |
@@ -409,8 +410,9 @@ model is called, so a typo like `"temprature"` fails loudly.
 
 - **"reply hit the max_tokens ceiling … truncated"**: raise `max_tokens`.
 - **"context window is N% full" / "is full"**: the resent conversation is
-  outgrowing `num_ctx`; raise `num_ctx` or use fewer turns. (Shown only when
-  `num_ctx` is set.)
+  outgrowing `num_ctx`; raise `num_ctx`, use fewer turns, or set
+  `history_turns` to send only recent replies. (Shown only when `num_ctx`
+  is set.)
 - **"max_tokens … is larger than num_ctx"** (at startup): a reply can't use
   more tokens than the window holds; lower one or raise the other.
 - **"DEDUP GUARD: … repeated its previous reply"**: the guard re-rolled a
@@ -625,7 +627,7 @@ same suite on every push.
 | "HTTP 404 … model not found" | `ollama pull <model>`, or use a profile/scenario with models you have |
 | "HTTP 400" with thinking on | The model rejects thinking; use `--no-think` (duel) or drop `--think` |
 | Replies cut off mid-sentence | Raise `--max-tokens` (or `max_tokens`); if `num_ctx` is small, raise it too |
-| Speakers forget the topic in long duels | Raise `num_ctx`, lower `turns`, or watch for the "context window" warnings |
+| Speakers forget the topic in long duels | Raise `num_ctx`, lower `turns`, set `history_turns` (e.g. 4), or watch for the "context window" warnings |
 | A speaker keeps repeating itself | Leave `dedup_guard` on and try `repeat_penalty` 1.1–1.3 |
 | Very slow replies | Smaller models, fewer turns, lower `max_tokens`; raise `--timeout` on slow machines |
 | `rag_demo.py`: "unrecognized arguments: --db" | Put `--db`/`--host`/`--embed-model` before `index`/`ask` |

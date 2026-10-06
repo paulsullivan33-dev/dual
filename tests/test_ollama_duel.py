@@ -1392,6 +1392,67 @@ class ProfileTests(unittest.TestCase):
         self.assertTrue(all(c[-2:] == ["--profile", "box"] for c in ran))
 
 
+class HistoryTurnsTests(unittest.TestCase):
+    """history_turns sends only the most recent replies, so long duels fit
+    small context windows; the topic and nudges are always sent."""
+
+    @staticmethod
+    def _participants(**a_extra):
+        base = {"system": "sys", "turn_prompt": "reply to {other}",
+                "first_turn_prompt": "open"}
+        return [dict(base, name="A", **a_extra), dict(base, name="B")]
+
+    def test_unset_sends_the_whole_transcript(self):
+        transcript = [(0, "a1"), (1, "b1"), (0, "a2"), (1, "b2")]
+        msgs = ollama_duel.build_turn_messages(self._participants(), 0, "topic", transcript)
+        self.assertEqual([m["content"] for m in msgs],
+                         ["sys", "topic", "a1", "b1", "a2", "b2", "reply to B"])
+
+    def test_keeps_only_the_last_n_replies_with_correct_roles(self):
+        transcript = [(0, "a1"), (1, "b1"), (0, "a2"), (1, "b2")]
+        msgs = ollama_duel.build_turn_messages(
+            self._participants(history_turns=2), 0, "topic", transcript)
+        self.assertEqual([(m["role"], m["content"]) for m in msgs], [
+            ("system", "sys"), ("user", "topic"),
+            ("assistant", "a2"), ("user", "b2"), ("user", "reply to B")])
+
+    def test_window_larger_than_transcript_sends_everything(self):
+        transcript = [(0, "a1"), (1, "b1")]
+        msgs = ollama_duel.build_turn_messages(
+            self._participants(history_turns=10), 0, "topic", transcript)
+        self.assertEqual([m["content"] for m in msgs][2:4], ["a1", "b1"])
+
+    def test_duel_sends_topic_plus_window_every_turn(self):
+        # dedup_guard off: the helper's canned reply repeats, and re-rolls
+        # would add extra calls.
+        seen = run_duel(minimal_config(turns=5, history_turns=1, dedup_guard=False))
+        # Turn 5: system-less config -> topic, the 1 most recent reply, nudge.
+        self.assertEqual(len(seen[4]), 3)
+        self.assertEqual(seen[4][0], "test topic")
+        self.assertEqual(seen[4][1], "canned reply")
+
+    def test_per_model_value_wins_over_top_level(self):
+        cfg = minimal_config(turns=5, history_turns=1, dedup_guard=False)
+        cfg["models"][0]["history_turns"] = 3
+        seen = run_duel(cfg)
+        self.assertEqual(len(seen[4]), 1 + 3 + 1)   # m1 speaks turn 5: window of 3
+        self.assertEqual(len(seen[3]), 1 + 1 + 1)   # Two speaks turn 4: window of 1
+
+    def test_profile_can_set_it_for_both_speakers(self):
+        cfg = minimal_config(history_turns=8)
+        cfg["models"][0]["history_turns"] = 6
+        ollama_duel.apply_profile(cfg, {"settings": {"history_turns": 2}})
+        self.assertEqual(cfg["history_turns"], 2)
+        self.assertNotIn("history_turns", cfg["models"][0])
+
+    def test_invalid_values_are_rejected(self):
+        for value in (0, -1, "4", 2.5, True):
+            with tempfile.TemporaryDirectory() as d:
+                path = write_json(d, "cfg.json", minimal_config(history_turns=value))
+                with self.subTest(value=value), self.assertRaises(SystemExit):
+                    ollama_duel.load_config(path)
+
+
 class ShippedProfilesTests(unittest.TestCase):
     """Every profile in profiles/ must load, and every scenario it lists
     must exist and validate with the profile applied."""

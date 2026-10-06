@@ -61,11 +61,12 @@ from ollama_profiles import apply_profile, load_profile, profile_scenarios
 TOP_LEVEL_KEYS = {
     "host", "topic", "turns", "think", "max_tokens", "temperature",
     "num_ctx", "repeat_penalty", "turn_prompt", "first_turn_prompt",
-    "log_file", "save_json", "timeout",
+    "history_turns", "log_file", "save_json", "timeout",
     "display", "dedup_guard", "results_log", "ntfy_url", "models",
 }
 MODEL_KEYS = {"model", "name", "system", "think", "max_tokens", "temperature",
-              "num_ctx", "repeat_penalty", "turn_prompt", "first_turn_prompt"}
+              "num_ctx", "repeat_penalty", "turn_prompt", "first_turn_prompt",
+              "history_turns"}
 
 # Sent as the last message on every turn after the first, to nudge the model
 # to answer the other participant instead of starting a fresh parallel
@@ -175,6 +176,7 @@ def load_config(path, profile=None):
     _validate_field(cfg, "temperature", "number", "top level", minimum=0)
     _validate_field(cfg, "num_ctx", "int", "top level", minimum=1)
     _validate_field(cfg, "repeat_penalty", "number", "top level", minimum=1)
+    _validate_field(cfg, "history_turns", "int", "top level", minimum=1)
     _validate_field(cfg, "turn_prompt", "str", "top level")
     _validate_field(cfg, "first_turn_prompt", "str", "top level")
     _validate_field(cfg, "log_file", "str", "top level")
@@ -191,6 +193,7 @@ def load_config(path, profile=None):
         _validate_field(m, "temperature", "number", label, minimum=0)
         _validate_field(m, "num_ctx", "int", label, minimum=1)
         _validate_field(m, "repeat_penalty", "number", label, minimum=1)
+        _validate_field(m, "history_turns", "int", label, minimum=1)
         _validate_field(m, "turn_prompt", "str", label)
         _validate_field(m, "first_turn_prompt", "str", label)
     return cfg
@@ -447,13 +450,19 @@ def build_turn_messages(participants, i, topic, transcript):
     speaker's first_turn_prompt (see DEFAULT_FIRST_TURN_PROMPT) closes the
     list instead, so the opener stays in character rather than script-writing
     both sides; an empty first_turn_prompt disables it.
+
+    When the speaker's history_turns is set, only the most recent that many
+    replies are sent (the system prompt, topic and nudge always are), so a
+    long duel can't outgrow a small context window.
     """
     me = participants[i]
     messages = []
     if me["system"]:
         messages.append({"role": "system", "content": me["system"]})
     messages.append({"role": "user", "content": topic})
-    for spk, text in transcript:
+    history = me.get("history_turns")
+    recent = transcript[-history:] if history else transcript
+    for spk, text in recent:
         role = "assistant" if spk == i else "user"
         messages.append({"role": role, "content": text})
     first_nudge = me.get("first_turn_prompt", DEFAULT_FIRST_TURN_PROMPT)
@@ -821,6 +830,8 @@ def main():
             "first_turn_prompt": first_not_none(entry.get("first_turn_prompt"),
                                                cfg.get("first_turn_prompt"),
                                                DEFAULT_FIRST_TURN_PROMPT),
+            "history_turns": first_not_none(entry.get("history_turns"),
+                                           cfg.get("history_turns")),
         })
 
     if profile:

@@ -20,7 +20,7 @@ PROFILE_SETTING_KINDS = {
     "think": ("bool", None), "max_tokens": ("int", 1),
     "temperature": ("number", 0), "num_ctx": ("int", 1),
     "repeat_penalty": ("number", 1), "host": ("str", None),
-    "timeout": ("number", 1),
+    "timeout": ("number", 1), "history_turns": ("int", 1),
 }
 
 
