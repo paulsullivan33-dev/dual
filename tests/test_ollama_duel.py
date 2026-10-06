@@ -973,15 +973,22 @@ class NtfyTests(unittest.TestCase):
                 f.write(text)
         return d
 
+    @staticmethod
+    def _as_home(d):
+        # expanduser("~") reads HOME on Linux/macOS but USERPROFILE on
+        # Windows; patch both so the test never reads the real ~/.dual.conf.
+        return mock.patch.dict(os.environ,
+                               {"HOME": d.name, "USERPROFILE": d.name})
+
     def test_default_url_missing_file(self):
         d = self._home_with({})
-        with mock.patch.dict(os.environ, {"HOME": d.name}):
+        with self._as_home(d):
             self.assertEqual(ollama_duel.load_default_ntfy_url(), "")
 
     def test_default_url_valid_file(self):
         d = self._home_with(
             {".dual.conf": json.dumps({"ntfy_url": "https://ntfy.sh/x"})})
-        with mock.patch.dict(os.environ, {"HOME": d.name}):
+        with self._as_home(d):
             self.assertEqual(ollama_duel.load_default_ntfy_url(),
                              "https://ntfy.sh/x")
 
@@ -989,7 +996,7 @@ class NtfyTests(unittest.TestCase):
         for text in ('{not json', '[1, 2]', '{"ntfy_url": 42}',
                      '{"other": "x"}', '{"ntfy_url": "   "}'):
             d = self._home_with({".dual.conf": text})
-            with mock.patch.dict(os.environ, {"HOME": d.name}):
+            with self._as_home(d):
                 self.assertEqual(ollama_duel.load_default_ntfy_url(), "",
                                  f"for {text!r}")
 

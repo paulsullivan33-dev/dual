@@ -355,4 +355,4 @@ The `tests/` directory has stdlib-only `unittest` coverage for the shared helper
 python -m unittest discover -s tests
 ```
 
-GitHub Actions runs the same command on every push (`.github/workflows/tests.yml`), alongside the pylint check.
+On every push and pull request, GitHub Actions runs these tests on Ubuntu and Windows with Python 3.8, 3.9, 3.10, and 3.14 (`.github/workflows/tests.yml`), and runs Pylint over all Python files (`.github/workflows/pylint.yml`).

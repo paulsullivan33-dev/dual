@@ -210,12 +210,14 @@ def cmd_ask(args):
     if not os.path.exists(args.db):
         sys.exit(f"No database at {args.db} -- run the index step first.")
     conn = open_db(args.db)
-    chunks = load_chunks(conn)
-    conn.close()
+    try:
+        chunks = load_chunks(conn)
+        row = conn.execute(
+            "SELECT value FROM meta WHERE key='embed_model'").fetchone()
+    finally:
+        conn.close()
     if not chunks:
         sys.exit("Database is empty -- run the index step first.")
-    row = sqlite3.connect(args.db).execute(
-        "SELECT value FROM meta WHERE key='embed_model'").fetchone()
     if row and row[0] != args.embed_model:
         print(f"Note: index was built with '{row[0]}' but you're querying "
               f"with '{args.embed_model}'. Re-index if answers look off.")

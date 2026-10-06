@@ -1,19 +1,24 @@
 name: Tests
 
-on: [push]
+on: [push, pull_request]
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
+  test:
+    runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
-        python-version: ["3.8", "3.9", "3.10"]
+        # Windows is in the matrix because Windows-only failures (expanduser
+        # reading USERPROFILE, files left open blocking temp-dir cleanup)
+        # have slipped through when only Linux ran the tests.
+        os: [ubuntu-latest, windows-latest]
+        python-version: ["3.8", "3.9", "3.10", "3.14"]
     steps:
     - uses: actions/checkout@v4
     - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v3
+      uses: actions/setup-python@v5
       with:
         python-version: ${{ matrix.python-version }}
-    - name: Running the unit tests
-      run: |
-        python -m unittest discover -s tests
+    - name: Run the unit tests
+      # Stdlib-only; Ollama calls are mocked, so no server or pip install is needed.
+      run: python -m unittest discover -s tests -v
