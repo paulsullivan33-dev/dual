@@ -13,6 +13,7 @@ from unittest import mock
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import ollama_duel
+import ollama_profiles
 
 _ISOLATION = {}
 
@@ -1331,9 +1332,9 @@ class ProfileTests(unittest.TestCase):
         self.assertIn("Profile: " + prof, out)
 
     def test_bare_name_is_looked_up_in_profiles_folder(self):
-        self.assertEqual(ollama_duel.profile_path("arduino_q"),
-                         os.path.join(ollama_duel.SCRIPT_DIR, "profiles", "arduino_q.json"))
-        self.assertEqual(ollama_duel.profile_path("x/y.json"), "x/y.json")
+        self.assertEqual(ollama_profiles.profile_path("arduino_q"),
+                         os.path.join(ollama_profiles.SCRIPT_DIR, "profiles", "arduino_q.json"))
+        self.assertEqual(ollama_profiles.profile_path("x/y.json"), "x/y.json")
 
     def test_invalid_profiles_exit_before_any_duel(self):
         bad = [
@@ -1395,7 +1396,7 @@ class ShippedProfilesTests(unittest.TestCase):
     must exist and validate with the profile applied."""
 
     def test_shipped_profiles_and_their_scenarios_are_valid(self):
-        folder = os.path.join(ollama_duel.SCRIPT_DIR, "profiles")
+        folder = os.path.join(ollama_profiles.SCRIPT_DIR, "profiles")
         names = sorted(f[:-5] for f in os.listdir(folder) if f.endswith(".json"))
         self.assertIn("arduino_q", names)
         for name in names:

@@ -217,3 +217,34 @@ def build_duel_json(transcript, participants):
         {"speaker": participants[i]["name"], "model": participants[i]["model"], "text": text}
         for i, text in transcript
     ]
+
+
+def validate_field(container, key, kind, label, minimum=None):
+    """Check an optional field's type (and minimum, if given) or exit with
+    a clear message. `kind` is one of "bool", "int", "number", "str"."""
+    if key not in container or container[key] is None:
+        return
+    value = container[key]
+    if kind == "bool":
+        ok = isinstance(value, bool)
+    elif kind == "int":
+        ok = isinstance(value, int) and not isinstance(value, bool)
+    elif kind == "number":
+        ok = isinstance(value, (int, float)) and not isinstance(value, bool)
+    else:  # "str"
+        ok = isinstance(value, str)
+    if not ok:
+        sys.exit(f'"{key}" in {label} must be a {kind}, got {value!r}.')
+    if minimum is not None and value < minimum:
+        sys.exit(f'"{key}" in {label} must be >= {minimum}, got {value!r}.')
+
+
+def check_unknown_keys(container, allowed, label):
+    """Reject keys outside `allowed` so a typo (e.g. "temprature") fails
+    loudly instead of silently falling back to a default."""
+    unknown = sorted(set(container) - allowed)
+    if unknown:
+        sys.exit(
+            f'Unknown setting(s) in {label}: {", ".join(unknown)}. '
+            f'Allowed: {", ".join(sorted(allowed))}.'
+        )
