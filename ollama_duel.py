@@ -14,16 +14,19 @@ temperature, num_ctx, repeat_penalty, turn_prompt, first_turn_prompt only --
 the rest are duel-wide). "models" must contain exactly 2 entries.
 If "log_file" is set, everything printed to stdout is mirrored to a
 timestamped copy of that file: the current date/time is prepended to the
-file name (e.g. "duel.log" -> "20260925-084500-duel.log") so each run gets
+file name (e.g. "logs/duel.log" -> "output/logs/20260925-084500-duel.log") so each run gets
 its own log instead of appending to a previous run's. If "save_json" is set,
 the transcript (speaker/model/text per turn) is written there as JSON when
 the duel ends, including after a stopped-early error or Ctrl-C.
 
 After every run the script also appends a one-block summary to
-"run_results.log" in the current directory (override with the top-level
+"output/run_results.log" (override with the top-level
 "results_log" setting or --results-log, disable with --no-results-log):
 date/time, config, models, turns completed, and the per-model stats table
 on success or the error message when the duel stopped early.
+
+Relative paths for log_file, save_json and results_log are placed under the
+output/ folder (see ollama_common.output_path); absolute paths are used as-is.
 """
 
 import argparse
@@ -39,6 +42,7 @@ from ollama_common import (
     OllamaError,
     build_duel_json,
     call_chat,
+    output_path,
     save_transcript_json_safe,
     setup_utf8_stdout,
     wrap_text,
@@ -687,15 +691,15 @@ def main():
     if args.max_tokens is not None and args.max_tokens < 1:
         sys.exit(f'"--max-tokens" must be >= 1, got {args.max_tokens}.')
     timeout = first_not_none(args.timeout, cfg.get("timeout"), DEFAULT_TIMEOUT)
-    save_json_path = first_not_none(args.save_json, cfg.get("save_json"))
+    save_json_path = output_path(first_not_none(args.save_json, cfg.get("save_json")))
     want_display = first_not_none(args.display, cfg.get("display"), False)
     dedup_guard = first_not_none(cfg.get("dedup_guard"), True)
     # Run summary file: appended after every duel with the date/time and
     # either the stats table (success) or the error (early stop). Defaults
-    # to run_results.log in the current directory; --no-results-log (or a
-    # false-y CLI value) disables it.
-    results_log_path = first_not_none(args.results_log, cfg.get("results_log"),
-                                      "run_results.log")
+    # to output/run_results.log; --no-results-log (or a false-y CLI value)
+    # disables it.
+    results_log_path = output_path(first_not_none(
+        args.results_log, cfg.get("results_log"), "run_results.log"))
 
     # ntfy: explicit CLI flag wins, then the scenario config, then the
     # default ~/.dual.conf. Undefined everywhere -> ntfy_url stays None
@@ -709,7 +713,7 @@ def main():
     # (stderr progress lines like "(waiting for reply...)" stay console-only.)
     # The stamp prepended to the file name keeps each run in its own file.
     # A dry run never opens one -- it should not leave log artifacts behind.
-    log_path = first_not_none(args.log_file, cfg.get("log_file"))
+    log_path = output_path(first_not_none(args.log_file, cfg.get("log_file")))
     log_fh = None
     if log_path and not args.dry_run:
         log_path = timestamped_log_path(log_path)

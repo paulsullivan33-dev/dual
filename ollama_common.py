@@ -5,6 +5,7 @@ the two scripts.
 """
 
 import json
+import os
 import re
 import sys
 import textwrap
@@ -13,6 +14,26 @@ import urllib.error
 
 DEFAULT_HOST = "http://localhost:11434"
 DEFAULT_TIMEOUT = 1200
+
+# Everything the scripts generate (logs, run summaries, transcripts, agent
+# projects) goes under this folder, which .gitignore excludes.
+OUTPUT_DIR = "output"
+
+
+def output_path(path):
+    """Where a generated file or folder should go.
+
+    Relative paths are placed under OUTPUT_DIR ("logs/x.log" ->
+    "output/logs/x.log"), unless they already start with it. Absolute paths
+    and empty/false values are returned unchanged, so callers can pass an
+    unset or disabled setting straight through.
+    """
+    if not path or os.path.isabs(path):
+        return path
+    norm = os.path.normpath(path)
+    if norm.split(os.sep)[0] == OUTPUT_DIR:
+        return norm
+    return os.path.join(OUTPUT_DIR, norm)
 
 
 class OllamaError(Exception):
@@ -166,8 +187,11 @@ def save_transcript_json(path, turns):
 
     `turns` is a list of plain dicts (e.g. {"speaker": ..., "model": ...,
     "text": ...} for a duel, or {"role": ..., "content": ...} for a chat).
-    Raises OSError on a write failure.
+    Raises OSError on a write failure. Missing parent folders are created.
     """
+    parent = os.path.dirname(path)
+    if parent:
+        os.makedirs(parent, exist_ok=True)
     with open(path, "w", encoding="utf-8") as f:
         json.dump(turns, f, indent=2, ensure_ascii=False)
         f.write("\n")

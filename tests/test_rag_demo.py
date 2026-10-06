@@ -16,6 +16,23 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import rag_demo
 
 
+class OutputPathTests(unittest.TestCase):
+    def test_default_db_lives_under_output(self):
+        self.assertEqual(rag_demo.DEFAULT_DB, os.path.join("output", "rag_demo.db"))
+
+    def test_relative_db_goes_under_output_absolute_unchanged(self):
+        self.assertEqual(rag_demo.output_path("my.db"),
+                         os.path.join("output", "my.db"))
+        absolute = os.path.abspath("my.db")
+        self.assertEqual(rag_demo.output_path(absolute), absolute)
+
+    def test_open_db_creates_missing_folders(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "new", "index.db")
+            rag_demo.open_db(path).close()
+            self.assertTrue(os.path.isfile(path))
+
+
 class ChunkingTests(unittest.TestCase):
     def test_overlap_keeps_straddling_words_in_both_chunks(self):
         words = [f"w{i}" for i in range(600)]

@@ -32,7 +32,7 @@ Your own notes are ideal — the more the model *doesn't* already know,
 the clearer the demo.
 
 **2. Index them.** This splits each file into overlapping chunks, embeds
-every chunk with `nomic-embed-text`, and stores it all in `rag_demo.db`:
+every chunk with `nomic-embed-text`, and stores it all in `output/rag_demo.db`:
 
 ```bash
 python rag_demo.py index --docs ./my-docs

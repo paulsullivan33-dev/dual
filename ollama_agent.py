@@ -17,8 +17,10 @@ forgets the path and writes a plain ```python fence, the script asks you
 for a filename instead of silently dropping the code.
 
 Safety rules (deliberate, not accidental):
-  * Every file lands inside --output-dir. Paths with ".." or absolute
-    paths are rejected, so a rogue reply can't write outside the project.
+  * Every file lands inside --output-dir (a folder under output/ unless
+    you give an absolute path). File paths in a reply that use ".." or
+    are absolute are rejected, so a rogue reply can't write outside the
+    project.
   * Nothing is ever executed. The model can write code, but this script
     will not run it. Running what it wrote is your job, in your terminal.
   * Every write is previewed and confirmed unless you pass --yes.
@@ -38,6 +40,7 @@ from ollama_common import (
     DEFAULT_TIMEOUT,
     OllamaError,
     call_chat,
+    output_path,
     setup_utf8_stdout,
     wrap_text,
 )
@@ -252,6 +255,8 @@ def name_untagged_blocks(blocks, task, auto_yes, input_fn):
 def run_agent(args, input_fn=input, call_fn=call_chat):
     """Main loop. input_fn/call_fn are injectable so tests can drive it."""
     setup_utf8_stdout()
+    # A relative --output-dir is a project folder under output/.
+    args.output_dir = output_path(args.output_dir)
     os.makedirs(args.output_dir, exist_ok=True)
 
     options = {}
@@ -316,8 +321,9 @@ def main(argv=None):
     ap.add_argument("--task", required=True, help="what to build, in plain words")
     ap.add_argument("--model", default="qwen2.5-coder:14b",
                     help="Ollama model to use (default: qwen2.5-coder:14b)")
-    ap.add_argument("--output-dir", default="./agent_out",
-                    help="project directory for written files (default: ./agent_out)")
+    ap.add_argument("--output-dir", default="agent_out",
+                    help="project directory for written files; a relative path is placed "
+                         "under output/ (default: output/agent_out)")
     ap.add_argument("--host", default=DEFAULT_HOST, help="Ollama host")
     ap.add_argument("--max-tokens", type=int, default=4096,
                     help="max tokens per reply (default: 4096)")

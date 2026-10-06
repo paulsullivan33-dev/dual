@@ -6,7 +6,7 @@ The scripts use only the Python standard library. They send requests to an Ollam
 
 ## Requirements and setup
 
-- Python 3.7 or later.
+- Python 3.8 or later.
 - Ollama running at `http://localhost:11434`, or another reachable Ollama host.
 - The models named in your command or JSON configuration available on that server.
 
@@ -24,6 +24,20 @@ ollama pull qwen3:4b
 ```
 
 If Ollama is not already running, start it in another terminal with `ollama serve`. No `pip install` step is needed. Examples use `python`; substitute `python3` or `py` if that is how Python is installed on your system.
+
+### Where output goes
+
+Everything the scripts generate goes into an `output/` folder, created on first use and excluded from git:
+
+| Path | Written by |
+| --- | --- |
+| `output/logs/` | Duel transcript logs (`log_file`, `--log-file`) |
+| `output/run_results.log` | One summary per duel run (`results_log`, `--results-log`) |
+| `output/<name>.json` | Transcripts saved with `save_json` / `--save-json` |
+| `output/agent_out/`, `output/<project>/` | Projects written by `ollama_agent.py` (`--output-dir`) |
+| `output/rag_demo.db` | The RAG demo's search index (`--db`) |
+
+Any relative path you give for these settings is placed under `output/` (so `--log-file logs/x.log` writes `output/logs/<timestamp>-x.log`); an absolute path is used exactly as given. Input files such as scenarios and the RAG demo's `--docs` folder are read from wherever you point them.
 
 ## Interactive chat
 
@@ -75,7 +89,7 @@ python ollama_duel.py scenarios/duel-example.json --topic "Should a small team a
 Pass a directory to run every `*.json` scenario inside it, or a glob pattern
 to run the matches (quote the pattern so your shell doesn't expand it first).
 Each scenario runs as its own process — its own log file, its own completion
-notice, its own entry in `run_results.log` — and a failed scenario is
+notice, its own entry in `output/run_results.log` — and a failed scenario is
 reported and skipped while the rest of the batch continues. CLI overrides
 apply to every scenario in the batch; Ctrl-C stops the whole batch.
 
@@ -122,9 +136,9 @@ The JSON must be an object with exactly two entries in `models`. Each entry requ
 | `host` | Top level | Server URL; defaults to `http://localhost:11434` |
 | `topic` | Top level | Opening prompt for the first participant |
 | `turns` | Top level | Total replies; defaults to 6; must be a positive integer |
-| `log_file` | Top level | Optional path for the transcript; a date/time stamp is prepended to the file name so each run gets its own log. The included scenarios write to `logs/`; missing folders are created |
-| `save_json` | Top level | Optional path to write the structured transcript (`speaker`/`model`/`text` per reply) as JSON when the duel ends, including after an early stop |
-| `results_log` | Top level | Optional path for the run summary; defaults to `run_results.log` in the current directory. After every duel a one-block entry is appended: date/time, config, models, turns completed, and the per-model stats table on success or the error message when the duel stopped early. Missing folders are created; pass `--no-results-log` to disable |
+| `log_file` | Top level | Optional path for the transcript; a date/time stamp is prepended to the file name so each run gets its own log. Relative paths go under `output/`, so the included scenarios' `logs/...` paths write to `output/logs/`; missing folders are created |
+| `save_json` | Top level | Optional path to write the structured transcript (`speaker`/`model`/`text` per reply) as JSON when the duel ends, including after an early stop; relative paths go under `output/` |
+| `results_log` | Top level | Optional path for the run summary; defaults to `output/run_results.log`, and relative paths go under `output/`. After every duel a one-block entry is appended: date/time, config, models, turns completed, and the per-model stats table on success or the error message when the duel stopped early. Missing folders are created; pass `--no-results-log` to disable |
 | `ntfy_url` | Top level | Optional ntfy topic URL; when set, the script POSTs a short completion notice (finished / stopped early / crashed, with models and turns) after every duel. Resolution order: `--ntfy-url`, the scenario file, then `~/.dual.conf` (`{"ntfy_url": "https://ntfy.sh/my-topic"}`). Undefined everywhere means notifications are skipped silently; pass `--no-ntfy` to force them off. Notification failures warn on stderr and never fail the run |
 | `timeout` | Top level | Per-request timeout in seconds; defaults to 1200 |
 | `display` | Top level | Show live duel stats on the Arduino Uno Q's built-in 8x13 LED matrix; defaults to false. Needs `python3-smbus` on the Uno Q. The script runs headless with a warning anywhere the matrix is unreachable, so this is safe to leave on in shared configs |
@@ -263,9 +277,9 @@ Requests are sequential and non-streaming: a complete reply appears after the se
 
 The scripts remove inline `<think>` blocks from reply text. When thinking is enabled, they separately display the server's `thinking` field when available. Thinking behavior depends on the model and server, and its token use can reduce the budget available for the visible reply.
 
-When `log_file` is set, `ollama_duel.py` mirrors its standard output to a timestamped copy of that file (e.g. `"logs/my-duel.log"` becomes `"logs/20260925-084500-my-duel.log"`) while also printing it to the console, so each run gets its own log. Logs include session start markers and, on normal completion or a handled Ctrl+C, session end markers. Progress messages and the final reply count go to standard error and are not mirrored. Relative log paths are resolved from the directory where you run the command, and any missing folders in the path are created. Omit `log_file` to disable logging. Saved logs are not automatically loaded into a later session.
+When `log_file` is set, `ollama_duel.py` mirrors its standard output to a timestamped copy of that file (e.g. `"logs/my-duel.log"` becomes `"output/logs/20260925-084500-my-duel.log"`) while also printing it to the console, so each run gets its own log. Logs include session start markers and, on normal completion or a handled Ctrl+C, session end markers. Progress messages and the final reply count go to standard error and are not mirrored. Relative log paths are placed under `output/` in the directory where you run the command, and any missing folders in the path are created. Omit `log_file` to disable logging. Saved logs are not automatically loaded into a later session.
 
-Separately, every duel appends a one-block summary to `run_results.log` in the directory where you run the command (override with `results_log` or `--results-log`, disable with `--no-results-log`). Each entry carries the date/time, config file, models, how many of the requested turns completed, and the per-model stats table when the duel finished -- or the error message when it stopped early, so a batch of overnight runs can be scanned without opening each transcript log.
+Separately, every duel appends a one-block summary to `output/run_results.log` (override with `results_log` or `--results-log`, disable with `--no-results-log`). Each entry carries the date/time, config file, models, how many of the requested turns completed, and the per-model stats table when the duel finished -- or the error message when it stopped early, so a batch of overnight runs can be scanned without opening each transcript log.
 
 The programming scenario produces code as conversation text. Neither script executes, tests, or automatically saves generated code as a Python file.
 
@@ -289,7 +303,7 @@ unattended beat fast models competing for cycles on your main machine.
 ## Coding agent
 
 `ollama_agent.py` is a minimal coding agent: describe a task, the model
-writes files into a project directory, and you iterate on them.
+writes files into a project directory under `output/` (`output/agent_out/` by default), and you iterate on them.
 
 ```shell
 python ollama_agent.py --task "a python script that renames photos in a folder by date taken"
@@ -306,7 +320,7 @@ executed; running the code is your job.
 After each round, describe a change or type `done` to finish; the model
 sees the current files on every turn, so it can revise its own work.
 
-Useful flags: `--output-dir`, `--max-tokens` (default 4096),
+Useful flags: `--output-dir` (a relative name such as `./flappy` becomes `output/flappy/`), `--max-tokens` (default 4096),
 `--temperature`, `--num-ctx`, `--host`, `--timeout`, `--yes`.
 
 ## Benchmarking model speed

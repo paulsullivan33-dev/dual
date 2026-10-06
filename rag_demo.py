@@ -14,7 +14,7 @@ Two steps:
     python rag_demo.py ask --question "what is ..."
 
 Everything is stdlib-only: documents + embeddings live in a SQLite file
-(rag_demo.db by default), so you can open it and poke at it yourself.
+(output/rag_demo.db by default), so you can open it and poke at it yourself.
 """
 
 import argparse
@@ -29,7 +29,10 @@ import urllib.error
 DEFAULT_HOST = "http://localhost:11434"
 DEFAULT_EMBED_MODEL = "nomic-embed-text"
 DEFAULT_CHAT_MODEL = "qwen3:8b"
-DEFAULT_DB = "rag_demo.db"
+# Generated files go under output/ (git-ignored), like the other scripts.
+# A relative --db is placed there too; an absolute path is used as-is.
+OUTPUT_DIR = "output"
+DEFAULT_DB = os.path.join(OUTPUT_DIR, "rag_demo.db")
 
 SYSTEM_PROMPT = (
     "You answer questions using ONLY the context below. The context is a set "
@@ -112,7 +115,21 @@ CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
 """
 
 
+def output_path(path):
+    """Same rule as ollama_common.output_path, kept local so this demo stays
+    a single self-contained file."""
+    if not path or os.path.isabs(path):
+        return path
+    norm = os.path.normpath(path)
+    if norm.split(os.sep)[0] == OUTPUT_DIR:
+        return norm
+    return os.path.join(OUTPUT_DIR, norm)
+
+
 def open_db(path):
+    parent = os.path.dirname(path)
+    if parent:
+        os.makedirs(parent, exist_ok=True)
     conn = sqlite3.connect(path)
     conn.executescript(SCHEMA)
     return conn
@@ -268,6 +285,7 @@ def main(argv=None):
     p.set_defaults(show_chunks=True)
 
     args = ap.parse_args(argv)
+    args.db = output_path(args.db)
     if args.cmd == "index":
         cmd_index(args)
     else:

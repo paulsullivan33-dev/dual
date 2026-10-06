@@ -14,6 +14,31 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import ollama_duel
 
+_ISOLATION = {}
+
+
+def setUpModule():
+    """Keep these tests off the developer's real machine state.
+
+    Many tests run ollama_duel.main() for real (with call_chat faked), and
+    main() reads ~/.dual.conf -- so a configured ntfy_url would send a real
+    notification on every test run -- and appends to output/run_results.log
+    in the current directory. Point the home folder at an empty temp folder
+    (expanduser reads HOME on Linux/macOS, USERPROFILE on Windows) and run
+    from a temp working directory so nothing leaks either way.
+    """
+    tmp = tempfile.TemporaryDirectory()
+    env = mock.patch.dict(os.environ, {"HOME": tmp.name, "USERPROFILE": tmp.name})
+    env.start()
+    _ISOLATION.update(tmp=tmp, env=env, cwd=os.getcwd())
+    os.chdir(tmp.name)
+
+
+def tearDownModule():
+    os.chdir(_ISOLATION["cwd"])
+    _ISOLATION["env"].stop()
+    _ISOLATION["tmp"].cleanup()
+
 
 def write_json(directory, name, data):
     path = os.path.join(directory, name)
@@ -864,7 +889,7 @@ class RunSummaryTests(unittest.TestCase):
             contents = self._run(d, self._canned, turns=1)
         self.assertEqual(contents.count("Result: OK"), 2)
 
-    def test_default_filename_is_run_results_log(self):
+    def test_default_is_run_results_log_under_output(self):
         with tempfile.TemporaryDirectory() as d:
             with tempfile.TemporaryDirectory() as cfg_dir:
                 path = write_json(cfg_dir, "cfg.json",
@@ -879,8 +904,8 @@ class RunSummaryTests(unittest.TestCase):
                         ollama_duel.main()
                 finally:
                     os.chdir(old)
-            self.assertTrue(
-                os.path.isfile(os.path.join(d, "run_results.log")))
+            self.assertTrue(os.path.isfile(
+                os.path.join(d, "output", "run_results.log")))
 
     def test_no_results_log_disables(self):
         with tempfile.TemporaryDirectory() as d:
@@ -979,6 +1004,12 @@ class NtfyTests(unittest.TestCase):
         # Windows; patch both so the test never reads the real ~/.dual.conf.
         return mock.patch.dict(os.environ,
                                {"HOME": d.name, "USERPROFILE": d.name})
+
+    def test_suite_never_sees_real_ntfy_config(self):
+        # Regression test: tests that run main() used to read the real
+        # ~/.dual.conf and send a real notification on every test run.
+        # setUpModule points the home folder at an empty temp folder.
+        self.assertEqual(ollama_duel.load_default_ntfy_url(), "")
 
     def test_default_url_missing_file(self):
         d = self._home_with({})

@@ -25,6 +25,7 @@ from ollama_common import (
     OllamaError,
     build_duel_json,
     call_chat,
+    output_path,
     save_transcript_json_safe,
     setup_utf8_stdout,
     wrap_text,
@@ -66,11 +67,11 @@ def cmd_chat(args):
             text = input("You: ").strip()
         except (EOFError, KeyboardInterrupt):
             print("\nBye.")
-            save_transcript_json_safe(args.save_json, messages)
+            save_transcript_json_safe(output_path(args.save_json), messages)
             return
         if text.lower() in ("quit", "exit", ":q"):
             print("Bye.")
-            save_transcript_json_safe(args.save_json, messages)
+            save_transcript_json_safe(output_path(args.save_json), messages)
             return
         if not text:
             continue
@@ -111,7 +112,7 @@ def cmd_duel(args):
             print()
             print(format_duel_stats(model_stats))
     finally:
-        save_transcript_json_safe(args.save_json, build_duel_json(transcript, personas))
+        save_transcript_json_safe(output_path(args.save_json), build_duel_json(transcript, personas))
 
 
 def main():

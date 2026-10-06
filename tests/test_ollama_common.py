@@ -156,6 +156,36 @@ class CallChatTests(unittest.TestCase):
         self.assertIn("timed out after 5s", str(ctx.exception))
 
 
+class OutputPathTests(unittest.TestCase):
+    """Generated files go under output/ so they never clutter the repo root."""
+
+    def test_relative_path_goes_under_output(self):
+        self.assertEqual(oc.output_path(os.path.join("logs", "x.log")),
+                         os.path.join("output", "logs", "x.log"))
+
+    def test_dot_prefix_is_normalized(self):
+        self.assertEqual(oc.output_path("./agent_out"),
+                         os.path.join("output", "agent_out"))
+
+    def test_path_already_under_output_is_not_doubled(self):
+        self.assertEqual(oc.output_path(os.path.join("output", "x.json")),
+                         os.path.join("output", "x.json"))
+
+    def test_absolute_path_is_unchanged(self):
+        path = os.path.abspath(os.path.join("somewhere", "x.log"))
+        self.assertEqual(oc.output_path(path), path)
+
+    def test_unset_or_disabled_values_pass_through(self):
+        for value in (None, "", False):
+            self.assertIs(oc.output_path(value), value)
+
+    def test_save_transcript_creates_missing_folders(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "new", "nested", "t.json")
+            oc.save_transcript_json(path, [{"role": "user", "content": "hi"}])
+            self.assertTrue(os.path.isfile(path))
+
+
 class TranscriptJsonTests(unittest.TestCase):
     def test_build_duel_json(self):
         participants = [
@@ -183,7 +213,12 @@ class TranscriptJsonTests(unittest.TestCase):
 
     def test_save_safe_reports_error_without_raising(self):
         with tempfile.TemporaryDirectory() as d:
-            bad_path = os.path.join(d, "missing-dir", "out.json")
+            # Missing folders are created, so force a failure by routing the
+            # path through a regular file, which can't become a directory.
+            blocker = os.path.join(d, "blocker")
+            with open(blocker, "w", encoding="utf-8") as f:
+                f.write("not a directory")
+            bad_path = os.path.join(blocker, "out.json")
             with mock.patch("sys.stderr", new_callable=io.StringIO) as fake_err:
                 oc.save_transcript_json_safe(bad_path, [])
             self.assertIn("Could not save transcript", fake_err.getvalue())
