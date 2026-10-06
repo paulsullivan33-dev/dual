@@ -143,6 +143,9 @@ The JSON must be an object with exactly two entries in `models`. Each entry requ
 | `results_log` | Top level | Optional path for the run summary; defaults to `output/run_results.log`, and relative paths go under `output/`. After every duel a one-block entry is appended: date/time, config, models, turns completed, and the per-model stats table on success or the error message when the duel stopped early. Missing folders are created; pass `--no-results-log` to disable |
 | `ntfy_url` | Top level | Optional ntfy topic URL; when set, the script POSTs a short completion notice (finished / stopped early / crashed, with models and turns) after every duel. Resolution order: `--ntfy-url`, the scenario file, then `~/.dual.conf` (`{"ntfy_url": "https://ntfy.sh/my-topic"}`). Undefined everywhere means notifications are skipped silently; pass `--no-ntfy` to force them off. Notification failures warn on stderr and never fail the run |
 | `timeout` | Top level | Per-request timeout in seconds; defaults to 1200 |
+| `run_code` | Top level | Run the last Python code block of every reply after it arrives and show the result to both speakers; defaults to false. See [Running each reply's code](#running-each-replys-code) |
+| `run_code_args` | Top level | Command-line arguments for those runs, as a list of strings, e.g. `["--test"]` |
+| `run_code_timeout` | Top level | Seconds each run may take before it's stopped; defaults to 30 |
 | `display` | Top level | Show live duel stats on the Arduino Uno Q's built-in 8x13 LED matrix; defaults to false. Needs `python3-smbus` on the Uno Q. The script runs headless with a warning anywhere the matrix is unreachable, so this is safe to leave on in shared configs |
 | `think` | Top level or model entry | Request and display thinking; defaults to false |
 | `max_tokens` | Top level or model entry | Passed as Ollama's `num_predict`; defaults to 300, or 2048 when thinking is enabled |
@@ -153,7 +156,7 @@ The JSON must be an object with exactly two entries in `models`. Each entry requ
 | `history_turns` | Top level or model entry | Send only the most recent this-many replies instead of the whole transcript (the system prompt, topic and turn nudge are always sent), so long duels fit a small `num_ctx`. Unset sends everything; must be at least 1. Speakers forget anything older than the window, so use a window that still covers what matters, such as the latest version of a program |
 | `repeat_penalty` | Top level or model entry | Passed to Ollama if specified; must be at least 1. Values above 1 (e.g. `1.1`–`1.3`) discourage the model from repeating itself; `1` means no penalty |
 
-Model-level `think`, `max_tokens`, `temperature`, `num_ctx`, `repeat_penalty`, `turn_prompt`, and `first_turn_prompt` override their top-level values. The CLI supports `--profile` (see [Machine profiles](#machine-profiles)), `--topic`, `--turns`, `--max-tokens`, `--host`, `--log-file`, `--save-json`, `--results-log`, `--no-results-log`, `--ntfy-url`, `--no-ntfy`, `--timeout`, `--think`, `--no-think`, and `--dry-run`; these override the corresponding configuration values (except `--dry-run`, which prints the exact messages turn 1 would send and exits without calling Ollama). The two thinking flags apply to both participants, and `--max-tokens` sets the per-turn token budget for both participants, overriding per-model and top-level `max_tokens` — handy for longer turns on a fast machine without editing the scenario file. Change model identifiers in JSON; `ollama_duel.py` has no `--model` option.
+Model-level `think`, `max_tokens`, `temperature`, `num_ctx`, `repeat_penalty`, `turn_prompt`, and `first_turn_prompt` override their top-level values. The CLI supports `--profile` (see [Machine profiles](#machine-profiles)), `--topic`, `--turns`, `--max-tokens`, `--host`, `--log-file`, `--save-json`, `--results-log`, `--no-results-log`, `--ntfy-url`, `--no-ntfy`, `--timeout`, `--think`, `--no-think`, `--run-code`, `--no-run-code` (see [Running each reply's code](#running-each-replys-code)), and `--dry-run`; these override the corresponding configuration values (except `--dry-run`, which prints the exact messages turn 1 would send and exits without calling Ollama). The two thinking flags apply to both participants, and `--max-tokens` sets the per-turn token budget for both participants, overriding per-model and top-level `max_tokens` — handy for longer turns on a fast machine without editing the scenario file. Change model identifiers in JSON; `ollama_duel.py` has no `--model` option.
 
 Invalid settings (an unrecognized key, wrong type, a `turns`/`max_tokens`/`num_ctx` less than 1, a negative `temperature`, or a `repeat_penalty` below 1) are rejected with an error naming the offending key before any request is sent — a typo like `"temprature"` fails loudly instead of silently falling back to a default.
 
@@ -221,7 +224,7 @@ The programming scenarios (`factorial.json`, `program_writing*.json`, and the se
 
 - **Format rules live in each system prompt:** one code block with the complete program, standard library only, and a change-history comment line per version. The system prompt is the only instruction sent on every turn, including the first, so rules placed only in the topic tend to be ignored.
 - **Each speaker has a distinct role** (builder and breaker, golfer and maintainer, and so on) with its own `turn_prompt`, so the exchange doesn't stall into near-identical turns.
-- **Programs check themselves** with `assert` statements or a self-test, so you can copy a turn's code out of the log and run it to see whether that turn broke anything. The scripts never run generated code themselves.
+- **Programs check themselves** with `assert` statements or a self-test, so you can tell whether a turn broke anything. Copy a turn's code out of the log and run it, or turn on [`run_code`](#running-each-replys-code) to have `ollama_duel.py` run it after every reply.
 
 Most use `qwen2.5-coder:14b`; `builder_vs_breaker.json`, `speed_race.json`, and `product_owner_vs_developer.json` also use `qwen3:14b` for the second role, so different models catch different mistakes.
 
@@ -248,6 +251,21 @@ playful, concrete roles that stay on track at a few tokens per second.
 | `small_time_capsule.json` | Fight over which 3 items represent 2026 |
 | `small_movie_ending_rewrite.json` | Competing better endings for *Titanic* |
 | `small_pet_debate.json` | A dog and a cat debate the better pet |
+
+### Running each reply's code
+
+For programming scenarios, `ollama_duel.py` can run the program in every reply, so a turn that breaks the code gets noticed and fixed instead of drifting along unseen. It's off unless you turn it on, either with `"run_code": true` in the scenario or `--run-code` for one run. `--no-run-code` forces it off. Profiles can't turn it on.
+
+```shell
+python ollama_duel.py scenarios/factorial.json --run-code
+python ollama_duel.py scenarios/tic_tac_toe_game.json --run-code
+```
+
+After each reply, the last fenced Python block (labelled `python`, `py`, or not labelled) is saved as `program.py` in a new temporary folder and run with the same Python interpreter. It runs with a time limit (`run_code_timeout`, default 30 seconds) and no keyboard input, so `input()` sees end-of-file instead of hanging. `run_code_args` passes command-line arguments, for example `["--test"]` for a game with a self-test mode. The folder is deleted afterwards.
+
+The exit code and output (the last 2000 characters) go into the log, and both speakers see the result after that reply on their next turns. The log ends with a tally such as `Code runs: 6 ok, 2 failed, 0 timed out, 0 replies without a Python code block`, which is handy when reading an overnight batch. A dry run shows whether running code is on but never runs anything.
+
+**This is not a sandbox.** The program runs with your user account's permissions and can read and write files and use the network, like any script you run yourself. Turn it on only for scenarios whose output you're comfortable running, ideally on a machine or account with nothing sensitive on it.
 
 ### Machine profiles
 
@@ -296,7 +314,7 @@ When `log_file` is set, `ollama_duel.py` mirrors its standard output to a timest
 
 Separately, every duel appends a one-block summary to `output/run_results.log` (override with `results_log` or `--results-log`, disable with `--no-results-log`). Each entry carries the date/time, config file, models, how many of the requested turns completed, and the per-model stats table when the duel finished -- or the error message when it stopped early, so a batch of overnight runs can be scanned without opening each transcript log.
 
-The programming scenario produces code as conversation text. Neither script executes, tests, or automatically saves generated code as a Python file.
+The programming scenarios produce code as conversation text. By default nothing runs it; [`run_code`](#running-each-replys-code) is an opt-in that runs each reply's program and feeds the result back to the speakers.
 
 ## Choosing models
 

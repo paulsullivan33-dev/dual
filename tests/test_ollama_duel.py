@@ -813,7 +813,7 @@ class DedupGuardTests(unittest.TestCase):
         seen = {}
 
         def fake_run_duel(host, topic, turns, participants, timeout,
-                          transcript, matrix=None, dedup_guard=True):
+                          transcript, matrix=None, dedup_guard=True, run_code=None):
             seen["dedup_guard"] = dedup_guard
             return {}, None, None
 
@@ -1451,6 +1451,101 @@ class HistoryTurnsTests(unittest.TestCase):
                 path = write_json(d, "cfg.json", minimal_config(history_turns=value))
                 with self.subTest(value=value), self.assertRaises(SystemExit):
                     ollama_duel.load_config(path)
+
+
+class RunCodeTests(unittest.TestCase):
+    """Opt-in running of each reply's Python block, with the result logged
+    and shown to both speakers on later turns."""
+
+    PROGRAM_REPLY = "Here it is:\n```python\nimport sys\nprint('RAN-OK', sys.argv[1:])\n```"
+
+    def _duel(self, cfg, extra_args=(), reply=PROGRAM_REPLY):
+        sent = []
+
+        def fake_call_chat(host, model, messages, think, options, timeout=None):
+            sent.append(messages)
+            return "", reply, "stop", {"gen_tokens": 10, "gen_s": 1.0,
+                                       "prompt_tokens": 20, "prompt_s": 0.5}
+
+        out = io.StringIO()
+        cfg = dict(cfg, dedup_guard=False)
+        with tempfile.TemporaryDirectory() as d:
+            path = write_json(d, "cfg.json", cfg)
+            argv = ["ollama_duel.py", path, "--no-results-log", "--no-ntfy", *extra_args]
+            with mock.patch.object(sys, "argv", argv), \
+                 mock.patch.object(ollama_duel, "call_chat", fake_call_chat), \
+                 mock.patch.object(sys, "stdout", out):
+                ollama_duel.main()
+        return sent, out.getvalue()
+
+    def test_off_by_default(self):
+        with mock.patch.object(ollama_duel, "run_program",
+                               side_effect=AssertionError("must not run")):
+            _, out = self._duel(minimal_config(turns=2))
+        self.assertNotIn("CODE RUN", out)
+        self.assertNotIn("Code running: ON", out)
+
+    def test_runs_reply_code_and_logs_the_result(self):
+        _, out = self._duel(minimal_config(turns=2, run_code=True))
+        self.assertIn("Code running: ON", out)
+        self.assertIn("--- CODE RUN ---", out)
+        self.assertIn("m1's program ran successfully", out)
+        self.assertIn("RAN-OK []", out)
+        self.assertIn("Code runs: 2 ok, 0 failed, 0 timed out", out)
+
+    def test_both_speakers_see_the_result_after_the_reply(self):
+        sent, _ = self._duel(minimal_config(turns=3, run_code=True))
+        contents = [m["content"] for m in sent[2]]   # turn 3, m1 speaking
+        reply_at = contents.index(self.PROGRAM_REPLY)
+        self.assertTrue(contents[reply_at + 1].startswith("[Automatic code run] m1's program"))
+        roles = [m["role"] for m in sent[1]]          # turn 2, Two speaking
+        self.assertEqual(roles[-2:], ["user", "user"])  # report, then the nudge
+
+    def test_cli_turns_it_on_and_off(self):
+        _, out = self._duel(minimal_config(turns=1), extra_args=["--run-code"])
+        self.assertIn("--- CODE RUN ---", out)
+        with mock.patch.object(ollama_duel, "run_program",
+                               side_effect=AssertionError("must not run")):
+            _, out = self._duel(minimal_config(turns=1, run_code=True),
+                                extra_args=["--no-run-code"])
+        self.assertNotIn("CODE RUN", out)
+
+    def test_arguments_and_timeout_reach_the_program(self):
+        _, out = self._duel(minimal_config(turns=1, run_code=True,
+                                           run_code_args=["--test"], run_code_timeout=5))
+        self.assertIn("RAN-OK ['--test']", out)
+        self.assertIn("5s timeout, arguments --test", out)
+
+    def test_failing_program_is_reported(self):
+        reply = "```python\nassert False, 'self-test failed'\n```"
+        _, out = self._duel(minimal_config(turns=1, run_code=True), reply=reply)
+        self.assertIn("FAILED with exit code 1", out)
+        self.assertIn("self-test failed", out)
+
+    def test_reply_without_code_is_noted(self):
+        _, out = self._duel(minimal_config(turns=1, run_code=True), reply="Just talk.")
+        self.assertIn("no Python code block in this reply", out)
+        self.assertIn("1 replies without a Python code block", out)
+
+    def test_dry_run_never_runs_code(self):
+        with mock.patch.object(ollama_duel, "run_program",
+                               side_effect=AssertionError("must not run")):
+            _, out = self._duel(minimal_config(run_code=True), extra_args=["--dry-run"])
+        self.assertIn("Code running: ON", out)
+
+    def test_invalid_settings_are_rejected(self):
+        for bad in ({"run_code": "yes"}, {"run_code_timeout": 0},
+                    {"run_code_args": "--test"}, {"run_code_args": [1, 2]}):
+            with tempfile.TemporaryDirectory() as d:
+                path = write_json(d, "cfg.json", minimal_config(**bad))
+                with self.subTest(bad=bad), self.assertRaises(SystemExit):
+                    ollama_duel.load_config(path)
+
+    def test_profiles_cannot_turn_it_on(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = write_json(d, "p.json", {"settings": {"run_code": True}})
+            with self.assertRaises(SystemExit):
+                ollama_duel.load_profile(path)
 
 
 class ShippedProfilesTests(unittest.TestCase):

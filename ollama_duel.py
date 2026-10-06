@@ -13,11 +13,14 @@ position and forces settings such as num_ctx and think, so one scenario
 file serves every machine.
 
 Globals in the JSON (host, topic, turns, think, max_tokens, temperature,
-num_ctx, repeat_penalty, turn_prompt, first_turn_prompt, log_file, save_json,
-timeout, display, dedup_guard, ntfy_url) act as defaults; anything set inside a "models"
-entry overrides the global for that model only (think, max_tokens,
-temperature, num_ctx, repeat_penalty, turn_prompt, first_turn_prompt only --
-the rest are duel-wide). "models" must contain exactly 2 entries.
+num_ctx, repeat_penalty, turn_prompt, first_turn_prompt, history_turns,
+log_file, save_json, timeout, display, dedup_guard, ntfy_url, run_code,
+run_code_args, run_code_timeout) act as defaults; anything set inside a
+"models" entry overrides the global for that model only (think, max_tokens,
+temperature, num_ctx, repeat_penalty, turn_prompt, first_turn_prompt,
+history_turns only -- the rest are duel-wide). "models" must contain exactly
+2 entries. run_code (or --run-code) runs each reply's Python block; see
+ollama_coderun.py.
 If "log_file" is set, everything printed to stdout is mirrored to a
 timestamped copy of that file: the current date/time is prepended to the
 file name (e.g. "logs/duel.log" -> "output/logs/20260925-084500-duel.log") so each run gets
@@ -55,6 +58,8 @@ from ollama_common import (
     validate_field as _validate_field,
     wrap_text,
 )
+from ollama_coderun import (DEFAULT_RUN_TIMEOUT, count_runs, describe_run,
+                            extract_program, run_program)
 from ollama_profiles import apply_profile, load_profile, profile_scenarios
 
 
@@ -63,6 +68,7 @@ TOP_LEVEL_KEYS = {
     "num_ctx", "repeat_penalty", "turn_prompt", "first_turn_prompt",
     "history_turns", "log_file", "save_json", "timeout",
     "display", "dedup_guard", "results_log", "ntfy_url", "models",
+    "run_code", "run_code_args", "run_code_timeout",
 }
 MODEL_KEYS = {"model", "name", "system", "think", "max_tokens", "temperature",
               "num_ctx", "repeat_penalty", "turn_prompt", "first_turn_prompt",
@@ -183,6 +189,12 @@ def load_config(path, profile=None):
     _validate_field(cfg, "save_json", "str", "top level")
     _validate_field(cfg, "timeout", "number", "top level", minimum=1)
     _validate_field(cfg, "display", "bool", "top level")
+    _validate_field(cfg, "run_code", "bool", "top level")
+    _validate_field(cfg, "run_code_timeout", "number", "top level", minimum=1)
+    run_args = cfg.get("run_code_args")
+    if run_args is not None and not (
+            isinstance(run_args, list) and all(isinstance(a, str) for a in run_args)):
+        sys.exit(f'"run_code_args" in top level must be a list of strings, got {run_args!r}.')
     _validate_field(cfg, "dedup_guard", "bool", "top level")
     _validate_field(cfg, "results_log", "str", "top level")
     _validate_field(cfg, "ntfy_url", "str", "top level")
@@ -438,7 +450,7 @@ def _matrix(matrix, method, *args):
     return matrix
 
 
-def build_turn_messages(participants, i, topic, transcript):
+def build_turn_messages(participants, i, topic, transcript, run_reports=None):
     """Build the message list for participant `i`'s next turn.
 
     Seen from that speaker's point of view: their own past lines are
@@ -462,9 +474,13 @@ def build_turn_messages(participants, i, topic, transcript):
     messages.append({"role": "user", "content": topic})
     history = me.get("history_turns")
     recent = transcript[-history:] if history else transcript
-    for spk, text in recent:
+    first_index = len(transcript) - len(recent)
+    for k, (spk, text) in enumerate(recent, first_index):
         role = "assistant" if spk == i else "user"
         messages.append({"role": role, "content": text})
+        # With run_code on, what happened when this reply's program ran.
+        if run_reports and k in run_reports:
+            messages.append({"role": "user", "content": run_reports[k]})
     first_nudge = me.get("first_turn_prompt", DEFAULT_FIRST_TURN_PROMPT)
     if transcript and me["turn_prompt"]:
         messages.append({
@@ -525,7 +541,7 @@ def context_usage_note(name, used, num_ctx, level):
 
 
 def run_duel(host, topic, turns, participants, timeout, transcript, matrix=None,
-             dedup_guard=True):
+             dedup_guard=True, run_code=None):
     """Run the duel's turn loop, printing each reply as it arrives.
 
     Each participant is a dict with name, model, system, think, options,
@@ -548,13 +564,16 @@ def run_duel(host, topic, turns, participants, timeout, transcript, matrix=None,
     """
     model_stats = {}  # model -> {turns, gen_tokens, gen_s, prompt_tokens, prompt_s, truncated}
     prev_replies = {}  # speaker_index -> normalized text of their last reply
+    run_reports = {}  # transcript index -> code-run report (run_code only)
+    run_results = []  # outcome of each code run (run_code only)
     ctx_levels = [0, 0]  # per speaker: 0 = fine, 1 = nearly-full noted, 2 = full warned
     stop_note = None  # why the loop ended early, when it did
     try:
         for turn in range(turns):
             i = turn % 2
             me = participants[i]
-            messages = build_turn_messages(participants, i, topic, transcript)
+            messages = build_turn_messages(participants, i, topic, transcript,
+                                           run_reports)
 
             print("  (waiting for reply...)", file=sys.stderr, flush=True)
             matrix = _matrix(matrix, "progress", turn, turns)
@@ -613,13 +632,38 @@ def run_duel(host, topic, turns, participants, timeout, transcript, matrix=None,
             if note:
                 print(note)
                 print()
+            if run_code is not None:
+                run_results.append(
+                    _run_reply_code(reply, me["name"], run_code, run_reports,
+                                    len(transcript) - 1))
     except KeyboardInterrupt:
         stop_note = "interrupted by user (Ctrl-C)"
         print("\nStopped.", file=sys.stderr)
     except OllamaError as e:
         stop_note = str(e)
         print(f"\n{e}\nStopped.", file=sys.stderr)
+    if run_results:
+        print(count_runs(run_results))
+        print()
     return model_stats, matrix, stop_note
+
+
+def _run_reply_code(reply, author, run_code, run_reports, index):
+    """With run_code on: run the reply's last Python block, print the
+    result, and remember it so later turns show it to both speakers.
+    Returns the outcome ("ok", "failed", "timeout" or "no_code")."""
+    program = extract_program(reply)
+    if program is None:
+        print("--- CODE RUN: no Python code block in this reply ---")
+        print()
+        return "no_code"
+    result = run_program(program, run_code["args"], run_code["timeout"])
+    report = describe_run(result, author)
+    run_reports[index] = report
+    print("--- CODE RUN ---")
+    print(report)
+    print()
+    return result["status"]
 
 
 def expand_configs(config_arg):
@@ -711,6 +755,12 @@ def main():
                          "8x13 LED matrix (needs python3-smbus on the Uno Q)")
     ap.add_argument("--no-display", dest="display", action="store_false",
                     help="force the LED matrix display off")
+    ap.add_argument("--run-code", dest="run_code", action="store_true", default=None,
+                    help="run the last Python code block of each reply (timeout, "
+                         "no keyboard input) and show the result to both speakers. "
+                         "Not a sandbox: the code runs with your permissions")
+    ap.add_argument("--no-run-code", dest="run_code", action="store_false",
+                    help="never run reply code, even if the scenario turns it on")
     ap.add_argument("--dry-run", action="store_true",
                     help="print the exact messages turn 1 would send and exit "
                          "without calling Ollama")
@@ -744,6 +794,12 @@ def main():
     save_json_path = output_path(first_not_none(args.save_json, cfg.get("save_json")))
     want_display = first_not_none(args.display, cfg.get("display"), False)
     dedup_guard = first_not_none(cfg.get("dedup_guard"), True)
+    # Running model-written code is strictly opt-in: the scenario's run_code
+    # or --run-code; --no-run-code always wins. Profiles can't turn it on.
+    run_code = None
+    if first_not_none(args.run_code, cfg.get("run_code"), False):
+        run_code = {"args": cfg.get("run_code_args") or [],
+                    "timeout": cfg.get("run_code_timeout") or DEFAULT_RUN_TIMEOUT}
     # Run summary file: appended after every duel with the date/time and
     # either the stats table (success) or the error (early stop). Defaults
     # to output/run_results.log; --no-results-log (or a false-y CLI value)
@@ -838,6 +894,12 @@ def main():
         print(f"Profile: {args.profile}")
     print_duel_header(topic, participants, turns)
 
+    if run_code is not None:
+        extra = f", arguments {' '.join(run_code['args'])}" if run_code["args"] else ""
+        print(f"Code running: ON -- each reply's last Python block runs with a "
+              f"{run_code['timeout']:g}s timeout{extra}. This runs model-written "
+              f"code on this machine with your permissions.")
+        print()
     if args.dry_run:
         # Show exactly what the opening turn would send, then stop before
         # any Ollama call. Handy when writing or debugging scenarios.
@@ -857,7 +919,8 @@ def main():
     try:
         model_stats, matrix, stop_note = run_duel(host, topic, turns, participants, timeout,
                                                   transcript, matrix=matrix,
-                                                  dedup_guard=dedup_guard)
+                                                  dedup_guard=dedup_guard,
+                                                  run_code=run_code)
         print(f"Done: {len(transcript)} replies.", file=sys.stderr)
         if log_fh is not None:
             print(f"Logging to {log_path}", file=sys.stderr)

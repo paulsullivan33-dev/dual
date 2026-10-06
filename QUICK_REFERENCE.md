@@ -37,6 +37,7 @@ of the RAG demo, see [RAG_DEMO.md](RAG_DEMO.md).
 | Run a group of scenarios | `python ollama_duel.py "scenarios/small_*.json"` |
 | Run a scenario on the Arduino box's models | `python ollama_duel.py scenarios/factorial.json --profile arduino_q` |
 | Run the whole Arduino set | `python ollama_duel.py --profile arduino_q` |
+| Run each reply's program to catch broken code | `python ollama_duel.py scenarios/factorial.json --run-code` |
 | Save a duel's transcript as JSON | `python ollama_duel.py scenarios/roast_battle.json --save-json roast.json` |
 | Get a phone notification when a duel ends | `python ollama_duel.py scenarios/roast_battle.json --ntfy-url https://ntfy.sh/my-topic` |
 | Have a model write a small project | `python ollama_agent.py --task "a CLI that renames photos by date taken"` |
@@ -284,6 +285,35 @@ Every key is optional. `settings` may set `num_ctx`, `think`, `max_tokens`,
 scenario's values for both speakers. `scenarios` lists files in
 `scenarios/` to run when you pass `--profile` without a scenario.
 
+### Run each reply's code
+
+```shell
+# Run the program in every reply of a programming duel
+python ollama_duel.py scenarios/factorial.json --run-code
+
+# Turn it on in your own scenario file instead, with arguments for each run
+# (e.g. a game's self-test mode) and a time limit:
+#   "run_code": true, "run_code_args": ["--test"], "run_code_timeout": 20
+python ollama_duel.py my_game_duel.json
+
+# Skip it for one run of a scenario that turns it on
+python ollama_duel.py my_game_duel.json --no-run-code
+```
+
+Interactive programs (like the tic-tac-toe game) wait for keyboard input and
+time out, so give them a test mode and pass it with `run_code_args`.
+
+After each reply, its last Python code block is run in a fresh temporary
+folder with a time limit (default 30s) and no keyboard input. The result
+(exit code and the end of the output) goes in the log, and both speakers
+see it on their next turns, so a broken program gets fixed. The log ends
+with a tally: `Code runs: 6 ok, 2 failed, 0 timed out, …`.
+
+Off unless the scenario sets `"run_code": true` or you pass `--run-code`;
+profiles can't turn it on. **Not a sandbox:** the code runs with your
+permissions and can touch files and the network, so only use it for code
+you're comfortable running.
+
 ### Logs, summaries and transcripts
 
 ```shell
@@ -355,6 +385,7 @@ it prints a warning and carries on without the display.
 | `--ntfy-url` | Send a completion notice to this ntfy topic URL |
 | `--no-ntfy` | Never send a notice, even if one is configured |
 | `--display` / `--no-display` | LED matrix on the Arduino Uno Q |
+| `--run-code` / `--no-run-code` | Run (or never run) each reply's last Python block, showing the result to both speakers |
 | `--dry-run` | Print turn 1's messages and exit without calling Ollama |
 
 ### Scenario file settings
@@ -403,6 +434,9 @@ entry (that speaker only, overriding the top level).
 | `results_log` | top | `run_results.log` | Run summary path |
 | `ntfy_url` | top | none | Completion notice URL |
 | `display` | top | false | LED matrix on the Uno Q |
+| `run_code` | top | false | Run each reply's last Python block and show the result to both speakers (not a sandbox) |
+| `run_code_args` | top | none | Arguments for each run, e.g. `["--test"]` |
+| `run_code_timeout` | top | 30 | Seconds before a run is stopped |
 
 Unknown keys, wrong types and out-of-range values are rejected before any
 model is called, so a typo like `"temprature"` fails loudly.
@@ -416,6 +450,10 @@ model is called, so a typo like `"temprature"` fails loudly.
   is set.)
 - **"max_tokens … is larger than num_ctx"** (at startup): a reply can't use
   more tokens than the window holds; lower one or raise the other.
+- **"CODE RUN … FAILED" / "was stopped after Ns"** (with `run_code`): the
+  reply's program crashed or didn't finish; the speakers see the same report.
+  A program waiting for keyboard input times out, so use `run_code_args`
+  for a test mode instead.
 - **"DEDUP GUARD: … repeated its previous reply"**: the guard re-rolled a
   repeated turn (see `dedup_guard`).
 
@@ -602,6 +640,7 @@ python ollama_bench.py qwen3:1.7b smollm2:1.7b --host http://192.168.1.50:11434 
 | --- | --- |
 | `ollama_common.py` | Shared code: the Ollama API call, text wrapping, transcript saving, the `output/` path rule, setting validation |
 | `ollama_profiles.py` | Loading and applying machine profiles for `ollama_duel.py --profile` |
+| `ollama_coderun.py` | Running each reply's Python code for `ollama_duel.py --run-code` |
 | `unoq_matrix.py` | Driver for the Arduino Uno Q's LED matrix, used by `ollama_duel.py --display` |
 
 ---
