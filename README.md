@@ -4,6 +4,8 @@ Command-line Python utilities for chatting with an Ollama model or letting two A
 
 The scripts use only the Python standard library. They send requests to an Ollama server; they do not run models themselves.
 
+**Looking for a command?** [QUICK_REFERENCE.md](QUICK_REFERENCE.md) has copy-paste examples for every script, a find-by-task table, and every option explained.
+
 ## Requirements and setup
 
 - Python 3.8 or later.
