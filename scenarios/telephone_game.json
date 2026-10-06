@@ -1,6 +1,9 @@
 {
   "host": "http://localhost:11434",
   "topic": "A game of telephone. Each turn, retell the story you were just told to the next person, in your own words and at about the same length. Don't add commentary, don't mention that you're retelling, and don't ask questions: just tell the story.",
+  "tags": [
+    "game"
+  ],
   "turns": 20,
   "think": false,
   "max_tokens": 600,

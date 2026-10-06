@@ -20,5 +20,8 @@
   "temperature": 1.0,
   "think": false,
   "topic": "Trade roasts about working from home versus going into the office. First round, make it count.",
+  "tags": [
+    "creative"
+  ],
   "turns": 8
 }

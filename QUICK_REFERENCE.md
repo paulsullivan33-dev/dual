@@ -35,10 +35,13 @@ of the RAG demo, see [RAG_DEMO.md](RAG_DEMO.md).
 | See what a scenario sends, without running it | `python ollama_duel.py scenarios/factorial.json --dry-run` |
 | Run every scenario in a folder | `python ollama_duel.py scenarios/` |
 | Run a group of scenarios | `python ollama_duel.py "scenarios/small_*.json"` |
+| Run only scenarios tagged "game" | `python ollama_duel.py scenarios/ --tag game` |
+| List all scenario tags | `python ollama_duel.py scenarios/ --list-tags` |
 | Run a scenario on the Arduino box's models | `python ollama_duel.py scenarios/factorial.json --profile arduino_q` |
 | Run the whole Arduino set | `python ollama_duel.py --profile arduino_q` |
 | Run each reply's program to catch broken code | On already in the programming scenarios; elsewhere add `--run-code` |
 | Skip running code for one run | `python ollama_duel.py scenarios/factorial.json --no-run-code` |
+| Have a third model judge the duel | Set `"judge"` in the scenario; skip it once with `--no-judge` |
 | Save a duel's transcript as JSON | `python ollama_duel.py scenarios/roast_battle.json --save-json roast.json` |
 | Get a phone notification when a duel ends | `python ollama_duel.py scenarios/roast_battle.json --ntfy-url https://ntfy.sh/my-topic` |
 | Have a model write a small project | `python ollama_agent.py --task "a CLI that renames photos by date taken"` |
@@ -183,7 +186,7 @@ different settings per speaker, use a scenario file with `ollama_duel.py`.
 
 ## Scenario duels — `ollama_duel.py`
 
-Runs a two-speaker conversation described in a JSON scenario file (69 are
+Runs a two-speaker conversation described in a JSON scenario file (75 are
 included in `scenarios/`). Adds per-speaker settings, transcript logs, run
 summaries, batch runs, machine profiles, notifications and a dry-run mode.
 
@@ -242,11 +245,23 @@ python ollama_duel.py "scenarios/mac_*.json"
 
 # Any other options apply to every scenario in the batch
 python ollama_duel.py "scenarios/small_*.json" --turns 4 --no-ntfy
+
+# Only scenarios tagged "game" (repeat --tag to match any of them)
+python ollama_duel.py scenarios/ --tag game
+python ollama_duel.py scenarios/ --tag code --tag debate
+
+# See what tags exist and how many scenarios carry each
+python ollama_duel.py scenarios/ --list-tags
 ```
 
 Each scenario runs as its own process with its own log, summary entry and
 notification. A failing scenario is reported and skipped; Ctrl+C stops the
 whole batch.
+
+Scenarios carry topic tags (`debate`, `code`, `game`, `interview`,
+`creative`, `roleplay`, `small`) so a batch can select by kind instead of
+by file name. Add your own tags to a scenario's `"tags"` list; `--tag`
+matches any of the tags you pass.
 
 ### Machine profiles
 
@@ -326,6 +341,32 @@ Off unless the scenario sets `"run_code": true` or you pass `--run-code`;
 profiles can't turn it on. **Not a sandbox:** the code runs with your
 permissions and can touch files and the network, so only use it for code
 you're comfortable running.
+
+### Have a third model judge the duel
+
+```shell
+# twenty_questions.json already sets one; the judge scores the finished
+# duel and its verdict goes in the log, the run summary and the ntfy notice
+python ollama_duel.py scenarios/twenty_questions.json
+
+# Skip the judge for one run
+python ollama_duel.py scenarios/twenty_questions.json --no-judge
+```
+
+A scenario opts in with `"judge": "qwen3:8b"`, or a dict for more control:
+
+```json
+"judge": {
+  "model": "qwen3:8b",
+  "prompt": "Declare the winner based on code correctness only.",
+  "temperature": 0.2,
+  "max_tokens": 500
+}
+```
+
+After the last turn, the judge reads the whole transcript and writes a
+short verdict ending in `WINNER: <name>` (or `WINNER: draw`). A judge
+failure is noted but never fails the duel.
 
 ### Logs, summaries and transcripts
 

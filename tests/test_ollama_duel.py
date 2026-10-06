@@ -1713,5 +1713,213 @@ class ContextUsageTests(unittest.TestCase):
         self.assertNotIn("is full", out)
 
 
+class TagsTests(unittest.TestCase):
+    """Scenarios carry optional topic tags; batch runs can filter by them."""
+
+    def _load(self, **overrides):
+        with tempfile.TemporaryDirectory() as d:
+            path = write_json(d, "cfg.json", minimal_config(**overrides))
+            return ollama_duel.load_config(path)
+
+    def test_valid_tags_load(self):
+        cfg = self._load(tags=["debate", "code"])
+        self.assertEqual(cfg["tags"], ["debate", "code"])
+
+    def test_missing_tags_defaults_to_none(self):
+        self.assertIsNone(self._load()["tags"])
+
+    def test_string_tags_rejected(self):
+        with self.assertRaises(SystemExit):
+            self._load(tags="debate")
+
+    def test_empty_tags_rejected(self):
+        with self.assertRaises(SystemExit):
+            self._load(tags=[])
+
+    def test_non_string_tag_rejected(self):
+        with self.assertRaises(SystemExit):
+            self._load(tags=["debate", 42])
+
+    def test_unknown_top_level_key_still_rejected(self):
+        with self.assertRaises(SystemExit):
+            self._load(tag=["debate"])  # singular is a typo
+
+    def test_configs_matching_tags_no_filter_passes_all(self):
+        cfgs = ["a.json", "b.json"]
+        self.assertEqual(ollama_duel.configs_matching_tags(cfgs, None), cfgs)
+        self.assertEqual(ollama_duel.configs_matching_tags(cfgs, []), cfgs)
+
+    def test_configs_matching_tags_filters(self):
+        with tempfile.TemporaryDirectory() as d:
+            a = write_json(d, "a.json", minimal_config(tags=["debate"]))
+            b = write_json(d, "b.json", minimal_config(tags=["code"]))
+            c = write_json(d, "c.json", minimal_config())
+            self.assertEqual(ollama_duel.configs_matching_tags([a, b, c], ["code"]), [b])
+            # Any-of semantics across several wanted tags.
+            self.assertEqual(
+                ollama_duel.configs_matching_tags([a, b, c], ["code", "debate"]),
+                [a, b])
+            self.assertEqual(
+                ollama_duel.configs_matching_tags([a, b, c], ["game"]), [])
+
+    def test_read_scenario_tags_tolerates_garbage(self):
+        with tempfile.TemporaryDirectory() as d:
+            missing = os.path.join(d, "nope.json")
+            bad = os.path.join(d, "bad.json")
+            with open(bad, "w", encoding="utf-8") as f:
+                f.write("{not json")
+            self.assertEqual(ollama_duel.read_scenario_tags(missing), [])
+            self.assertEqual(ollama_duel.read_scenario_tags(bad), [])
+
+    def test_list_all_tags_counts(self):
+        with tempfile.TemporaryDirectory() as d:
+            a = write_json(d, "a.json", minimal_config(tags=["debate"]))
+            b = write_json(d, "b.json", minimal_config(tags=["debate", "code"]))
+            self.assertEqual(ollama_duel.list_all_tags([a, b]),
+                             {"debate": 2, "code": 1})
+
+    def test_list_tags_flag_prints_and_exits_without_dueling(self):
+        with tempfile.TemporaryDirectory() as d:
+            write_json(d, "a.json", minimal_config(tags=["debate"]))
+            argv = ["ollama_duel.py", d, "--list-tags"]
+            out = io.StringIO()
+            with mock.patch.object(sys, "argv", argv), \
+                 mock.patch.object(sys, "stdout", out):
+                ollama_duel.main()  # returns; never touches Ollama
+        self.assertIn("debate", out.getvalue())
+
+    def test_tag_filter_with_no_match_exits(self):
+        with tempfile.TemporaryDirectory() as d:
+            write_json(d, "a.json", minimal_config(tags=["debate"]))
+            argv = ["ollama_duel.py", d, "--tag", "game", "--no-ntfy"]
+            with mock.patch.object(sys, "argv", argv):
+                with self.assertRaises(SystemExit) as ctx:
+                    ollama_duel.main()
+        self.assertIn("No scenarios match", str(ctx.exception))
+
+    def test_tag_filter_selects_matching_file(self):
+        # Three scenarios, two tagged "code": the batch runner only
+        # re-execs those two.
+        import subprocess
+        ran = []
+
+        def fake_run(argv, **kw):
+            ran.append(argv[2])
+            return mock.Mock(returncode=0)
+
+        with tempfile.TemporaryDirectory() as d:
+            write_json(d, "a.json", minimal_config(tags=["debate"], turns=1))
+            b = write_json(d, "b.json", minimal_config(tags=["code"], turns=1))
+            c = write_json(d, "c.json", minimal_config(tags=["code"], turns=1))
+            argv = ["ollama_duel.py", d, "--tag", "code",
+                    "--no-ntfy", "--no-results-log"]
+            with mock.patch.object(sys, "argv", argv), \
+                 mock.patch.object(subprocess, "run", fake_run), \
+                 mock.patch("sys.stderr", new_callable=io.StringIO):
+                with self.assertRaises(SystemExit) as ctx:
+                    ollama_duel.main()
+        self.assertEqual(ctx.exception.code, 0)  # batch ran clean
+        self.assertEqual(ran, [b, c])  # only the code-tagged ones ran
+
+
+class JudgeWiringTests(unittest.TestCase):
+    """A configured judge scores the finished duel; --no-judge skips it."""
+
+    def test_judge_scores_completed_duel(self):
+        calls, out = run_duel_capturing(
+            minimal_config(turns=2, judge="judge-model"),
+            reply="Alice wins.\nWINNER: Alice")
+        # Two duel turns plus the judge call, all answered by the fake.
+        self.assertEqual(len(calls), 3)
+        self.assertEqual(calls[-1]["model"], "judge-model")
+        self.assertIn("=== Verdict ===", out)
+        self.assertIn("WINNER: Alice", out)
+
+    def test_no_judge_by_default(self):
+        calls, out = run_duel_capturing(minimal_config(turns=2))
+        self.assertEqual(len(calls), 2)
+        self.assertNotIn("=== Verdict ===", out)
+
+    def test_no_judge_flag_disables_configured_judge(self):
+        calls, out = run_duel_capturing(
+            minimal_config(turns=2, judge="judge-model"),
+            extra_args=("--no-judge",))
+        self.assertEqual(len(calls), 2)
+        self.assertNotIn("=== Verdict ===", out)
+
+    def test_judge_failure_does_not_fail_duel(self):
+        from ollama_common import OllamaError
+        calls = []
+
+        def flaky_call_chat(host, model, messages, think, options,
+                            timeout=None):
+            calls.append(model)
+            if model == "judge-model":
+                raise OllamaError("judge is down")
+            return "", "reply", "stop", {"gen_tokens": 1, "gen_s": 0.1,
+                                         "prompt_tokens": 1, "prompt_s": 0.1}
+
+        with tempfile.TemporaryDirectory() as d:
+            path = write_json(d, "cfg.json",
+                              minimal_config(turns=1, judge="judge-model"))
+            argv = ["ollama_duel.py", path, "--no-results-log", "--no-ntfy"]
+            out = io.StringIO()
+            with mock.patch.object(sys, "argv", argv), \
+                 mock.patch.object(ollama_duel, "call_chat", flaky_call_chat), \
+                 mock.patch.object(sys, "stdout", out):
+                ollama_duel.main()  # must not raise
+        self.assertIn("JUDGE FAILED", out.getvalue())
+
+    def test_verdict_lands_in_run_summary(self):
+        with tempfile.TemporaryDirectory() as d:
+            results = os.path.join(d, "results.log")
+            run_duel_capturing(
+                minimal_config(turns=1, judge="judge-model"),
+                extra_args=("--results-log", results),
+                reply="Bob wins.\nWINNER: Bob")
+            with open(results, encoding="utf-8") as f:
+                summary = f.read()
+        self.assertIn("WINNER: Bob", summary)
+
+    def test_judge_config_string_and_dict_both_validate(self):
+        cfg = self._load_judge("judge-model")
+        self.assertEqual(cfg["judge"], {"model": "judge-model"})
+        cfg = self._load_judge({"model": "j", "temperature": 0.2})
+        self.assertEqual(cfg["judge"]["temperature"], 0.2)
+
+    def _load_judge(self, judge):
+        with tempfile.TemporaryDirectory() as d:
+            path = write_json(d, "cfg.json", minimal_config(judge=judge))
+            return ollama_duel.load_config(path)
+
+    def test_bad_judge_config_exits(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = write_json(d, "cfg.json", minimal_config(judge=42))
+            with self.assertRaises(SystemExit):
+                ollama_duel.load_config(path)
+
+
+class ShippedScenariosTagTests(unittest.TestCase):
+    """Every shipped scenario carries at least one tag, from the known
+    vocabulary, so --tag filtering and --list-tags stay useful."""
+
+    KNOWN = {"debate", "code", "game", "interview", "creative", "roleplay",
+             "small"}
+
+    def test_all_scenarios_tagged_with_known_tags(self):
+        root = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            "scenarios")
+        paths = sorted(os.path.join(root, n) for n in os.listdir(root)
+                       if n.endswith(".json"))
+        self.assertGreater(len(paths), 0)
+        for path in paths:
+            with self.subTest(path=os.path.basename(path)):
+                tags = ollama_duel.read_scenario_tags(path)
+                self.assertTrue(tags, "scenario has no tags")
+                unknown = set(tags) - self.KNOWN
+                self.assertFalse(unknown, f"unknown tags: {unknown}")
+
+
 if __name__ == "__main__":
     unittest.main()

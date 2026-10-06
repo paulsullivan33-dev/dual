@@ -1,1 +1,28 @@
-{"host":"http://localhost:11434","log_file":"logs/small_sidekick_interview.log","max_tokens":400,"models":[{"model":"qwen3:1.7b","name":"Captain Cosmos","system":"You are Captain Cosmos, a famous superhero interviewing a sidekick candidate. Ask tough, funny interview questions: greatest weakness, experience with death rays, cape-maintenance skills. You are heroic and slightly pompous. Keep replies to a few lines.","temperature":1.0},{"model":"smollm2:1.7b","name":"Kid Quip","system":"You are Kid Quip, an overconfident teenager interviewing for a superhero sidekick job. Brag shamelessly about your totally real qualifications: meme warfare, snack runs, dramatic entrances. You are earnest and hilarious. Keep replies to a few lines.","temperature":1.0}],"num_ctx":4096,"temperature":1.0,"think":false,"topic":"Captain Cosmos is interviewing Kid Quip for a sidekick position. Cosmos opens with the first interview question.","turns":8}
+{
+  "host": "http://localhost:11434",
+  "log_file": "logs/small_sidekick_interview.log",
+  "max_tokens": 400,
+  "models": [
+    {
+      "model": "qwen3:1.7b",
+      "name": "Captain Cosmos",
+      "system": "You are Captain Cosmos, a famous superhero interviewing a sidekick candidate. Ask tough, funny interview questions: greatest weakness, experience with death rays, cape-maintenance skills. You are heroic and slightly pompous. Keep replies to a few lines.",
+      "temperature": 1.0
+    },
+    {
+      "model": "smollm2:1.7b",
+      "name": "Kid Quip",
+      "system": "You are Kid Quip, an overconfident teenager interviewing for a superhero sidekick job. Brag shamelessly about your totally real qualifications: meme warfare, snack runs, dramatic entrances. You are earnest and hilarious. Keep replies to a few lines.",
+      "temperature": 1.0
+    }
+  ],
+  "num_ctx": 4096,
+  "temperature": 1.0,
+  "think": false,
+  "topic": "Captain Cosmos is interviewing Kid Quip for a sidekick position. Cosmos opens with the first interview question.",
+  "tags": [
+    "small",
+    "interview"
+  ],
+  "turns": 8
+}

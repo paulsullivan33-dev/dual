@@ -20,5 +20,8 @@
   "temperature": 0.7,
   "think": false,
   "topic": "The offer on the table is $135,000 base salary. Candidate, your response?",
+  "tags": [
+    "roleplay"
+  ],
   "turns": 8
 }

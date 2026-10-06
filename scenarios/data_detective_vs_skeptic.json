@@ -1,6 +1,10 @@
 {
   "host": "http://localhost:11434",
   "topic": "A coffee chain ran a spring promotion in stores A and B from April to June; store C never ran it. Did the promotion increase sales, and by how much? Every claim must be backed by Python that computes it from this data, so the numbers in the log are real output, not guesses. Paste the SALES list into every program (each runs on its own).\n\n```python\n# (month, store, sales_in_dollars, promo_running)\nSALES = [\n    (\"Jan\", \"A\", 1200, False), (\"Feb\", \"A\", 1150, False), (\"Mar\", \"A\", 1250, False),\n    (\"Apr\", \"A\", 1500, True), (\"May\", \"A\", 1550, True), (\"Jun\", \"A\", 1600, True),\n    (\"Jan\", \"B\", 900, False), (\"Feb\", \"B\", 880, False), (\"Mar\", \"B\", 950, False),\n    (\"Apr\", \"B\", 1120, True), (\"May\", \"B\", 1150, True), (\"Jun\", \"B\", 1190, True),\n    (\"Jan\", \"C\", 1000, False), (\"Feb\", \"C\", 980, False), (\"Mar\", \"C\", 1040, False),\n    (\"Apr\", \"C\", 1180, False), (\"May\", \"C\", 1220, False), (\"Jun\", \"C\", 1260, False),\n]\n```",
+  "tags": [
+    "code",
+    "debate"
+  ],
   "turns": 8,
   "think": false,
   "max_tokens": 2048,

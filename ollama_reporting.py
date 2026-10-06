@@ -51,7 +51,7 @@ def format_duel_stats(model_stats):
 
 def format_run_summary(run_started, config_path, participants, turns,
                        transcript, model_stats, stop_note, crashed=False,
-                       code_runs=None, log_path=None):
+                       code_runs=None, log_path=None, verdict=None):
     """Build the one-block summary appended to run_results.log after a duel.
 
     Always carries the date/time, config, models, and how many of the
@@ -62,6 +62,7 @@ def format_run_summary(run_started, config_path, participants, turns,
     traceback itself goes to the console); pass the message as stop_note.
     `code_runs` is the run_code tally line, when code running was on, and
     `log_path` the full path of this run's transcript log, when one was kept.
+    `verdict` is the judge's verdict text, when a judge scored the duel.
     """
     bar = "-" * 72
     stamp = run_started.strftime("%Y-%m-%d %H:%M:%S")
@@ -78,6 +79,9 @@ def format_run_summary(run_started, config_path, participants, turns,
     ]
     if code_runs:
         lines.append(code_runs)
+    if verdict:
+        lines.append("Verdict:")
+        lines.extend(verdict.splitlines())
     if crashed:
         lines.append("Result: CRASHED")
         lines.append(stop_note.strip())
@@ -142,7 +146,7 @@ def format_token_stats_line(model_stats):
 
 def notify_duel_done(url, config_path, participants, turns, transcript,
                      run_started, stop_note, crashed, model_stats=None,
-                     code_runs=None, log_path=None):
+                     code_runs=None, log_path=None, verdict=None):
     """POST a short completion notice to ntfy. Best-effort: any failure
     warns on stderr and never fails the run."""
     import socket
@@ -171,6 +175,11 @@ def notify_duel_done(url, config_path, participants, turns, transcript,
         body += "\n" + stats_line
     if code_runs:
         body += "\n" + code_runs
+    if verdict:
+        # The notice stays short: just the declared winner line.
+        winner = next((ln for ln in verdict.splitlines()
+                       if ln.strip().upper().startswith("WINNER:")), None)
+        body += "\n" + (winner.strip() if winner else "Verdict recorded")
     if stop_note and not crashed:
         body += "\n" + stop_note.strip().splitlines()[0][:200]
     try:

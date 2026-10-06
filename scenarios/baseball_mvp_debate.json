@@ -20,5 +20,8 @@
   "temperature": 0.75,
   "think": false,
   "topic": "Debate: who deserves this season's MVP - the WAR leader or the player who carried his team to October? Make your case.",
+  "tags": [
+    "debate"
+  ],
   "turns": 8
 }

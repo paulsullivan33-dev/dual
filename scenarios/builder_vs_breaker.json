@@ -1,6 +1,9 @@
 {
   "host": "http://localhost:11434",
   "topic": "Write parse_duration(text) in Python: it converts duration strings such as '1h30m', '45s', '2h', '1h 5m 10s' and '90m' into a whole number of seconds, and raises ValueError for anything it cannot parse. Put the tests in a run_tests() function that runs every test case even after a failure, prints PASS or FAIL with the input, expected and actual result for each, prints a final 'N passed, M failed' line, and exits with sys.exit(1) if any test failed. Call run_tests() at the bottom of the script. Start with one simple first version in a single code block.",
+  "tags": [
+    "code"
+  ],
   "turns": 10,
   "think": false,
   "max_tokens": 2048,

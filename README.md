@@ -100,6 +100,13 @@ python ollama_duel.py scenarios/
 python ollama_duel.py "scenarios/small_*"
 ```
 
+Scenarios carry topic tags (`debate`, `code`, `game`, `interview`,
+`creative`, `roleplay`, `small`), and a batch can select by tag instead of
+by file name: `python ollama_duel.py scenarios/ --tag game` runs only the
+game-tagged scenarios (repeat `--tag` to match any of several).
+`python ollama_duel.py scenarios/ --list-tags` shows every tag in use and
+how many scenarios carry it.
+
 Before running a supplied scenario, inspect its `models` entries and pull those exact models, or replace them with models available on your server. For example, `duel-example.json` uses both `qwen3:4b` and `qwen3:8b`.
 
 ### Create your own configuration
@@ -146,6 +153,8 @@ The JSON must be an object with exactly two entries in `models`. Each entry requ
 | `run_code` | Top level | Run the last Python code block of every reply after it arrives and show the result to both speakers; defaults to false. See [Running each reply's code](#running-each-replys-code) |
 | `run_code_args` | Top level | Command-line arguments for those runs, as a list of strings, e.g. `["--test"]` |
 | `run_code_timeout` | Top level | Seconds each run may take before it's stopped; defaults to 30 |
+| `tags` | Top level | Optional list of topic tags, e.g. `["game", "code"]`; batch runs can select scenarios with `--tag` |
+| `judge` | Top level | Optional third model that scores the finished duel: a model name like `"qwen3:8b"`, or a dict with `model` plus optional `prompt`, `temperature`, `max_tokens`, `think`, `num_ctx`. The verdict is printed into the log, appended to the run summary, and its `WINNER:` line goes into the ntfy notice. A judge failure is noted but never fails the duel; `--no-judge` skips it for one run |
 | `display` | Top level | Show live duel stats on the Arduino Uno Q's built-in 8x13 LED matrix; defaults to false. Needs `python3-smbus` on the Uno Q. The script runs headless with a warning anywhere the matrix is unreachable, so this is safe to leave on in shared configs |
 | `think` | Top level or model entry | Request and display thinking; defaults to false |
 | `max_tokens` | Top level or model entry | Passed as Ollama's `num_predict`; defaults to 300, or 2048 when thinking is enabled |

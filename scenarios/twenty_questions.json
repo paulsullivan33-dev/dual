@@ -1,6 +1,10 @@
 {
   "host": "http://localhost:11434",
   "topic": "A game of 20 Questions. The Answerer is thinking of an everyday object. The Questioner asks one yes/no question per turn, numbered 'Question N of 20', and may guess at any time ('Is it a ...?'). The Answerer replies with exactly one word -- Yes, No, or Sometimes -- or 'Correct!' for a right guess. After 20 questions without a correct guess, the Answerer wins.",
+  "tags": [
+    "game"
+  ],
+  "judge": "qwen3:8b",
   "turns": 40,
   "think": false,
   "max_tokens": 200,

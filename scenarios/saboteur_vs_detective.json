@@ -1,6 +1,10 @@
 {
   "host": "http://localhost:11434",
   "topic": "A game of hidden bugs. The program below is correct and its tests pass. The Saboteur changes split_bill to add one subtle bug that the existing tests do NOT catch, so the program still passes. The Detective then adds one test that exposes the bug, fixes split_bill, and returns a program where every test passes. Then the Saboteur strikes again. Tests use run_tests(): print PASS or FAIL for each case, print 'N passed, M failed', and exit with sys.exit(1) if any failed.\n\n```python\nimport sys\n\n\ndef split_bill(total_cents, people):\n    \"\"\"Split a bill into whole-cent shares that add up exactly to the total.\n\n    The first (total_cents % people) people pay one cent more than the rest.\n    \"\"\"\n    if people < 1:\n        raise ValueError(\"people must be at least 1\")\n    if total_cents < 0:\n        raise ValueError(\"total_cents must not be negative\")\n    base, extra = divmod(total_cents, people)\n    return [base + 1 if i < extra else base for i in range(people)]\n\n\ndef run_tests():\n    cases = [\n        ((1000, 4), [250, 250, 250, 250]),\n        ((1001, 4), [251, 250, 250, 250]),\n        ((5, 1), [5]),\n    ]\n    failed = 0\n    for args, expected in cases:\n        try:\n            actual = split_bill(*args)\n        except Exception as e:  # report crashes as failures, keep going\n            actual = f\"{type(e).__name__}: {e}\"\n        if actual == expected:\n            print(f\"PASS split_bill{args} == {expected}\")\n        else:\n            failed += 1\n            print(f\"FAIL split_bill{args}: expected {expected}, got {actual}\")\n    print(f\"{len(cases) - failed} passed, {failed} failed\")\n    if failed:\n        sys.exit(1)\n\n\nrun_tests()\n```",
+  "tags": [
+    "game",
+    "code"
+  ],
   "turns": 10,
   "think": false,
   "max_tokens": 2048,

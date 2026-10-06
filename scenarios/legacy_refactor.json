@@ -1,6 +1,9 @@
 {
   "host": "http://localhost:11434",
   "topic": "Refactor this legacy invoice code one small step at a time. The tests in run_tests() at the bottom must keep passing after every step, and they must not be changed or removed; you may add tests.\n\n```python\nimport sys\n\nTAX = 0.08\n\ndef calc(items, c, d):\n    t = 0\n    for i in items:\n        if i[2] == 'book':\n            t = t + i[1] * i[3]\n        elif i[2] == 'food':\n            t = t + i[1] * i[3]\n        else:\n            t = t + i[1] * i[3] + i[1] * i[3] * TAX\n    if c == 'SAVE10':\n        if t > 50:\n            t = t - t * 0.1\n        else:\n            t = t\n    elif c == 'SAVE20':\n        if t > 100:\n            t = t - t * 0.2\n    if d == 'express':\n        t = t + 15\n    elif d == 'standard':\n        if t < 35:\n            t = t + 5\n    return round(t, 2)\n\ndef run_tests():\n    cases = [\n        (([('pen', 2.5, 'office', 4)], None, 'standard'), 15.8),\n        (([('novel', 12.0, 'book', 2), ('apple', 0.5, 'food', 10)], 'SAVE10', 'express'), 44.0),\n        (([('novel', 30.0, 'book', 2)], 'SAVE10', 'pickup'), 54.0),\n        (([('lamp', 60.0, 'home', 2)], 'SAVE20', 'standard'), 103.68),\n        (([], None, 'standard'), 5),\n    ]\n    failed = 0\n    for args, expected in cases:\n        actual = calc(*args)\n        if actual == expected:\n            print(f\"PASS calc{args} == {expected}\")\n        else:\n            failed += 1\n            print(f\"FAIL calc{args}: expected {expected}, got {actual}\")\n    print(f\"{len(cases) - failed} passed, {failed} failed\")\n    if failed:\n        sys.exit(1)\n\n\nrun_tests()\n```",
+  "tags": [
+    "code"
+  ],
   "turns": 10,
   "think": false,
   "max_tokens": 2048,

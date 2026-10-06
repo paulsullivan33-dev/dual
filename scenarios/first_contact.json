@@ -20,5 +20,8 @@
   "temperature": 0.8,
   "think": false,
   "topic": "The first formal session begins. Envoy Zyx, your delegation requested this meeting — what does the Vellari Concordance propose?",
+  "tags": [
+    "roleplay"
+  ],
   "turns": 10
 }

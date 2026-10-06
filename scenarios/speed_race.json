@@ -1,6 +1,9 @@
 {
   "host": "http://localhost:11434",
   "topic": "Speed race: write count_primes(n), which returns how many primes are less than n. The program must first check that count_primes(100) == 25 and count_primes(1_000_000) == 78498, printing PASS or FAIL with the expected and actual value for each and exiting with sys.exit(1) if either fails; then time count_primes(1_000_000) with timeit and print the best of 5 runs in milliseconds. Start with one simple, correct first version in a single code block.",
+  "tags": [
+    "code"
+  ],
   "turns": 10,
   "think": false,
   "max_tokens": 2048,

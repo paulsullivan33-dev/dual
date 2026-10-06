@@ -21,6 +21,9 @@
   "temperature": 0.9,
   "think": false,
   "topic": "AI will save us all",
+  "tags": [
+    "debate"
+  ],
   "turns": 8,
   "log_file": "logs/ai_will_save_us_all.log",
   "timeout": 1500

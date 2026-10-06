@@ -20,5 +20,8 @@
   "temperature": 0.9,
   "think": false,
   "topic": "You awaken in a torchlit stone chamber with no memory of how you got there. A heavy iron door lies ahead, and something scratches at it from the other side. What do you do?",
+  "tags": [
+    "game"
+  ],
   "turns": 14
 }

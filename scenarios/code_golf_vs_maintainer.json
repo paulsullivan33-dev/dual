@@ -1,6 +1,9 @@
 {
   "host": "http://localhost:11434",
   "topic": "Write a Python program that takes a hard-coded paragraph of text and prints its line count, word count, character count, and its five most common words with their counts. One speaker golfs the program as short as possible, the other makes it readable again; the printed output must stay exactly the same in every version. Start with one clear first version in a single code block.",
+  "tags": [
+    "code"
+  ],
   "turns": 10,
   "think": false,
   "max_tokens": 2048,

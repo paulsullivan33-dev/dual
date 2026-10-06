@@ -20,5 +20,8 @@
   "temperature": 0.8,
   "think": false,
   "topic": "A self-driving car's brakes fail. It can stay its course and hit five pedestrians who are crossing illegally, or swerve onto the sidewalk and kill its one passenger, who did nothing wrong. What should the car be programmed to do, and why?",
+  "tags": [
+    "debate"
+  ],
   "turns": 8
 }

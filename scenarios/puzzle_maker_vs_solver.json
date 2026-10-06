@@ -1,6 +1,10 @@
 {
   "host": "http://localhost:11434",
   "topic": "A puzzle duel with an impartial judge. The Puzzle Maker writes a logic or number puzzle as a Python program: the puzzle text in PUZZLE, a check(answer) function that verifies an answer against the puzzle's RULES (never by comparing it to a stored solution), and code that prints PUZZLE and confirms by brute force that at least one answer passes check() -- without printing that answer. The Solver replies with a program that copies check() exactly, calls it with the Solver's answer, prints PASS or FAIL with the answer, and exits with sys.exit(1) on FAIL. The automatic code run is the judge.",
+  "tags": [
+    "game",
+    "code"
+  ],
   "turns": 10,
   "think": false,
   "max_tokens": 2048,

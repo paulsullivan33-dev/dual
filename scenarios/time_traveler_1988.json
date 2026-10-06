@@ -20,5 +20,8 @@
   "temperature": 0.75,
   "think": false,
   "topic": "Okay, start with the basics: what exactly is a smartphone, and why is everyone staring at one?",
+  "tags": [
+    "interview"
+  ],
   "turns": 8
 }

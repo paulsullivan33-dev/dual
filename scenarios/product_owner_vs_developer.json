@@ -1,6 +1,9 @@
 {
   "host": "http://localhost:11434",
   "topic": "Build a command-line to-do list tool in Python. It stores tasks in a todo.json file next to the script and supports 'add <text>', 'list', and 'done <number>' commands via argparse. The Developer writes the first version; after that, the Product Owner adds or changes one requirement per turn and the Developer implements it.",
+  "tags": [
+    "code"
+  ],
   "turns": 10,
   "think": false,
   "max_tokens": 2048,

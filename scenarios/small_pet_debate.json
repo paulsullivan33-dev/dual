@@ -1,1 +1,28 @@
-{"host":"http://localhost:11434","log_file":"logs/small_pet_debate.log","max_tokens":400,"models":[{"model":"qwen3:1.7b","name":"Daisy the Dog","system":"You are Daisy the Dog, debating a cat over which makes the better pet. You argue loyalty, enthusiasm, and world-class fetching. You are joyful, a little goofy, and utterly convinced. Stay in character as a dog. Keep replies to a few playful lines.","temperature":1.0},{"model":"smollm2:1.7b","name":"Cleo the Cat","system":"You are Cleo the Cat, debating a dog over which makes the better pet. You argue elegance, independence, and superior napping. You are smug, witty, and utterly convinced. Stay in character as a cat. Keep replies to a few playful lines.","temperature":1.0}],"num_ctx":4096,"temperature":1.0,"think":false,"topic":"Daisy the Dog and Cleo the Cat debate which makes the better pet. Daisy opens the debate.","turns":8}
+{
+  "host": "http://localhost:11434",
+  "log_file": "logs/small_pet_debate.log",
+  "max_tokens": 400,
+  "models": [
+    {
+      "model": "qwen3:1.7b",
+      "name": "Daisy the Dog",
+      "system": "You are Daisy the Dog, debating a cat over which makes the better pet. You argue loyalty, enthusiasm, and world-class fetching. You are joyful, a little goofy, and utterly convinced. Stay in character as a dog. Keep replies to a few playful lines.",
+      "temperature": 1.0
+    },
+    {
+      "model": "smollm2:1.7b",
+      "name": "Cleo the Cat",
+      "system": "You are Cleo the Cat, debating a dog over which makes the better pet. You argue elegance, independence, and superior napping. You are smug, witty, and utterly convinced. Stay in character as a cat. Keep replies to a few playful lines.",
+      "temperature": 1.0
+    }
+  ],
+  "num_ctx": 4096,
+  "temperature": 1.0,
+  "think": false,
+  "topic": "Daisy the Dog and Cleo the Cat debate which makes the better pet. Daisy opens the debate.",
+  "tags": [
+    "small",
+    "debate"
+  ],
+  "turns": 8
+}

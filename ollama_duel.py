@@ -15,7 +15,7 @@ file serves every machine.
 Globals in the JSON (host, topic, turns, think, max_tokens, temperature,
 num_ctx, repeat_penalty, turn_prompt, first_turn_prompt, history_turns,
 log_file, save_json, timeout, display, dedup_guard, ntfy_url, run_code,
-run_code_args, run_code_timeout) act as defaults; anything set inside a
+run_code_args, run_code_timeout, tags, judge) act as defaults; anything set inside a
 "models" entry overrides the global for that model only (think, max_tokens,
 temperature, num_ctx, repeat_penalty, turn_prompt, first_turn_prompt,
 history_turns only -- the rest are duel-wide). "models" must contain exactly
@@ -62,6 +62,7 @@ from ollama_reporting import (append_run_summary, format_duel_stats, format_run_
                               load_default_ntfy_url, notify_duel_done)
 from ollama_coderun import (DEFAULT_RUN_TIMEOUT, count_runs, describe_run,
                             extract_program, run_program)
+from ollama_judge import normalize_judge, run_judge
 from ollama_profiles import apply_profile, load_profile, profile_scenarios
 
 
@@ -70,7 +71,7 @@ TOP_LEVEL_KEYS = {
     "num_ctx", "repeat_penalty", "turn_prompt", "first_turn_prompt",
     "history_turns", "log_file", "save_json", "timeout",
     "display", "dedup_guard", "results_log", "ntfy_url", "models",
-    "run_code", "run_code_args", "run_code_timeout",
+    "run_code", "run_code_args", "run_code_timeout", "tags", "judge",
 }
 MODEL_KEYS = {"model", "name", "system", "think", "max_tokens", "temperature",
               "num_ctx", "repeat_penalty", "turn_prompt", "first_turn_prompt",
@@ -200,6 +201,14 @@ def load_config(path, profile=None):
     _validate_field(cfg, "dedup_guard", "bool", "top level")
     _validate_field(cfg, "results_log", "str", "top level")
     _validate_field(cfg, "ntfy_url", "str", "top level")
+    tags = cfg.get("tags")
+    if tags is not None and not (
+            isinstance(tags, list) and tags
+            and all(isinstance(t, str) and t.strip() for t in tags)):
+        sys.exit(f'"tags" in top level must be a non-empty list of strings, '
+                 f'got {tags!r}.')
+    cfg["tags"] = tags
+    cfg["judge"] = normalize_judge(cfg.get("judge"))
     for m in models:
         label = f'model "{m["name"]}"'
         _validate_field(m, "think", "bool", label)
@@ -530,6 +539,41 @@ def expand_configs(config_arg):
     return [config_arg]
 
 
+def read_scenario_tags(path):
+    """Best-effort read of a scenario file's "tags" list. Anything
+    unreadable or malformed yields [] -- tag filtering must never fail a
+    batch, it just skips what it can't read."""
+    try:
+        with open(path, encoding="utf-8") as f:
+            tags = json.load(f).get("tags")
+    except (OSError, ValueError):
+        return []
+    if isinstance(tags, list):
+        return [t for t in tags if isinstance(t, str)]
+    return []
+
+
+def configs_matching_tags(configs, wanted):
+    """Keep the scenario files carrying any of the wanted tags.
+
+    No wanted tags -> everything passes through, so single-file runs and
+    untagged batches behave exactly as before.
+    """
+    if not wanted:
+        return list(configs)
+    wanted = set(wanted)
+    return [p for p in configs if wanted & set(read_scenario_tags(p))]
+
+
+def list_all_tags(configs):
+    """Every tag used by the given scenario files, with a count each."""
+    counts = {}
+    for path in configs:
+        for tag in read_scenario_tags(path):
+            counts[tag] = counts.get(tag, 0) + 1
+    return counts
+
+
 def run_batch(configs, config_arg):
     """Run each scenario as its own child process (re-exec of this script).
 
@@ -603,6 +647,14 @@ def main():
                          "Not a sandbox: the code runs with your permissions")
     ap.add_argument("--no-run-code", dest="run_code", action="store_false",
                     help="never run reply code, even if the scenario turns it on")
+    ap.add_argument("--tag", dest="tags", action="append", default=None,
+                    metavar="TAG",
+                    help="in a batch run (directory or glob), only run "
+                         "scenarios tagged with TAG; repeatable, matches any")
+    ap.add_argument("--list-tags", action="store_true",
+                    help="list the tags used by the given scenarios and exit")
+    ap.add_argument("--no-judge", dest="judge", action="store_false",
+                    help="skip the scenario's judge, if it has one")
     ap.add_argument("--dry-run", action="store_true",
                     help="print the exact messages turn 1 would send and exit "
                          "without calling Ollama")
@@ -618,6 +670,20 @@ def main():
         configs = profile_scenarios(profile, args.profile)
     else:
         configs = expand_configs(args.config)
+    if args.list_tags:
+        # Discovery aid: what tags exist in these scenarios, and how many
+        # carry each. Runs before any filtering or dueling.
+        counts = list_all_tags(configs)
+        if not counts:
+            print("No tags found in the given scenarios.")
+        else:
+            width = max(len(t) for t in counts)
+            for tag in sorted(counts):
+                print(f"{tag.ljust(width)}  {counts[tag]}")
+        return
+    configs = configs_matching_tags(configs, args.tags)
+    if not configs:
+        sys.exit(f"No scenarios match tag(s): {', '.join(args.tags or [])}.")
     if len(configs) > 1:
         sys.exit(run_batch(configs, args.config))
 
@@ -757,12 +823,29 @@ def main():
     transcript = []  # list of (speaker_index, text)
     stop_note = None  # why the duel ended early, when it did
     model_stats = {}  # per-model stats; stays empty if the loop never starts
+    verdict = None  # the judge's verdict text, when a judge scores the duel
     run_started = datetime.now()
     try:
         model_stats, matrix, stop_note = run_duel(host, topic, turns, participants, timeout,
                                                   transcript, matrix=matrix,
                                                   dedup_guard=dedup_guard,
                                                   run_code=run_code)
+        judge = cfg.get("judge") if args.judge else None
+        if judge and transcript and stop_note is None:
+            # A third model scores the finished duel. Best-effort: a judge
+            # failure is noted, never fatal -- the duel result stands.
+            print(f"--- JUDGE: {judge['model']} is scoring the duel ---")
+            print()
+            try:
+                verdict = run_judge(host, judge, topic, participants,
+                                    transcript, timeout, call_chat)
+            except OllamaError as e:
+                print(f"--- JUDGE FAILED: {e} ---")
+                print()
+            else:
+                print("=== Verdict ===")
+                print(verdict)
+                print()
         print(f"Done: {len(transcript)} replies.", file=sys.stderr)
         if log_fh is not None:
             print(f"Logging to {log_path}", file=sys.stderr)
@@ -804,7 +887,7 @@ def main():
                                        turns, transcript, model_stats,
                                        crash_note or stop_note,
                                        crashed=crashed, code_runs=code_runs,
-                                       log_path=written_log)
+                                       log_path=written_log, verdict=verdict)
             append_run_summary(results_log_path, entry)
         if ntfy_url:
             # Completion notice: OK, stopped early, or crashed. Best-effort
@@ -815,7 +898,7 @@ def main():
             notify_duel_done(ntfy_url, config_path, participants, turns,
                              transcript, run_started, stop_note, crashed_now,
                              model_stats=model_stats, code_runs=code_runs,
-                             log_path=written_log)
+                             log_path=written_log, verdict=verdict)
 
 
 if __name__ == "__main__":

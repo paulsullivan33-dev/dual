@@ -21,6 +21,9 @@
   "temperature": 0.9,
   "think": false,
   "topic": "Write a murder/crime novel. Write about a paragraph at a time. Take turns and expand on what was previously written. Ecalate the action as it progresses.",
+  "tags": [
+    "creative"
+  ],
   "turns": 20,
   "log_file": "logs/murder-crime-novel.log",
   "timeout": 1500

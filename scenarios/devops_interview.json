@@ -20,5 +20,8 @@
   "temperature": 0.7,
   "think": false,
   "topic": "Let's begin the interview. First question: walk me through how you'd design a CI/CD pipeline for a team deploying microservices to Kubernetes.",
+  "tags": [
+    "interview"
+  ],
   "turns": 8
 }
