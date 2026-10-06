@@ -4,7 +4,9 @@ on: [push]
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    # Python 3.8 is end-of-life and may not be available on the Ubuntu 26
+    # image that ubuntu-latest moves to on 2026-10-19, so pin its job.
+    runs-on: ${{ matrix.python-version == '3.8' && 'ubuntu-24.04' || 'ubuntu-latest' }}
     strategy:
       matrix:
         python-version: ["3.8", "3.9", "3.10"]

@@ -13,6 +13,14 @@ jobs:
         # have slipped through when only Linux ran the tests.
         os: [ubuntu-latest, windows-latest]
         python-version: ["3.8", "3.9", "3.10", "3.14"]
+        # Python 3.8 is end-of-life and may not be available on the Ubuntu 26
+        # image that ubuntu-latest moves to on 2026-10-19, so pin its job.
+        exclude:
+        - os: ubuntu-latest
+          python-version: "3.8"
+        include:
+        - os: ubuntu-24.04
+          python-version: "3.8"
     steps:
     - uses: actions/checkout@v7
     - name: Set up Python ${{ matrix.python-version }}
