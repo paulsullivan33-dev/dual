@@ -1541,6 +1541,106 @@ class RunCodeTests(unittest.TestCase):
                 with self.subTest(bad=bad), self.assertRaises(SystemExit):
                     ollama_duel.load_config(path)
 
+    def test_tally_reaches_run_summary_and_ntfy_notice(self):
+        posted = []
+
+        class FakeResp:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+            def read(self):
+                return b""
+
+        def fake_urlopen(req, timeout=None):
+            posted.append(req.data.decode("utf-8"))
+            return FakeResp()
+
+        def fake_call_chat(host, model, messages, think, options, timeout=None):
+            return "", self.PROGRAM_REPLY, "stop", {
+                "gen_tokens": 10, "gen_s": 1.0, "prompt_tokens": 20, "prompt_s": 0.5}
+
+        import urllib.request
+        with tempfile.TemporaryDirectory() as d:
+            summary = os.path.join(d, "results.log")
+            path = write_json(d, "cfg.json", minimal_config(
+                turns=2, run_code=True, dedup_guard=False, results_log=summary))
+            argv = ["ollama_duel.py", path, "--ntfy-url", "https://ntfy.example/t"]
+            with mock.patch.object(sys, "argv", argv), \
+                 mock.patch.object(ollama_duel, "call_chat", fake_call_chat), \
+                 mock.patch.object(urllib.request, "urlopen", fake_urlopen), \
+                 mock.patch.object(sys, "stdout", io.StringIO()):
+                ollama_duel.main()
+            with open(summary, encoding="utf-8") as f:
+                entry = f.read()
+        tally = "Code runs: 2 ok, 0 failed, 0 timed out, 0 replies without a Python code block"
+        self.assertIn(tally, entry)
+        self.assertLess(entry.index(tally), entry.index("Result: OK"))
+        self.assertEqual(len(posted), 1)
+        self.assertIn(tally, posted[0])
+
+    def test_summary_and_notice_give_the_full_log_path(self):
+        posted = []
+
+        class FakeResp:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+            def read(self):
+                return b""
+
+        def fake_urlopen(req, timeout=None):
+            posted.append(req.data.decode("utf-8"))
+            return FakeResp()
+
+        import urllib.request
+        with tempfile.TemporaryDirectory() as d:
+            summary = os.path.join(d, "results.log")
+            path = write_json(d, "cfg.json", minimal_config(
+                turns=1, results_log=summary, log_file=os.path.join(d, "logs", "duel.log")))
+            argv = ["ollama_duel.py", path, "--ntfy-url", "https://ntfy.example/t"]
+            with mock.patch.object(sys, "argv", argv), \
+                 mock.patch.object(ollama_duel, "call_chat",
+                                   lambda *a, **k: ("", "hi", "stop", {
+                                       "gen_tokens": 1, "gen_s": 1.0,
+                                       "prompt_tokens": 1, "prompt_s": 1.0})), \
+                 mock.patch.object(urllib.request, "urlopen", fake_urlopen), \
+                 mock.patch.object(sys, "stdout", io.StringIO()):
+                ollama_duel.main()
+            written = os.listdir(os.path.join(d, "logs"))
+            self.assertEqual(len(written), 1)
+            full = os.path.abspath(os.path.join(d, "logs", written[0]))
+            with open(summary, encoding="utf-8") as f:
+                entry = f.read()
+        self.assertIn(f"Log: {full}\n", entry)
+        self.assertIn(f"Log: {full}", posted[0])
+
+    def test_no_log_line_without_a_log_file(self):
+        entry = ollama_duel.format_run_summary(
+            __import__("datetime").datetime.now(), "cfg.json",
+            [{"model": "m1", "name": "A"}, {"model": "m2", "name": "B"}],
+            1, [(0, "hi")], {}, None)
+        self.assertNotIn("Log:", entry)
+
+    def test_no_tally_when_code_running_is_off(self):
+        with tempfile.TemporaryDirectory() as d:
+            summary = os.path.join(d, "results.log")
+            path = write_json(d, "cfg.json", minimal_config(turns=1, results_log=summary))
+            with mock.patch.object(sys, "argv", ["ollama_duel.py", path, "--no-ntfy"]), \
+                 mock.patch.object(ollama_duel, "call_chat",
+                                   lambda *a, **k: ("", "hi", "stop", {
+                                       "gen_tokens": 1, "gen_s": 1.0,
+                                       "prompt_tokens": 1, "prompt_s": 1.0})), \
+                 mock.patch.object(sys, "stdout", io.StringIO()):
+                ollama_duel.main()
+            with open(summary, encoding="utf-8") as f:
+                self.assertNotIn("Code runs:", f.read())
+
     def test_profiles_cannot_turn_it_on(self):
         with tempfile.TemporaryDirectory() as d:
             path = write_json(d, "p.json", {"settings": {"run_code": True}})

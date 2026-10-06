@@ -312,7 +312,8 @@ def timestamped_log_path(log_path):
 
 
 def format_run_summary(run_started, config_path, participants, turns,
-                       transcript, model_stats, stop_note, crashed=False):
+                       transcript, model_stats, stop_note, crashed=False,
+                       code_runs=None, log_path=None):
     """Build the one-block summary appended to run_results.log after a duel.
 
     Always carries the date/time, config, models, and how many of the
@@ -321,6 +322,8 @@ def format_run_summary(run_started, config_path, participants, turns,
     batch of runs can be scanned without opening each transcript log.
     `crashed` covers an unexpected exception escaping the turn loop (the
     traceback itself goes to the console); pass the message as stop_note.
+    `code_runs` is the run_code tally line, when code running was on, and
+    `log_path` the full path of this run's transcript log, when one was kept.
     """
     bar = "-" * 72
     stamp = run_started.strftime("%Y-%m-%d %H:%M:%S")
@@ -330,10 +333,13 @@ def format_run_summary(run_started, config_path, participants, turns,
         bar,
         f"Run: {stamp}",
         f"Config: {config_path}",
+        *([f"Log: {log_path}"] if log_path else []),
         f"Models: {a['model']} ({a['name']}) vs {b['model']} ({b['name']})",
         f"Turns: {len(transcript)}/{turns} "
         f"({len(transcript)} replies) in {duration_s:.0f}s",
     ]
+    if code_runs:
+        lines.append(code_runs)
     if crashed:
         lines.append("Result: CRASHED")
         lines.append(stop_note.strip())
@@ -397,7 +403,8 @@ def format_token_stats_line(model_stats):
 
 
 def notify_duel_done(url, config_path, participants, turns, transcript,
-                     run_started, stop_note, crashed, model_stats=None):
+                     run_started, stop_note, crashed, model_stats=None,
+                     code_runs=None, log_path=None):
     """POST a short completion notice to ntfy. Best-effort: any failure
     warns on stderr and never fails the run."""
     import socket
@@ -419,10 +426,13 @@ def notify_duel_done(url, config_path, participants, turns, transcript,
         f"{scenario}: {result}",
         f"{a['model']} ({a['name']}) vs {b['model']} ({b['name']})",
         f"{len(transcript)}/{turns} turns in {duration_s:.0f}s",
+        *([f"Log: {log_path}"] if log_path else []),
     ])
     stats_line = format_token_stats_line(model_stats)
     if stats_line:
         body += "\n" + stats_line
+    if code_runs:
+        body += "\n" + code_runs
     if stop_note and not crashed:
         body += "\n" + stop_note.strip().splitlines()[0][:200]
     try:
@@ -565,7 +575,9 @@ def run_duel(host, topic, turns, participants, timeout, transcript, matrix=None,
     model_stats = {}  # model -> {turns, gen_tokens, gen_s, prompt_tokens, prompt_s, truncated}
     prev_replies = {}  # speaker_index -> normalized text of their last reply
     run_reports = {}  # transcript index -> code-run report (run_code only)
-    run_results = []  # outcome of each code run (run_code only)
+    # Outcome of each code run, kept in run_code so main() can put the tally
+    # in the run summary and ntfy notice.
+    run_results = run_code.setdefault("results", []) if run_code is not None else []
     ctx_levels = [0, 0]  # per speaker: 0 = fine, 1 = nearly-full noted, 2 = full warned
     stop_note = None  # why the loop ended early, when it did
     try:
@@ -928,6 +940,10 @@ def main():
             print()
             print(format_duel_stats(model_stats))
     finally:
+        code_runs = (count_runs(run_code["results"])
+                     if run_code is not None and run_code.get("results") else None)
+        # Full path of the transcript log, for the summary and notice.
+        written_log = os.path.abspath(log_path) if log_fh is not None else None
         # Always write the session-end marker / transcript, even if the
         # duel stopped early on an Ollama error.
         matrix = _matrix(matrix, "show_text", "DONE")
@@ -957,7 +973,8 @@ def main():
             entry = format_run_summary(run_started, config_path, participants,
                                        turns, transcript, model_stats,
                                        crash_note or stop_note,
-                                       crashed=crashed)
+                                       crashed=crashed, code_runs=code_runs,
+                                       log_path=written_log)
             append_run_summary(results_log_path, entry)
         if ntfy_url:
             # Completion notice: OK, stopped early, or crashed. Best-effort
@@ -967,7 +984,8 @@ def main():
             crashed_now = stop_note is None and sys.exc_info()[0] is not None
             notify_duel_done(ntfy_url, config_path, participants, turns,
                              transcript, run_started, stop_note, crashed_now,
-                             model_stats=model_stats)
+                             model_stats=model_stats, code_runs=code_runs,
+                             log_path=written_log)
 
 
 if __name__ == "__main__":

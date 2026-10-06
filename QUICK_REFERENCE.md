@@ -317,7 +317,8 @@ After each reply, its last Python code block is run in a fresh temporary
 folder with a time limit (default 30s) and no keyboard input. The result
 (exit code and the end of the output) goes in the log, and both speakers
 see it on their next turns, so a broken program gets fixed. The log ends
-with a tally: `Code runs: 6 ok, 2 failed, 0 timed out, …`.
+with a tally, `Code runs: 6 ok, 2 failed, 0 timed out, …`, which also goes
+into the `run_results.log` entry and the ntfy notice.
 
 Off unless the scenario sets `"run_code": true` or you pass `--run-code`;
 profiles can't turn it on. **Not a sandbox:** the code runs with your
@@ -342,7 +343,8 @@ python ollama_duel.py scenarios/roast_battle.json --no-results-log
   timestamped file. The scenario's `log_file` sets it; included scenarios
   log to `output/logs/`.
 - **Run summary**: after every run, one block is appended to
-  `output/run_results.log` with date, scenario, models, turns completed,
+  `output/run_results.log` with date, scenario, the full path of that run's
+  transcript log, models, turns completed,
   and either the speed table or the error that stopped it. Handy for
   scanning an overnight batch.
 - **Transcript JSON**: written when the duel ends, even after an early stop.
@@ -362,7 +364,7 @@ To get a notice after every duel without typing the URL, create
 ```
 
 The notice says whether the duel finished, stopped early or crashed, with
-models, turns and token speeds. `--ntfy-url` overrides the scenario's
+models, turns, token speeds and the transcript log's path. `--ntfy-url` overrides the scenario's
 `ntfy_url`, which overrides `~/.dual.conf`; `--no-ntfy` turns it off.
 
 ### Arduino Uno Q LED matrix
