@@ -32,10 +32,10 @@ from ollama_common import (
 )
 from ollama_duel import (
     DEFAULT_TURN_PROMPT,
-    format_duel_stats,
     print_duel_header,
     run_duel,
 )
+from ollama_reporting import format_duel_stats
 
 
 def _build_options(args):

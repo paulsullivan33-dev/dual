@@ -653,6 +653,7 @@ python ollama_bench.py qwen3:1.7b smollm2:1.7b --host http://192.168.1.50:11434 
 | `ollama_common.py` | Shared code: the Ollama API call, text wrapping, transcript saving, the `output/` path rule, setting validation |
 | `ollama_profiles.py` | Loading and applying machine profiles for `ollama_duel.py --profile` |
 | `ollama_coderun.py` | Running each reply's Python code for `ollama_duel.py --run-code` |
+| `ollama_reporting.py` | End-of-duel reporting: the speed table, `run_results.log` entries and ntfy notices |
 | `unoq_matrix.py` | Driver for the Arduino Uno Q's LED matrix, used by `ollama_duel.py --display` |
 
 ---
