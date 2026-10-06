@@ -23,5 +23,6 @@
     }
   ],
   "turn_prompt": "Make {other}'s newest failing test pass with the simplest code change that keeps all earlier tests passing. Then add exactly one new failing test for the next small piece of behavior, and list the complete program.",
-  "timeout": 1500
+  "timeout": 1500,
+  "run_code": true
 }

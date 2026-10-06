@@ -23,5 +23,6 @@
     }
   ],
   "turn_prompt": "Take {other}'s latest version and make exactly one refactoring step that changes the code, not just the comments. Every existing test must still pass and none may be edited or removed. Describe the step in the change-history comment and list the complete program.",
-  "timeout": 1500
+  "timeout": 1500,
+  "run_code": true
 }

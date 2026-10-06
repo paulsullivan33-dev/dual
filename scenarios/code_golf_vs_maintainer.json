@@ -24,5 +24,6 @@
       "turn_prompt": "Golf {other}'s program: make it as short as you can in characters while keeping every feature and the exact same printed output. Report the new character count in the change-history comment and list the complete program."
     }
   ],
-  "timeout": 1500
+  "timeout": 1500,
+  "run_code": true
 }

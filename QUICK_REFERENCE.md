@@ -37,7 +37,8 @@ of the RAG demo, see [RAG_DEMO.md](RAG_DEMO.md).
 | Run a group of scenarios | `python ollama_duel.py "scenarios/small_*.json"` |
 | Run a scenario on the Arduino box's models | `python ollama_duel.py scenarios/factorial.json --profile arduino_q` |
 | Run the whole Arduino set | `python ollama_duel.py --profile arduino_q` |
-| Run each reply's program to catch broken code | `python ollama_duel.py scenarios/factorial.json --run-code` |
+| Run each reply's program to catch broken code | On already in the programming scenarios; elsewhere add `--run-code` |
+| Skip running code for one run | `python ollama_duel.py scenarios/factorial.json --no-run-code` |
 | Save a duel's transcript as JSON | `python ollama_duel.py scenarios/roast_battle.json --save-json roast.json` |
 | Get a phone notification when a duel ends | `python ollama_duel.py scenarios/roast_battle.json --ntfy-url https://ntfy.sh/my-topic` |
 | Have a model write a small project | `python ollama_agent.py --task "a CLI that renames photos by date taken"` |
@@ -287,21 +288,30 @@ scenario's values for both speakers. `scenarios` lists files in
 
 ### Run each reply's code
 
+The programming scenarios (`factorial`, `program_writing*`,
+`builder_vs_breaker`, `mac_builder_vs_breaker`, `tdd_pingpong`,
+`legacy_refactor`, `speed_race`, `code_golf_vs_maintainer`,
+`product_owner_vs_developer`, `tic_tac_toe_game`) already have it on.
+
 ```shell
-# Run the program in every reply of a programming duel
-python ollama_duel.py scenarios/factorial.json --run-code
+# Programming scenarios run each reply's code automatically
+python ollama_duel.py scenarios/factorial.json
+
+# Skip it for one run, e.g. on a slow machine
+python ollama_duel.py scenarios/speed_race.json --no-run-code
+
+# Turn it on for any other scenario
+python ollama_duel.py scenarios/socratic_debugging.json --run-code
 
 # Turn it on in your own scenario file instead, with arguments for each run
 # (e.g. a game's self-test mode) and a time limit:
 #   "run_code": true, "run_code_args": ["--test"], "run_code_timeout": 20
 python ollama_duel.py my_game_duel.json
-
-# Skip it for one run of a scenario that turns it on
-python ollama_duel.py my_game_duel.json --no-run-code
 ```
 
-Interactive programs (like the tic-tac-toe game) wait for keyboard input and
-time out, so give them a test mode and pass it with `run_code_args`.
+Interactive programs wait for keyboard input and time out, so give them a
+test mode and pass it with `run_code_args` (the tic-tac-toe scenario runs
+`--test` this way).
 
 After each reply, its last Python code block is run in a fresh temporary
 folder with a time limit (default 30s) and no keyboard input. The result

@@ -224,7 +224,7 @@ The programming scenarios (`factorial.json`, `program_writing*.json`, and the se
 
 - **Format rules live in each system prompt:** one code block with the complete program, standard library only, and a change-history comment line per version. The system prompt is the only instruction sent on every turn, including the first, so rules placed only in the topic tend to be ignored.
 - **Each speaker has a distinct role** (builder and breaker, golfer and maintainer, and so on) with its own `turn_prompt`, so the exchange doesn't stall into near-identical turns.
-- **Programs check themselves** with `assert` statements or a self-test, so you can tell whether a turn broke anything. Copy a turn's code out of the log and run it, or turn on [`run_code`](#running-each-replys-code) to have `ollama_duel.py` run it after every reply.
+- **Programs check themselves** with `assert` statements or a self-test, so you can tell whether a turn broke anything. These scenarios also turn on [`run_code`](#running-each-replys-code), so `ollama_duel.py` runs each reply's program and shows the result to both speakers (`speed_race.json` allows 120 seconds per run, `tic_tac_toe_game.json` runs its `--test` mode, and `product_owner_vs_developer.json` runs the tool's `list` command). Pass `--no-run-code` to skip it.
 
 Most use `qwen2.5-coder:14b`; `builder_vs_breaker.json`, `speed_race.json`, and `product_owner_vs_developer.json` also use `qwen3:14b` for the second role, so different models catch different mistakes.
 
@@ -254,7 +254,7 @@ playful, concrete roles that stay on track at a few tokens per second.
 
 ### Running each reply's code
 
-For programming scenarios, `ollama_duel.py` can run the program in every reply, so a turn that breaks the code gets noticed and fixed instead of drifting along unseen. It's off unless you turn it on, either with `"run_code": true` in the scenario or `--run-code` for one run. `--no-run-code` forces it off. Profiles can't turn it on.
+For programming scenarios, `ollama_duel.py` can run the program in every reply, so a turn that breaks the code gets noticed and fixed instead of drifting along unseen. It's off unless you turn it on, either with `"run_code": true` in the scenario or `--run-code` for one run. `--no-run-code` forces it off. Profiles can't turn it on. The 11 programming scenarios (`factorial.json`, `program_writing*.json`, and the builder/breaker, TDD, refactoring, speed-race, golf, product-owner and tic-tac-toe duels) have it on; it also applies when they run through a profile such as `arduino_q`.
 
 ```shell
 python ollama_duel.py scenarios/factorial.json --run-code

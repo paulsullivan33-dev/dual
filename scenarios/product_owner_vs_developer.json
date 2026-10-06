@@ -24,5 +24,9 @@
       "turn_prompt": "Look at {other}'s latest program and give exactly one new or changed requirement in two or three plain sentences. Do not write code."
     }
   ],
-  "timeout": 1500
+  "timeout": 1500,
+  "run_code": true,
+  "run_code_args": [
+    "list"
+  ]
 }

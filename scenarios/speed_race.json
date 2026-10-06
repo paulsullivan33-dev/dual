@@ -23,5 +23,7 @@
     }
   ],
   "turn_prompt": "Make {other}'s count_primes faster with one concrete optimization. Keep the correctness asserts and the timeit benchmark exactly as they are. Record the optimization and your expected speedup in the change-history comment, and list the complete program.",
-  "timeout": 1500
+  "timeout": 1500,
+  "run_code": true,
+  "run_code_timeout": 120
 }

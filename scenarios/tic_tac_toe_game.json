@@ -23,5 +23,9 @@
     }
   ],
   "turn_prompt": "Take {other}'s latest version and add exactly one new feature or gameplay improvement, keeping the game playable and self_test() passing. Add tests for the new feature, record it in the change-history comment, and list the complete program.",
-  "timeout": 1500
+  "timeout": 1500,
+  "run_code": true,
+  "run_code_args": [
+    "--test"
+  ]
 }

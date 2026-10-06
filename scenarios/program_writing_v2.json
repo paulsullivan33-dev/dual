@@ -25,5 +25,6 @@
   "turn_prompt": "Take {other}'s latest program as your starting point and keep everything that still works. Make one improvement that changes the code, not just the comments. Add a new entry for it at the top of the change-history comment without removing earlier entries, and list the complete program in a single code block.",
   "turns": 8,
   "log_file": "logs/program-useful.log",
-  "timeout": 1500
+  "timeout": 1500,
+  "run_code": true
 }
