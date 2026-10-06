@@ -4,22 +4,21 @@ on: [push]
 
 jobs:
   build:
-    # Python 3.8 is end-of-life and may not be available on the Ubuntu 26
-    # image that ubuntu-latest moves to on 2026-10-19, so pin its job.
-    runs-on: ${{ matrix.python-version == '3.8' && 'ubuntu-24.04' || 'ubuntu-latest' }}
-    strategy:
-      matrix:
-        python-version: ["3.8", "3.9", "3.10"]
+    runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v7
-    - name: Set up Python ${{ matrix.python-version }}
+    # One job on a current Python with a pinned Pylint, so every run applies
+    # the same rules. (Running on several old Pythons installed a different
+    # Pylint release on each, because newer releases drop old Pythons.)
+    # Python-version compatibility is the Tests workflow's job.
+    - name: Set up Python 3.14
       uses: actions/setup-python@v7
       with:
-        python-version: ${{ matrix.python-version }}
+        python-version: "3.14"
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install pylint
+        pip install pylint==4.1.2
     - name: Analysing the code with pylint
       run: |
         pylint $(git ls-files '*.py')

@@ -381,4 +381,4 @@ The `tests/` directory has stdlib-only `unittest` coverage for the shared helper
 python -m unittest discover -s tests
 ```
 
-On every push and pull request, GitHub Actions runs these tests on Ubuntu and Windows with Python 3.8, 3.9, 3.10, and 3.14 (`.github/workflows/tests.yml`), and runs Pylint over all Python files (`.github/workflows/pylint.yml`).
+On every push and pull request, GitHub Actions runs these tests on Ubuntu and Windows with Python 3.8, 3.9, 3.10, and 3.14 (`.github/workflows/tests.yml`), and runs Pylint 4.1.2 over all Python files on Python 3.14 (`.github/workflows/pylint.yml`). The Pylint version is pinned so results don't change unexpectedly; bump it deliberately.
