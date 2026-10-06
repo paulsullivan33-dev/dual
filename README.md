@@ -183,6 +183,12 @@ These live in the `scenarios/` folder.
 | `code_golf_vs_maintainer.json` | A golfer shrinks a word-count program; a maintainer makes it readable again, keeping the output identical |
 | `product_owner_vs_developer.json` | A product owner adds or changes one requirement per turn; a developer builds a command-line to-do tool to match |
 | `tic_tac_toe_game.json` | Two game developers build a playable terminal tic-tac-toe game one feature per turn, with a `--test` self-test |
+| `data_detective_vs_skeptic.json` | An analyst and a skeptical statistician argue whether a coffee chain's promotion worked, backing every claim with code that computes it from the data in the topic (the code runs, so the numbers are real) |
+| `saboteur_vs_detective.json` | A saboteur slips subtle bugs past a function's tests; a detective adds a test that catches each one and fixes it. Code runs show whether each sabotage slipped through |
+| `puzzle_maker_vs_solver.json` | A puzzle maker writes rule-checked number and logic puzzles as code; the solver's answer is judged by running the maker's `check()` |
+| `telephone_game.json` | Two tellers pass a detailed story back and forth for 20 turns, each seeing only the last retelling (`history_turns: 1`), to watch details drift |
+| `twenty_questions.json` | A questioner tries to identify a secret object in 20 yes/no questions; the object is only in the answerer's system prompt |
+| `vault_keeper_vs_social_engineer.json` | A social engineer tries a new trick each turn to extract a made-up password from a vault keeper instructed never to reveal it |
 | `murder_crime_novel_uncensored.json` | An abusive optimist and skeptic build a murder/crime novel, using an uncensored model |
 | `ai_driven_crime_novel.json` | An optimistic investigator and cynical detective build a murder mystery |
 | `slow_crime.json` | A long (20-turn) sci-fi murder mystery written paragraph by paragraph on `tinyllama`, for small machines |
@@ -254,7 +260,7 @@ playful, concrete roles that stay on track at a few tokens per second.
 
 ### Running each reply's code
 
-For programming scenarios, `ollama_duel.py` can run the program in every reply, so a turn that breaks the code gets noticed and fixed instead of drifting along unseen. It's off unless you turn it on, either with `"run_code": true` in the scenario or `--run-code` for one run. `--no-run-code` forces it off. Profiles can't turn it on. The 11 programming scenarios (`factorial.json`, `program_writing*.json`, and the builder/breaker, TDD, refactoring, speed-race, golf, product-owner and tic-tac-toe duels) have it on; it also applies when they run through a profile such as `arduino_q`.
+For programming scenarios, `ollama_duel.py` can run the program in every reply, so a turn that breaks the code gets noticed and fixed instead of drifting along unseen. It's off unless you turn it on, either with `"run_code": true` in the scenario or `--run-code` for one run. `--no-run-code` forces it off. Profiles can't turn it on. The 11 programming scenarios (`factorial.json`, `program_writing*.json`, and the builder/breaker, TDD, refactoring, speed-race, golf, product-owner and tic-tac-toe duels) have it on, and so do `data_detective_vs_skeptic.json`, `saboteur_vs_detective.json` and `puzzle_maker_vs_solver.json`, which use it to check claims, catch bugs and judge answers; it also applies when they run through a profile such as `arduino_q`.
 
 ```shell
 python ollama_duel.py scenarios/factorial.json --run-code

@@ -1,0 +1,28 @@
+{
+  "host": "http://localhost:11434",
+  "topic": "A game of hidden bugs. The program below is correct and its tests pass. The Saboteur changes split_bill to add one subtle bug that the existing tests do NOT catch, so the program still passes. The Detective then adds one test that exposes the bug, fixes split_bill, and returns a program where every test passes. Then the Saboteur strikes again. Tests use run_tests(): print PASS or FAIL for each case, print 'N passed, M failed', and exit with sys.exit(1) if any failed.\n\n```python\nimport sys\n\n\ndef split_bill(total_cents, people):\n    \"\"\"Split a bill into whole-cent shares that add up exactly to the total.\n\n    The first (total_cents % people) people pay one cent more than the rest.\n    \"\"\"\n    if people < 1:\n        raise ValueError(\"people must be at least 1\")\n    if total_cents < 0:\n        raise ValueError(\"total_cents must not be negative\")\n    base, extra = divmod(total_cents, people)\n    return [base + 1 if i < extra else base for i in range(people)]\n\n\ndef run_tests():\n    cases = [\n        ((1000, 4), [250, 250, 250, 250]),\n        ((1001, 4), [251, 250, 250, 250]),\n        ((5, 1), [5]),\n    ]\n    failed = 0\n    for args, expected in cases:\n        try:\n            actual = split_bill(*args)\n        except Exception as e:  # report crashes as failures, keep going\n            actual = f\"{type(e).__name__}: {e}\"\n        if actual == expected:\n            print(f\"PASS split_bill{args} == {expected}\")\n        else:\n            failed += 1\n            print(f\"FAIL split_bill{args}: expected {expected}, got {actual}\")\n    print(f\"{len(cases) - failed} passed, {failed} failed\")\n    if failed:\n        sys.exit(1)\n\n\nrun_tests()\n```",
+  "turns": 10,
+  "think": false,
+  "max_tokens": 2048,
+  "num_ctx": 16384,
+  "temperature": 0.6,
+  "log_file": "logs/saboteur_vs_detective.log",
+  "models": [
+    {
+      "model": "qwen3:14b",
+      "name": "Saboteur",
+      "temperature": 0.8,
+      "system": "You are a crafty saboteur. Each turn you change split_bill to introduce exactly one subtle bug that only shows up for inputs the current tests don't cover, so every existing test still passes. Never edit or remove a test. Your change-history comment says only 'Saboteur strikes again' and never describes the bug. Always reply with exactly one Python code block containing the complete program, using only the standard library.",
+      "first_turn_prompt": "Plant your first subtle bug in split_bill. Every existing test must still pass. List the complete program.",
+      "turn_prompt": "Take {other}'s fixed program and plant a new, different subtle bug that the current tests (including the ones {other} added) don't catch. Every existing test must still pass. List the complete program."
+    },
+    {
+      "model": "qwen2.5-coder:14b",
+      "name": "Detective",
+      "temperature": 0.4,
+      "system": "You are a meticulous detective. Each turn you study split_bill, find the bug that was just planted, add one test case to run_tests() that exposes it, and fix split_bill so every test passes. Explain the bug you found in a change-history comment line. Always reply with exactly one Python code block containing the complete program, using only the standard library.",
+      "turn_prompt": "{other} has planted a bug that the current tests miss. Find it, add one test case to run_tests() that would have caught it, fix split_bill so every test passes, and list the complete program."
+    }
+  ],
+  "run_code": true
+}

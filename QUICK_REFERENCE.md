@@ -291,7 +291,9 @@ scenario's values for both speakers. `scenarios` lists files in
 The programming scenarios (`factorial`, `program_writing*`,
 `builder_vs_breaker`, `mac_builder_vs_breaker`, `tdd_pingpong`,
 `legacy_refactor`, `speed_race`, `code_golf_vs_maintainer`,
-`product_owner_vs_developer`, `tic_tac_toe_game`) already have it on.
+`product_owner_vs_developer`, `tic_tac_toe_game`) already have it on, as do
+`data_detective_vs_skeptic`, `saboteur_vs_detective` and
+`puzzle_maker_vs_solver`.
 
 ```shell
 # Programming scenarios run each reply's code automatically

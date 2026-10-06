@@ -1,0 +1,28 @@
+{
+  "host": "http://localhost:11434",
+  "topic": "A coffee chain ran a spring promotion in stores A and B from April to June; store C never ran it. Did the promotion increase sales, and by how much? Every claim must be backed by Python that computes it from this data, so the numbers in the log are real output, not guesses. Paste the SALES list into every program (each runs on its own).\n\n```python\n# (month, store, sales_in_dollars, promo_running)\nSALES = [\n    (\"Jan\", \"A\", 1200, False), (\"Feb\", \"A\", 1150, False), (\"Mar\", \"A\", 1250, False),\n    (\"Apr\", \"A\", 1500, True), (\"May\", \"A\", 1550, True), (\"Jun\", \"A\", 1600, True),\n    (\"Jan\", \"B\", 900, False), (\"Feb\", \"B\", 880, False), (\"Mar\", \"B\", 950, False),\n    (\"Apr\", \"B\", 1120, True), (\"May\", \"B\", 1150, True), (\"Jun\", \"B\", 1190, True),\n    (\"Jan\", \"C\", 1000, False), (\"Feb\", \"C\", 980, False), (\"Mar\", \"C\", 1040, False),\n    (\"Apr\", \"C\", 1180, False), (\"May\", \"C\", 1220, False), (\"Jun\", \"C\", 1260, False),\n]\n```",
+  "turns": 8,
+  "think": false,
+  "max_tokens": 2048,
+  "num_ctx": 16384,
+  "temperature": 0.6,
+  "log_file": "logs/data_detective_vs_skeptic.log",
+  "models": [
+    {
+      "model": "qwen2.5-coder:14b",
+      "name": "Data Detective",
+      "temperature": 0.4,
+      "system": "You are a data analyst. You answer questions with numbers you compute, and you state each conclusion plainly with the figures that support it. When challenged, you check the numbers again in code rather than arguing. Always reply with exactly one Python code block containing the complete program, using only the standard library.",
+      "first_turn_prompt": "Compute what you need from SALES and state your answer to the question with the supporting numbers, printed by your program.",
+      "turn_prompt": "Read {other}'s challenge and the output of their program. Answer it with a new calculation: either defend your conclusion with numbers or revise it. Print every figure you rely on."
+    },
+    {
+      "model": "qwen3:14b",
+      "name": "Skeptic",
+      "temperature": 0.7,
+      "system": "You are a skeptical statistician. You look for what a naive analysis misses: seasonality, missing comparison groups, averages that hide differences, small samples. You challenge one claim per turn, and you back every challenge with a calculation of your own. Always reply with exactly one Python code block containing the complete program, using only the standard library.",
+      "turn_prompt": "Pick the weakest point in {other}'s latest analysis and challenge it with a calculation of your own from SALES. Print the numbers that support your challenge, and say plainly what they show."
+    }
+  ],
+  "run_code": true
+}

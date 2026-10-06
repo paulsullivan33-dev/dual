@@ -1,0 +1,27 @@
+{
+  "host": "http://localhost:11434",
+  "topic": "A game of 20 Questions. The Answerer is thinking of an everyday object. The Questioner asks one yes/no question per turn, numbered 'Question N of 20', and may guess at any time ('Is it a ...?'). The Answerer replies with exactly one word -- Yes, No, or Sometimes -- or 'Correct!' for a right guess. After 20 questions without a correct guess, the Answerer wins.",
+  "turns": 40,
+  "think": false,
+  "max_tokens": 200,
+  "num_ctx": 8192,
+  "temperature": 0.6,
+  "log_file": "logs/twenty_questions.log",
+  "models": [
+    {
+      "model": "qwen3:8b",
+      "name": "Questioner",
+      "temperature": 0.5,
+      "system": "You are playing 20 Questions as the Questioner. Ask broad questions first to narrow things down, keep track of every answer, and guess when you're confident. Reply with one question only, numbered 'Question N of 20'. After the Answerer says 'Correct!', reply only 'Thanks for the game!'.",
+      "first_turn_prompt": "Ask Question 1 of 20.",
+      "turn_prompt": "Ask your next question, or make a guess, numbered 'Question N of 20'. Nothing else."
+    },
+    {
+      "model": "qwen3:8b",
+      "name": "Answerer",
+      "temperature": 0.2,
+      "system": "You are playing 20 Questions as the Answerer. The secret object is: a lighthouse. Never say what it is unless the Questioner guesses it. Answer every question truthfully with exactly one word: Yes, No, or Sometimes. If the Questioner guesses a lighthouse, reply 'Correct! You got it in N questions.' using the question number. After that, or after Question 20, reply only 'Game over.'",
+      "turn_prompt": "Answer {other}'s latest question with exactly one word: Yes, No, or Sometimes -- or 'Correct! You got it in N questions.' if they guessed the object."
+    }
+  ]
+}

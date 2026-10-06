@@ -1,0 +1,28 @@
+{
+  "host": "http://localhost:11434",
+  "topic": "A game of telephone. Each turn, retell the story you were just told to the next person, in your own words and at about the same length. Don't add commentary, don't mention that you're retelling, and don't ask questions: just tell the story.",
+  "turns": 20,
+  "think": false,
+  "max_tokens": 600,
+  "num_ctx": 4096,
+  "temperature": 0.6,
+  "log_file": "logs/telephone_game.log",
+  "models": [
+    {
+      "model": "qwen3:4b",
+      "name": "Teller A",
+      "temperature": 0.7,
+      "system": "You are passing a story along in a game of telephone. You only remember what you were just told.",
+      "first_turn_prompt": "Here is the story. Retell it to {other} in your own words, at about the same length:\n\nOn a rainy Tuesday in the port town of Wexley, a retired lighthouse keeper named Odile Marsh found a green glass bottle wedged between two rocks. Inside was a map drawn on the back of a 1962 train ticket, marked with seven red crosses and the words 'not the bell tower'. Her neighbour, a baker called Tomas who kept three grey cats, insisted they follow it that same afternoon. At the fourth cross, under the old fish market, they found only a rusted key with the number 41 stamped on it.",
+      "turn_prompt": "Retell the story {other} just told you, in your own words, at about the same length. Just tell the story."
+    },
+    {
+      "model": "qwen3:8b",
+      "name": "Teller B",
+      "temperature": 0.7,
+      "system": "You are passing a story along in a game of telephone. You only remember what you were just told.",
+      "turn_prompt": "Retell the story {other} just told you, in your own words, at about the same length. Just tell the story."
+    }
+  ],
+  "history_turns": 1
+}
