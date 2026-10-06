@@ -299,7 +299,7 @@ A profile is a JSON object with any of these keys:
 | --- | --- |
 | `description` | Free text for people reading the file |
 | `models` | Exactly two model names: the first replaces the first participant's model, the second the second's |
-| `settings` | Values for `num_ctx`, `think`, `max_tokens`, `temperature`, `repeat_penalty`, `history_turns`, `host`, or `timeout`, forced on both participants (they replace both the scenario's top-level and per-model values) |
+| `settings` | Values for `num_ctx`, `think`, `max_tokens`, `temperature`, `repeat_penalty`, `history_turns`, `host`, `timeout`, or `display`, forced on both participants (they replace both the scenario's top-level and per-model values) |
 | `scenarios` | Scenario file names in `scenarios/` to run when no scenario is given |
 
 `--profile` also accepts a path to a profile file elsewhere. The console header and log show `Profile: <name>` when one is used.

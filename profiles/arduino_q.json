@@ -7,7 +7,8 @@
   "settings": {
     "num_ctx": 4096,
     "think": false,
-    "history_turns": 4
+    "history_turns": 4,
+    "display": true
   },
   "scenarios": [
     "ai_consciousness_debate.json",

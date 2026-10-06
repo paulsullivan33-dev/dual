@@ -21,6 +21,7 @@ PROFILE_SETTING_KINDS = {
     "temperature": ("number", 0), "num_ctx": ("int", 1),
     "repeat_penalty": ("number", 1), "host": ("str", None),
     "timeout": ("number", 1), "history_turns": ("int", 1),
+    "display": ("bool", None),
 }
 
 

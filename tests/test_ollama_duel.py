@@ -1344,6 +1344,7 @@ class ProfileTests(unittest.TestCase):
             {"settings": {"num_ctx": "big"}},            # wrong type
             {"settings": {"num_ctx": 0}},                # below minimum
             {"settings": {"topic": "x"}},                # not a forcible setting
+            {"settings": {"display": "yes"}},            # wrong type
             {"scenarios": "factorial.json"},             # not a list
         ]
         with tempfile.TemporaryDirectory() as d:
@@ -1369,6 +1370,59 @@ class ProfileTests(unittest.TestCase):
         with self.assertRaises(SystemExit) as ctx:
             ollama_duel.profile_scenarios({"models": ["a", "b"]}, "box")
         self.assertIn("lists no", str(ctx.exception.code))
+
+    @staticmethod
+    def _fake_matrix_module(calls):
+        """A stand-in for unoq_matrix that records what the duel asked of
+        the real LED matrix, so tests don't need I2C hardware."""
+        import types
+
+        class DisplayUnavailable(Exception):
+            pass
+
+        class FakeMatrix:
+            def __init__(self):
+                calls.append("constructed")
+
+            def show_text(self, text, *args):
+                calls.append(("show_text", text))
+
+            def progress(self, *args):
+                calls.append("progress")
+
+        module = types.ModuleType("unoq_matrix")
+        module.UnoQMatrix = FakeMatrix
+        module.DisplayUnavailable = DisplayUnavailable
+        return module
+
+    def test_profile_display_true_drives_the_matrix(self):
+        calls = []
+        metrics = {"gen_tokens": 10, "gen_s": 1.0, "prompt_tokens": 20,
+                   "prompt_s": 0.5, "gen_tps": 10.0}
+        with tempfile.TemporaryDirectory() as d:
+            prof = self._profile(d, {"models": ["small-a", "small-b"],
+                                     "settings": {"display": True}})
+            with mock.patch.dict(sys.modules,
+                                 {"unoq_matrix": self._fake_matrix_module(calls)}):
+                run_duel_capturing(minimal_config(turns=2),
+                                   extra_args=["--profile", prof],
+                                   metrics=metrics)
+        self.assertIn("constructed", calls)
+        self.assertIn(("show_text", "DUEL"), calls)
+        self.assertIn("progress", calls)  # one progress update per turn
+        self.assertIn(("show_text", "DONE"), calls)
+
+    def test_no_display_flag_overrides_profile_display(self):
+        calls = []
+        with tempfile.TemporaryDirectory() as d:
+            prof = self._profile(d, {"models": ["small-a", "small-b"],
+                                     "settings": {"display": True}})
+            with mock.patch.dict(sys.modules,
+                                 {"unoq_matrix": self._fake_matrix_module(calls)}):
+                run_duel_capturing(minimal_config(turns=1),
+                                   extra_args=["--profile", prof,
+                                               "--no-display"])
+        self.assertNotIn("constructed", calls)
 
     def test_profile_scenario_list_runs_as_a_batch(self):
         import subprocess
