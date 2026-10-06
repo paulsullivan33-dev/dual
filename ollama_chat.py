@@ -61,7 +61,7 @@ def cmd_chat(args):
     messages = []
     if args.system:
         messages.append({"role": "system", "content": args.system})
-    print(f"Chatting with {args.model} -- blank line, 'quit', or Ctrl-C to exit.\n")
+    print(f"Chatting with {args.model} -- type 'quit', 'exit' or ':q' (or press Ctrl-C) to leave.\n")
     while True:
         try:
             text = input("You: ").strip()
