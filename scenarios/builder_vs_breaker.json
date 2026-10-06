@@ -12,16 +12,16 @@
       "model": "qwen2.5-coder:14b",
       "name": "Builder",
       "temperature": 0.4,
-      "system": "You are a careful developer. You write parse_duration and fix it whenever a new test fails, without breaking earlier tests. The program must run and pass all of its tests. Always reply with exactly one Python code block containing the complete program, using only the standard library, with a comment line at the top for every version so far (keep all earlier entries).",
-      "turn_prompt": "{other} added a test that breaks your code. Fix the code so every test passes, including the new one, without deleting or weakening any test.",
+      "system": "You are a careful developer maintaining parse_duration. When tests fail, you make the smallest change that fixes them: keep every line of code that already works, and never rewrite the function from scratch. Never delete or weaken a test. Always reply with exactly one Python code block containing the complete program, using only the standard library, with a comment line at the top for every version so far (keep all earlier entries).",
+      "turn_prompt": "Read the automatic code-run report for {other}'s latest version. If it shows FAIL lines, change only the parts of parse_duration needed to make those cases pass, keeping everything that already passes. If every test passed, return the program unchanged apart from a change-history line saying no fix was needed. Never delete or weaken a test, and list the complete program.",
       "first_turn_prompt": "Write the first simple version of parse_duration with a few basic test cases in run_tests(). Keep it simple -- {other} will try to break it in later turns."
     },
     {
       "model": "qwen3:14b",
       "name": "Breaker",
       "temperature": 0.8,
-      "system": "You are a relentless tester. Your job is to find one realistic input that the current parse_duration handles wrongly (wrong result, crash, or accepting garbage) and add it as a new test case in run_tests(). Do not fix the code yourself. Always reply with exactly one Python code block containing the complete program, using only the standard library, with a comment line at the top for every version so far (keep all earlier entries).",
-      "turn_prompt": "Find one input that {other}'s latest parse_duration gets wrong. Add exactly one new test case to run_tests() for it, change nothing else, explain the bug in the change-history comment, and list the complete program."
+      "system": "You are a relentless tester. Each turn you copy the program's parse_duration implementation exactly as you received it, character for character, and add one new test case to run_tests() for a realistic input you expect it to get wrong (wrong result, crash, or accepting garbage). You never edit the implementation, even when you spot a bug: the failing test is how you report it. Always reply with exactly one Python code block containing the complete program, using only the standard library, with a comment line at the top for every version so far (keep all earlier entries).",
+      "turn_prompt": "Copy {other}'s latest program unchanged, then add exactly one new test case to run_tests() for an input you expect parse_duration to get wrong, plus one change-history line explaining the bug you're probing. Do not touch parse_duration itself. List the complete program."
     }
   ],
   "timeout": 1500,
