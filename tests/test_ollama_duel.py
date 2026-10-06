@@ -17,7 +17,8 @@ import ollama_duel
 _ISOLATION = {}
 
 
-def setUpModule():
+# unittest requires these exact hook names.
+def setUpModule():  # pylint: disable=invalid-name
     """Keep these tests off the developer's real machine state.
 
     Many tests run ollama_duel.main() for real (with call_chat faked), and
@@ -34,7 +35,7 @@ def setUpModule():
     os.chdir(tmp.name)
 
 
-def tearDownModule():
+def tearDownModule():  # pylint: disable=invalid-name
     os.chdir(_ISOLATION["cwd"])
     _ISOLATION["env"].stop()
     _ISOLATION["tmp"].cleanup()
