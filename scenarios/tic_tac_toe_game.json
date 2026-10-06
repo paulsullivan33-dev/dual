@@ -3,7 +3,7 @@
   "topic": "Build a playable terminal tic-tac-toe game in Python, one feature per turn: for example a board display, move input with validation, win and draw detection, a computer opponent, a smarter opponent, and a replay option. Include a self_test() function with assert tests for the game logic, run when the script is started with --test; otherwise start the game. Start with one simple first version in a single code block.",
   "turns": 10,
   "think": false,
-  "max_tokens": 2048,
+  "max_tokens": 4096,
   "num_ctx": 16384,
   "temperature": 0.5,
   "log_file": "logs/tic_tac_toe_game.log",
