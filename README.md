@@ -150,7 +150,7 @@ The JSON must be an object with exactly two entries in `models`. Each entry requ
 | `first_turn_prompt` | Top level or model entry | Instruction added as the last message on the first turn only, so the opening speaker stays in character instead of script-writing both sides of the debate. Same `{name}`/`{other}` replacement as `turn_prompt`. Defaults to an opening-statement nudge of a few short paragraphs; set to `""` to turn it off |
 | `repeat_penalty` | Top level or model entry | Passed to Ollama if specified; must be at least 1. Values above 1 (e.g. `1.1`–`1.3`) discourage the model from repeating itself; `1` means no penalty |
 
-Model-level `think`, `max_tokens`, `temperature`, `num_ctx`, `repeat_penalty`, `turn_prompt`, and `first_turn_prompt` override their top-level values. The CLI supports `--topic`, `--turns`, `--max-tokens`, `--host`, `--log-file`, `--save-json`, `--results-log`, `--no-results-log`, `--ntfy-url`, `--no-ntfy`, `--timeout`, `--think`, `--no-think`, and `--dry-run`; these override the corresponding configuration values (except `--dry-run`, which prints the exact messages turn 1 would send and exits without calling Ollama). The two thinking flags apply to both participants, and `--max-tokens` sets the per-turn token budget for both participants, overriding per-model and top-level `max_tokens` — handy for longer turns on a fast machine without editing the scenario file. Change model identifiers in JSON; `ollama_duel.py` has no `--model` option.
+Model-level `think`, `max_tokens`, `temperature`, `num_ctx`, `repeat_penalty`, `turn_prompt`, and `first_turn_prompt` override their top-level values. The CLI supports `--profile` (see [Machine profiles](#machine-profiles)), `--topic`, `--turns`, `--max-tokens`, `--host`, `--log-file`, `--save-json`, `--results-log`, `--no-results-log`, `--ntfy-url`, `--no-ntfy`, `--timeout`, `--think`, `--no-think`, and `--dry-run`; these override the corresponding configuration values (except `--dry-run`, which prints the exact messages turn 1 would send and exits without calling Ollama). The two thinking flags apply to both participants, and `--max-tokens` sets the per-turn token budget for both participants, overriding per-model and top-level `max_tokens` — handy for longer turns on a fast machine without editing the scenario file. Change model identifiers in JSON; `ollama_duel.py` has no `--model` option.
 
 Invalid settings (an unrecognized key, wrong type, a `turns`/`max_tokens`/`num_ctx` less than 1, a negative `temperature`, or a `repeat_penalty` below 1) are rejected with an error naming the offending key before any request is sent — a typo like `"temprature"` fails loudly instead of silently falling back to a default.
 
@@ -246,17 +246,29 @@ playful, concrete roles that stay on track at a few tokens per second.
 | `small_movie_ending_rewrite.json` | Competing better endings for *Titanic* |
 | `small_pet_debate.json` | A dog and a cat debate the better pet |
 
-### Machine-specific variants
+### Machine profiles
 
-Two sets of files rerun scenarios from the tables above on smaller models,
-keeping the topic and personas and changing only the models and a few
-generation settings.
+A machine profile adapts any scenario to one machine without copying it: it swaps the two participants' models by position and forces a few generation settings, while the topic, personas and prompts stay as they are. Profiles live in `profiles/`; pass one with `--profile`:
 
-**`arduino_q_*.json`** — one for each of the first 40 scenarios in the
-main table (`duel-example.json` through `baseball_mvp_debate.json`), under
-the same name with an `arduino_q_` prefix. Both participants are swapped to
-`qwen3:1.7b` and `smollm2:1.7b`, thinking is off, and most set `num_ctx` to
-4096. Run the whole set with `python ollama_duel.py "scenarios/arduino_q_*"`.
+```shell
+python ollama_duel.py scenarios/factorial.json --profile arduino_q
+python ollama_duel.py --profile arduino_q
+```
+
+With no scenario, the profile's own scenario list runs as a batch. `profiles/arduino_q.json` is for the Arduino Uno Q duel box (about 3.6 GB of RAM): the first participant runs `qwen3:1.7b` and the second `smollm2:1.7b`, thinking is off (`smollm2` rejects it), and `num_ctx` is 4096 because the box runs out of memory above that. Its list holds 40 scenarios from the main table. It replaces the earlier `arduino_q_*.json` copies, which differed from their originals only in those settings.
+
+A profile is a JSON object with any of these keys:
+
+| Key | Meaning |
+| --- | --- |
+| `description` | Free text for people reading the file |
+| `models` | Exactly two model names: the first replaces the first participant's model, the second the second's |
+| `settings` | Values for `num_ctx`, `think`, `max_tokens`, `temperature`, `repeat_penalty`, `host`, or `timeout`, forced on both participants (they replace both the scenario's top-level and per-model values) |
+| `scenarios` | Scenario file names in `scenarios/` to run when no scenario is given |
+
+`--profile` also accepts a path to a profile file elsewhere. The console header and log show `Profile: <name>` when one is used.
+
+### Smaller-model variants
 
 **`mac_*.json`** — five scenarios on 3–4B models, with different models on
 each side:
@@ -351,7 +363,7 @@ non-thinking models compare fairly. Useful flags: `--iterations`/`-n`,
 - **Long waits:** the novel and debate scenarios allow up to 16,384 tokens per reply. Lower the applicable `max_tokens` values for shorter experiments.
 - **Truncated replies:** generation silently stops when the model's context window fills, so keep `max_tokens` at or below the effective window — the `num_ctx` setting, or the server default when `num_ctx` is unset. Raising `max_tokens` without raising `num_ctx` does not produce longer replies. `ollama_duel.py` prints a warning at startup when a participant's `max_tokens` is larger than its `num_ctx`, or above 4096 with no `num_ctx` set.
 - **Replies loop or repeat phrases:** set `repeat_penalty` to something like `1.1`–`1.3`, at the top level or for just the participant that repeats. Very high values can make wording erratic.
-- **Long conversations lose details:** the scripts resend the transcript without summarizing it, but the model's context capacity still limits what it can use.
+- **Long conversations lose details:** the scripts resend the transcript without summarizing it, but the model's context capacity still limits what it can use. While a duel runs, `ollama_duel.py` notes when a participant's conversation passes 80% of its `num_ctx` and warns when it fills the window (once each per participant, in the console and log), so you can see when early turns, possibly including the topic, start falling out of view. Without a `num_ctx` setting the window is the server's default, which the script can't know, so it stays silent.
 
 For the full command-line help:
 

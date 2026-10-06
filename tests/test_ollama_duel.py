@@ -1271,5 +1271,189 @@ class BatchModeTests(unittest.TestCase):
             with self.assertRaises(KeyboardInterrupt):
                 ollama_duel.run_batch(["a.json", "b.json"], "somedir")
 
+def run_duel_capturing(cfg, extra_args=(), metrics=None, reply="canned reply"):
+    """Like run_duel, but returns (calls, stdout): each call's model and
+    options, and everything main() printed."""
+    calls = []
+    metrics = metrics or {"gen_tokens": 10, "gen_s": 1.0,
+                          "prompt_tokens": 20, "prompt_s": 0.5}
+
+    def fake_call_chat(host, model, messages, think, options, timeout=None):
+        calls.append({"model": model, "think": think, "options": dict(options)})
+        return "", reply, "stop", metrics
+
+    out = io.StringIO()
+    with tempfile.TemporaryDirectory() as d:
+        path = write_json(d, "cfg.json", cfg)
+        argv = ["ollama_duel.py", path, "--no-results-log", "--no-ntfy", *extra_args]
+        with mock.patch.object(sys, "argv", argv), \
+             mock.patch.object(ollama_duel, "call_chat", fake_call_chat), \
+             mock.patch.object(sys, "stdout", out):
+            ollama_duel.main()
+    return calls, out.getvalue()
+
+
+class ProfileTests(unittest.TestCase):
+    """A machine profile adapts any scenario to one machine (models by
+    position plus forced settings), replacing per-machine scenario copies."""
+
+    def _profile(self, d, data, name="box"):
+        return write_json(d, name + ".json", data)
+
+    def test_apply_profile_swaps_models_by_position_and_forces_settings(self):
+        cfg = minimal_config(num_ctx=16384, think=True)
+        cfg["models"][1]["num_ctx"] = 8192  # per-model value must not survive
+        ollama_duel.apply_profile(cfg, {"models": ["small-a", "small-b"],
+                                        "settings": {"num_ctx": 4096, "think": False}})
+        self.assertEqual([m["model"] for m in cfg["models"]], ["small-a", "small-b"])
+        self.assertEqual(cfg["num_ctx"], 4096)
+        self.assertIs(cfg["think"], False)
+        self.assertNotIn("num_ctx", cfg["models"][1])
+        self.assertEqual(cfg["topic"], "test topic")
+
+    def test_unnamed_speaker_is_named_after_profile_model(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = write_json(d, "cfg.json", minimal_config())
+            cfg = ollama_duel.load_config(path, {"models": ["small-a", "small-b"]})
+        self.assertEqual(cfg["models"][0]["name"], "small-a")   # was unnamed
+        self.assertEqual(cfg["models"][1]["name"], "Two")       # keeps its name
+
+    def test_cli_profile_reaches_the_ollama_calls(self):
+        with tempfile.TemporaryDirectory() as d:
+            prof = self._profile(d, {"models": ["small-a", "small-b"],
+                                     "settings": {"num_ctx": 4096, "think": False}})
+            calls, out = run_duel_capturing(
+                minimal_config(turns=2, num_ctx=16384, think=True),
+                extra_args=["--profile", prof])
+        self.assertEqual([c["model"] for c in calls], ["small-a", "small-b"])
+        self.assertTrue(all(c["options"]["num_ctx"] == 4096 for c in calls))
+        self.assertTrue(all(c["think"] is False for c in calls))
+        self.assertIn("Profile: " + prof, out)
+
+    def test_bare_name_is_looked_up_in_profiles_folder(self):
+        self.assertEqual(ollama_duel.profile_path("arduino_q"),
+                         os.path.join(ollama_duel.SCRIPT_DIR, "profiles", "arduino_q.json"))
+        self.assertEqual(ollama_duel.profile_path("x/y.json"), "x/y.json")
+
+    def test_invalid_profiles_exit_before_any_duel(self):
+        bad = [
+            {"modles": ["a", "b"]},                      # unknown key
+            {"models": ["only-one"]},                    # wrong count
+            {"settings": {"num_ctx": "big"}},            # wrong type
+            {"settings": {"num_ctx": 0}},                # below minimum
+            {"settings": {"topic": "x"}},                # not a forcible setting
+            {"scenarios": "factorial.json"},             # not a list
+        ]
+        with tempfile.TemporaryDirectory() as d:
+            for i, data in enumerate(bad):
+                path = self._profile(d, data, name=f"bad{i}")
+                with self.subTest(profile=data), \
+                     mock.patch("sys.stderr", new_callable=io.StringIO):
+                    with self.assertRaises(SystemExit):
+                        ollama_duel.load_profile(path)
+
+    def test_missing_profile_exits(self):
+        with self.assertRaises(SystemExit) as ctx:
+            ollama_duel.load_profile("no_such_profile_here")
+        self.assertIn("Profile not found", str(ctx.exception.code))
+
+    def test_no_scenario_and_no_profile_is_an_error(self):
+        with mock.patch.object(sys, "argv", ["ollama_duel.py"]), \
+             mock.patch("sys.stderr", new_callable=io.StringIO):
+            with self.assertRaises(SystemExit):
+                ollama_duel.main()
+
+    def test_profile_without_scenarios_needs_a_scenario(self):
+        with self.assertRaises(SystemExit) as ctx:
+            ollama_duel.profile_scenarios({"models": ["a", "b"]}, "box")
+        self.assertIn("lists no", str(ctx.exception.code))
+
+    def test_profile_scenario_list_runs_as_a_batch(self):
+        import subprocess
+        ran = []
+
+        def fake_run(cmd, check=False):
+            ran.append(cmd)
+            return mock.Mock(returncode=0)
+
+        profile = {"scenarios": ["factorial.json", "vim_vs_emacs.json"]}
+        with mock.patch.object(ollama_duel, "load_profile", return_value=profile), \
+             mock.patch.object(subprocess, "run", fake_run), \
+             mock.patch.object(sys, "argv", ["ollama_duel.py", "--profile", "box"]), \
+             mock.patch("sys.stderr", new_callable=io.StringIO):
+            with self.assertRaises(SystemExit) as ctx:
+                ollama_duel.main()
+        self.assertEqual(ctx.exception.code, 0)
+        self.assertEqual([os.path.basename(c[2]) for c in ran],
+                         ["factorial.json", "vim_vs_emacs.json"])
+        # Each child run gets the profile too.
+        self.assertTrue(all(c[-2:] == ["--profile", "box"] for c in ran))
+
+
+class ShippedProfilesTests(unittest.TestCase):
+    """Every profile in profiles/ must load, and every scenario it lists
+    must exist and validate with the profile applied."""
+
+    def test_shipped_profiles_and_their_scenarios_are_valid(self):
+        folder = os.path.join(ollama_duel.SCRIPT_DIR, "profiles")
+        names = sorted(f[:-5] for f in os.listdir(folder) if f.endswith(".json"))
+        self.assertIn("arduino_q", names)
+        for name in names:
+            profile = ollama_duel.load_profile(name)
+            for path in ollama_duel.profile_scenarios(profile, name) \
+                    if profile.get("scenarios") else []:
+                with self.subTest(profile=name, scenario=os.path.basename(path)):
+                    cfg = ollama_duel.load_config(path, profile)
+                    for m in cfg["models"]:
+                        max_tokens = m.get("max_tokens", cfg.get("max_tokens"))
+                        num_ctx = m.get("num_ctx", cfg.get("num_ctx"))
+                        if max_tokens and num_ctx:
+                            self.assertLessEqual(max_tokens, num_ctx)
+
+
+class ContextUsageTests(unittest.TestCase):
+    """Warn as a speaker's resent transcript fills its context window."""
+
+    def test_no_note_below_threshold(self):
+        self.assertEqual(ollama_duel.context_usage_note("A", 3000, 4096, 0), (None, 0))
+
+    def test_nearly_full_note_once(self):
+        note, level = ollama_duel.context_usage_note("A", 3500, 4096, 0)
+        self.assertIn("85% full (3500/4096 tokens)", note)
+        self.assertEqual(level, 1)
+        self.assertEqual(ollama_duel.context_usage_note("A", 3600, 4096, level),
+                         (None, 1))
+
+    def test_full_warning_once_even_after_note(self):
+        note, level = ollama_duel.context_usage_note("A", 4100, 4096, 1)
+        self.assertIn("A's context window is full (4100/4096 tokens)", note)
+        self.assertEqual(level, 2)
+        self.assertEqual(ollama_duel.context_usage_note("A", 5000, 4096, level),
+                         (None, 2))
+
+    def test_unknown_window_is_never_reported(self):
+        self.assertEqual(ollama_duel.context_usage_note("A", 99999, None, 0), (None, 0))
+
+    def test_usage_takes_larger_of_reported_and_estimate(self):
+        msgs = [{"role": "user", "content": "x" * 4000}]
+        # Ollama reports only 20 + 10 tokens (cached prefix); text says ~1000.
+        used = ollama_duel.context_tokens_used(
+            msgs, "", {"prompt_tokens": 20, "gen_tokens": 10})
+        self.assertEqual(used, 1000)
+        used = ollama_duel.context_tokens_used(
+            msgs, "", {"prompt_tokens": 3000, "gen_tokens": 100})
+        self.assertEqual(used, 3100)
+
+    def test_duel_prints_each_level_once_per_speaker(self):
+        # Every turn reports 3500 of a 4096 window: one note per speaker.
+        metrics = {"gen_tokens": 100, "gen_s": 1.0, "prompt_tokens": 3400,
+                   "prompt_s": 0.5}
+        _, out = run_duel_capturing(minimal_config(turns=4, num_ctx=4096),
+                                    metrics=metrics)
+        self.assertEqual(out.count("m1's context window is 85% full"), 1)
+        self.assertEqual(out.count("Two's context window is 85% full"), 1)
+        self.assertNotIn("is full", out)
+
+
 if __name__ == "__main__":
     unittest.main()

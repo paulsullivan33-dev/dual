@@ -5,6 +5,12 @@ ollama_duel.py -- two AI models converse with each other, configured from JSON.
 Usage:
     python3 ollama_duel.py duel.json
     python3 ollama_duel.py duel.json --turns 10 --topic "A different question"
+    python3 ollama_duel.py duel.json --profile arduino_q
+    python3 ollama_duel.py --profile arduino_q      (runs the profile's scenario list)
+
+A machine profile (profiles/<name>.json) swaps both speakers' models by
+position and forces settings such as num_ctx and think, so one scenario
+file serves every machine.
 
 Globals in the JSON (host, topic, turns, think, max_tokens, temperature,
 num_ctx, repeat_penalty, turn_prompt, first_turn_prompt, log_file, save_json,
@@ -57,6 +63,21 @@ TOP_LEVEL_KEYS = {
 }
 MODEL_KEYS = {"model", "name", "system", "think", "max_tokens", "temperature",
               "num_ctx", "repeat_penalty", "turn_prompt", "first_turn_prompt"}
+
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# A machine profile (profiles/<name>.json, chosen with --profile) adapts any
+# scenario to one machine: it swaps the two speakers' models by position and
+# forces generation settings, keeping the topic, roles and prompts. It can
+# also list the scenarios that make up that machine's set, which run as a
+# batch when no scenario is given.
+PROFILE_KEYS = {"description", "models", "settings", "scenarios"}
+PROFILE_SETTING_KINDS = {
+    "think": ("bool", None), "max_tokens": ("int", 1),
+    "temperature": ("number", 0), "num_ctx": ("int", 1),
+    "repeat_penalty": ("number", 1), "host": ("str", None),
+    "timeout": ("number", 1),
+}
 
 # Sent as the last message on every turn after the first, to nudge the model
 # to answer the other participant instead of starting a fresh parallel
@@ -162,7 +183,7 @@ def _check_unknown_keys(container, allowed, label):
         )
 
 
-def load_config(path):
+def load_config(path, profile=None):
     try:
         with open(path, encoding="utf-8") as f:
             cfg = json.load(f)
@@ -181,6 +202,11 @@ def load_config(path):
     for m in models:
         if not isinstance(m, dict) or "model" not in m:
             sys.exit('Each model entry needs a "model" key, e.g. "qwen3:4b".')
+    if profile:
+        # Before names default to model ids, so an unnamed speaker is named
+        # after the profile's model, not the one it replaced.
+        apply_profile(cfg, profile)
+    for m in models:
         m.setdefault("name", m["model"])
         _check_unknown_keys(m, MODEL_KEYS, f'model "{m["name"]}"')
 
@@ -211,6 +237,78 @@ def load_config(path):
         _validate_field(m, "turn_prompt", "str", label)
         _validate_field(m, "first_turn_prompt", "str", label)
     return cfg
+
+
+def profile_path(name):
+    """--profile takes a file path, or a bare name looked up as
+    profiles/<name>.json next to this script."""
+    if name.endswith(".json") or "/" in name or os.sep in name:
+        return name
+    return os.path.join(SCRIPT_DIR, "profiles", name + ".json")
+
+
+def load_profile(name):
+    """Read and validate a machine profile, exiting with a clear message
+    on any problem -- before a duel starts, like load_config."""
+    path = profile_path(name)
+    try:
+        with open(path, encoding="utf-8") as f:
+            profile = json.load(f)
+    except FileNotFoundError:
+        sys.exit(f"Profile not found: {path}")
+    except (UnicodeDecodeError, json.JSONDecodeError) as e:
+        sys.exit(f"Invalid profile {path}: {e}")
+    label = f'profile "{name}"'
+    if not isinstance(profile, dict):
+        sys.exit(f"{label} must be a JSON object.")
+    _check_unknown_keys(profile, PROFILE_KEYS, label)
+    models = profile.get("models")
+    if models is not None and (
+            not isinstance(models, list) or len(models) != 2
+            or not all(isinstance(m, str) and m.strip() for m in models)):
+        sys.exit(f'"models" in {label} must list exactly 2 model names.')
+    settings = profile.get("settings", {})
+    if not isinstance(settings, dict):
+        sys.exit(f'"settings" in {label} must be a JSON object.')
+    _check_unknown_keys(settings, set(PROFILE_SETTING_KINDS), f"{label} settings")
+    for key, (kind, minimum) in PROFILE_SETTING_KINDS.items():
+        _validate_field(settings, key, kind, f"{label} settings", minimum=minimum)
+    scenarios = profile.get("scenarios")
+    if scenarios is not None and (
+            not isinstance(scenarios, list)
+            or not all(isinstance(s, str) and s.strip() for s in scenarios)):
+        sys.exit(f'"scenarios" in {label} must be a list of scenario file names.')
+    return profile
+
+
+def apply_profile(cfg, profile):
+    """Adapt a scenario config to a machine profile, in place.
+
+    Each forced setting replaces the top-level value and removes any
+    per-model value, so it holds for both speakers. The profile's models
+    replace the speakers' models by position (first speaker, second
+    speaker). Topic, names, system prompts and turn prompts are untouched.
+    """
+    for key, value in profile.get("settings", {}).items():
+        cfg[key] = value
+        for m in cfg["models"]:
+            m.pop(key, None)
+    for m, model in zip(cfg["models"], profile.get("models") or []):
+        m["model"] = model
+
+
+def profile_scenarios(profile, name):
+    """The scenario files a profile lists, resolved in scenarios/."""
+    paths = [os.path.join(SCRIPT_DIR, "scenarios", s)
+             for s in profile.get("scenarios") or []]
+    if not paths:
+        sys.exit(f'No scenario given, and profile "{name}" lists no "scenarios" '
+                 f"to run. Pass a scenario file, directory or glob.")
+    missing = [p for p in paths if not os.path.isfile(p)]
+    if missing:
+        sys.exit(f'Profile "{name}" lists missing scenario file(s): '
+                 + ", ".join(missing))
+    return paths
 
 
 def first_not_none(*values):
@@ -495,6 +593,43 @@ def print_duel_header(topic, participants, turns):
     print(f"[{a['model']} as {a['name']}] vs [{b['model']} as {b['name']}] -- {turns} turns\n")
 
 
+CONTEXT_NEARLY_FULL = 0.8  # note when a speaker's context window passes 80%
+
+
+def context_tokens_used(messages, reply, metrics):
+    """How much of the context window this turn used: prompt plus reply.
+
+    Ollama's prompt_eval_count can count only the uncached part of a prompt
+    when it reuses a previous request's prefix, so take the larger of its
+    figures and a rough estimate from the text (~4 characters per token).
+    """
+    reported = metrics.get("prompt_tokens", 0) + metrics.get("gen_tokens", 0)
+    chars = sum(len(m.get("content") or "") for m in messages) + len(reply)
+    return max(reported, chars // 4)
+
+
+def context_usage_note(name, used, num_ctx, level):
+    """Warn as a speaker's conversation fills its context window.
+
+    Every turn resends the whole transcript, so it only grows. Returns
+    (message or None, new level); each level is reported once per speaker,
+    so the log isn't flooded. Without an explicit num_ctx the window is the
+    server's default, which isn't known here, so nothing is reported.
+    """
+    if not num_ctx:
+        return None, level
+    pct = round(100 * used / num_ctx)
+    if used >= num_ctx and level < 2:
+        return (f"--- WARNING: {name}'s context window is full ({used}/{num_ctx} "
+                f"tokens). Ollama has to drop older messages to fit, so {name} may "
+                f"lose track of the topic and earlier turns; raise num_ctx or use "
+                f"fewer turns ---"), 2
+    if used >= CONTEXT_NEARLY_FULL * num_ctx and level < 1:
+        return (f"--- NOTE: {name}'s context window is {pct}% full ({used}/{num_ctx} "
+                f"tokens); it fills up as the conversation grows ---"), 1
+    return None, level
+
+
 def run_duel(host, topic, turns, participants, timeout, transcript, matrix=None,
              dedup_guard=True):
     """Run the duel's turn loop, printing each reply as it arrives.
@@ -519,6 +654,7 @@ def run_duel(host, topic, turns, participants, timeout, transcript, matrix=None,
     """
     model_stats = {}  # model -> {turns, gen_tokens, gen_s, prompt_tokens, prompt_s, truncated}
     prev_replies = {}  # speaker_index -> normalized text of their last reply
+    ctx_levels = [0, 0]  # per speaker: 0 = fine, 1 = nearly-full noted, 2 = full warned
     stop_note = None  # why the loop ended early, when it did
     try:
         for turn in range(turns):
@@ -576,6 +712,12 @@ def run_duel(host, topic, turns, participants, timeout, transcript, matrix=None,
                 print(f"--- WARNING: reply hit the max_tokens ceiling "
                       f"({me['options']['num_predict']} tokens) and was truncated; "
                       f"consider raising max_tokens ---")
+                print()
+            used = context_tokens_used(messages, reply, metrics)
+            note, ctx_levels[i] = context_usage_note(
+                me["name"], used, me["options"].get("num_ctx"), ctx_levels[i])
+            if note:
+                print(note)
                 print()
     except KeyboardInterrupt:
         stop_note = "interrupted by user (Ctrl-C)"
@@ -636,9 +778,15 @@ def run_batch(configs, config_arg):
 
 def main():
     ap = argparse.ArgumentParser(description="Two Ollama models converse, configured from a JSON file.")
-    ap.add_argument("config", help="path to a JSON config file, a directory "
+    ap.add_argument("config", nargs="?", default=None,
+                    help="path to a JSON config file, a directory "
                     "(runs every *.json inside it), or a glob pattern "
-                    "(quote it so the shell doesn't expand it first)")
+                    "(quote it so the shell doesn't expand it first); may be "
+                    "omitted with a --profile that lists scenarios")
+    ap.add_argument("--profile", default=None,
+                    help="machine profile: a name in profiles/ (e.g. arduino_q) "
+                         "or a path; swaps the models and forces its settings. "
+                         "Without a scenario, runs the profile's scenario list")
     ap.add_argument("--topic", default=None, help="override the config topic")
     ap.add_argument("--turns", type=int, default=None, help="override the config turn count")
     ap.add_argument("--max-tokens", type=int, default=None,
@@ -676,11 +824,19 @@ def main():
 
     setup_utf8_stdout()
 
-    configs = expand_configs(args.config)
+    profile = load_profile(args.profile) if args.profile else None
+    if args.config is None:
+        if profile is None:
+            ap.error("a scenario (file, directory or glob) or a --profile "
+                     "that lists scenarios is required")
+        configs = profile_scenarios(profile, args.profile)
+    else:
+        configs = expand_configs(args.config)
     if len(configs) > 1:
         sys.exit(run_batch(configs, args.config))
 
-    cfg = load_config(args.config)
+    config_path = configs[0]
+    cfg = load_config(config_path, profile)
     host = first_not_none(args.host, cfg.get("host"), DEFAULT_HOST)
     topic = first_not_none(args.topic, cfg.get("topic"))
     if not topic:
@@ -782,6 +938,8 @@ def main():
                                                DEFAULT_FIRST_TURN_PROMPT),
         })
 
+    if profile:
+        print(f"Profile: {args.profile}")
     print_duel_header(topic, participants, turns)
 
     if args.dry_run:
@@ -837,7 +995,7 @@ def main():
             if crashed:
                 exc = sys.exc_info()[1]
                 crash_note = f"unexpected error: {type(exc).__name__}: {exc}"
-            entry = format_run_summary(run_started, args.config, participants,
+            entry = format_run_summary(run_started, config_path, participants,
                                        turns, transcript, model_stats,
                                        crash_note or stop_note,
                                        crashed=crashed)
@@ -848,7 +1006,7 @@ def main():
             # ntfy URL is configured anywhere. --dry-run returns before
             # the duel, so it never notifies.
             crashed_now = stop_note is None and sys.exc_info()[0] is not None
-            notify_duel_done(ntfy_url, args.config, participants, turns,
+            notify_duel_done(ntfy_url, config_path, participants, turns,
                              transcript, run_started, stop_note, crashed_now,
                              model_stats=model_stats)
 

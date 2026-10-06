@@ -1,0 +1,53 @@
+{
+  "description": "Arduino Uno Q duel box (about 3.6 GB of RAM): small models on both sides, thinking off (smollm2 rejects it), and a 4096-token context window, since the box runs out of memory above that.",
+  "models": [
+    "qwen3:1.7b",
+    "smollm2:1.7b"
+  ],
+  "settings": {
+    "num_ctx": 4096,
+    "think": false
+  },
+  "scenarios": [
+    "ai_consciousness_debate.json",
+    "ai_driven_crime_novel.json",
+    "ai_will_kill_us.json",
+    "ai_will_save_us_all.json",
+    "alien_food_critics.json",
+    "angry_customer_support.json",
+    "architecture_review.json",
+    "baseball_mvp_debate.json",
+    "builder_vs_breaker.json",
+    "code_golf_vs_maintainer.json",
+    "code_review_duel.json",
+    "devops_interview.json",
+    "duel-coder-vs-gemma.json",
+    "duel-coder-vs-gemma2.json",
+    "duel-example.json",
+    "factorial.json",
+    "first_contact.json",
+    "incident_response.json",
+    "legacy_refactor.json",
+    "murder_crime_novel_uncensored.json",
+    "product_owner_vs_developer.json",
+    "program_writing.json",
+    "program_writing_v2.json",
+    "roast_battle.json",
+    "roast_battle_v2.json",
+    "salary_negotiation.json",
+    "salesperson_vs_customer.json",
+    "scope_negotiation.json",
+    "slow_crime.json",
+    "slow_crime_v3.json",
+    "socratic_debugging.json",
+    "speed_race.json",
+    "sports_commentary_duel.json",
+    "tdd_pingpong.json",
+    "text_adventure_dungeon.json",
+    "tic_tac_toe_game.json",
+    "time_traveler_1988.json",
+    "trolley_problem_ethics.json",
+    "tube_vs_modeler.json",
+    "vim_vs_emacs.json"
+  ]
+}
