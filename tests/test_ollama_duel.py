@@ -1190,7 +1190,8 @@ class BatchModeTests(unittest.TestCase):
         d = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, d, True)
         for f in files:
-            open(os.path.join(d, f), "w", encoding="utf-8").write("{}")
+            with open(os.path.join(d, f), "w", encoding="utf-8") as fh:
+                fh.write("{}")
         return d
 
     def test_expand_plain_path_unchanged(self):
