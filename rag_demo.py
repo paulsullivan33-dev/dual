@@ -13,6 +13,11 @@ Two steps:
     python rag_demo.py ask                        (interactive; blank line quits)
     python rag_demo.py ask --question "what is ..."
 
+Re-running `index` rebuilds the database from scratch. Add `--append`
+to grow an existing index instead: files already indexed are replaced,
+everything else is kept (so a second novel, or a new batch of notes,
+doesn't force re-embedding the whole thing).
+
 Everything is stdlib-only: documents + embeddings live in a SQLite file
 (output/rag_demo.db by default), so you can open it and poke at it yourself.
 """
@@ -161,8 +166,32 @@ def cmd_index(args):
     print(f"Found {len(files)} files. Embedding with {args.embed_model} ...")
 
     conn = open_db(args.db)
-    conn.execute("DELETE FROM chunks")
-    conn.execute("DELETE FROM meta")
+    meta_insert = "INSERT INTO meta (key, value) VALUES (?, ?)"
+    if args.append:
+        # Grow the existing index instead of rebuilding it. Files in --docs
+        # that are already indexed have their old chunks removed first, so
+        # re-running is idempotent: no duplicates, changed files replaced.
+        meta = dict(conn.execute("SELECT key, value FROM meta"))
+        if meta.get("embed_model") and meta["embed_model"] != args.embed_model:
+            sys.exit(
+                f"This index was built with '{meta['embed_model']}', not "
+                f"'{args.embed_model}'. Embeddings from different models "
+                "aren't comparable -- re-index without --append to start fresh.")
+        if meta.get("chunk_words") and (
+                meta["chunk_words"] != str(args.chunk_words)
+                or meta["overlap_words"] != str(args.overlap_words)):
+            print(f"Note: existing chunks use {meta['chunk_words']}/"
+                  f"{meta['overlap_words']} (chunk/overlap words); new files "
+                  f"will use {args.chunk_words}/{args.overlap_words}.")
+        conn.executemany("DELETE FROM chunks WHERE source = ?",
+                         [(os.path.relpath(p, docs),) for p in files])
+        conn.commit()
+        meta_insert = "INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)"
+        print(f"Appending {len(files)} files to the existing index "
+              f"({args.db}); old chunks kept.")
+    else:
+        conn.execute("DELETE FROM chunks")
+        conn.execute("DELETE FROM meta")
     total_chunks = 0
     for n, path in enumerate(files, 1):
         text = read_text_file(path)
@@ -179,7 +208,7 @@ def cmd_index(args):
         conn.commit()
         if n % 5 == 0 or n == len(files):
             print(f"  {n}/{len(files)} files, {total_chunks} chunks so far")
-    conn.executemany("INSERT INTO meta (key, value) VALUES (?, ?)", [
+    conn.executemany(meta_insert, [
         ("embed_model", args.embed_model),
         ("chunk_words", str(args.chunk_words)),
         ("overlap_words", str(args.overlap_words)),
@@ -272,6 +301,9 @@ def main(argv=None):
                    help="target words per chunk")
     p.add_argument("--overlap-words", type=int, default=50,
                    help="words overlapping between chunks")
+    p.add_argument("--append", action="store_true",
+                   help="add to the existing index instead of rebuilding it; "
+                        "files already indexed are replaced, others are kept")
 
     p = sub.add_parser("ask", help="ask a question about the indexed docs")
     p.add_argument("--question", default=None,

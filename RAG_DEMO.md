@@ -38,7 +38,17 @@ every chunk with `nomic-embed-text`, and stores it all in `output/rag_demo.db`:
 python rag_demo.py index --docs ./my-docs
 ```
 
-Re-running `index` rebuilds the database from scratch.
+Re-running `index` rebuilds the database from scratch. To add more
+files later without re-embedding everything, use `--append`:
+
+```bash
+python rag_demo.py index --docs ./more-docs --append
+```
+
+It keeps the existing chunks and only (re-)embeds the files in
+`--docs` — handy for dropping a second novel into the same index, or
+picking up new notes. It refuses to mix embedding models, since their
+vectors aren't comparable.
 
 **3. Ask questions.**
 

@@ -614,6 +614,9 @@ python rag_demo.py ask --hide-chunks --question "Who is mentioned most?"
 python rag_demo.py index --docs ./notes --chunk-words 120 --overlap-words 30
 python rag_demo.py index --docs ./manuals --chunk-words 400 --overlap-words 80
 
+# Add more files to an existing index instead of rebuilding it
+python rag_demo.py index --docs ./more-notes --append
+
 # Keep separate indexes for separate collections (note: --db goes BEFORE index/ask)
 python rag_demo.py --db news.db index --docs ./news
 python rag_demo.py --db news.db ask
@@ -637,6 +640,7 @@ embedding model, ask with the same one; the script warns if they differ.
 | `--docs` | `index` | required | Folder of `.txt`/`.md`/`.markdown` files |
 | `--chunk-words` | `index` | 250 | Words per passage |
 | `--overlap-words` | `index` | 50 | Words shared between neighbouring passages, so sentences aren't cut off |
+| `--append` | `index` | off | Add to the existing index; files already indexed are replaced, others kept |
 | `--question` | `ask` | interactive | Ask once and exit |
 | `--chat-model` | `ask` | `qwen3:8b` | Model that writes the answer |
 | `--top-k` | `ask` | 3 | How many passages to give the model |

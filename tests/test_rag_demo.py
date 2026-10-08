@@ -153,5 +153,88 @@ class AskPathTests(unittest.TestCase):
                                "ask", "--question", "q"])
 
 
+class IndexAppendTests(unittest.TestCase):
+    """`index --append` grows an existing index instead of wiping it."""
+
+    def _write(self, docs, name, text):
+        path = os.path.join(docs, name)
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write(text)
+
+    def _sources(self, db):
+        conn = rag_demo.open_db(db)
+        try:
+            return [r[0] for r in conn.execute(
+                "SELECT DISTINCT source FROM chunks ORDER BY source")]
+        finally:
+            conn.close()
+
+    def _chunks_for(self, db, source):
+        conn = rag_demo.open_db(db)
+        try:
+            return [r[0] for r in conn.execute(
+                "SELECT text FROM chunks WHERE source = ? ORDER BY idx",
+                (source,))]
+        finally:
+            conn.close()
+
+    def _run_index(self, db, docs, *extra):
+        with mock.patch.object(rag_demo, "embed_text",
+                               lambda _h, _m, _t: [1.0, 0.0]):
+            rag_demo.main(["--db", db, "index", "--docs", docs, *extra])
+
+    def _setup(self, d):
+        docs = os.path.join(d, "docs")
+        os.mkdir(docs)
+        return docs, os.path.join(d, "t.db")
+
+    def test_append_keeps_old_chunks_and_adds_new_files(self):
+        with tempfile.TemporaryDirectory() as d:
+            docs, db = self._setup(d)
+            self._write(docs, "old.txt", "the old note")
+            self._run_index(db, docs)
+            self._write(docs, "new.txt", "the new note")
+            with redirect_stdout(io.StringIO()):
+                self._run_index(db, docs, "--append")
+            self.assertEqual(self._sources(db), ["new.txt", "old.txt"])
+            self.assertEqual(self._chunks_for(db, "old.txt"), ["the old note"])
+            self.assertEqual(self._chunks_for(db, "new.txt"), ["the new note"])
+
+    def test_append_replaces_changed_file_without_duplicating(self):
+        with tempfile.TemporaryDirectory() as d:
+            docs, db = self._setup(d)
+            self._write(docs, "novel.txt", "chapter one")
+            self._run_index(db, docs)
+            self._write(docs, "novel.txt", "chapter one, revised")
+            with redirect_stdout(io.StringIO()):
+                self._run_index(db, docs, "--append")
+            self.assertEqual(self._chunks_for(db, "novel.txt"),
+                             ["chapter one, revised"])
+
+    def test_append_refuses_a_different_embedding_model(self):
+        with tempfile.TemporaryDirectory() as d:
+            docs, db = self._setup(d)
+            self._write(docs, "a.txt", "hello")
+            self._run_index(db, docs)
+            conn = rag_demo.open_db(db)
+            conn.execute("UPDATE meta SET value='other-model' "
+                         "WHERE key='embed_model'")
+            conn.commit()
+            conn.close()
+            with redirect_stdout(io.StringIO()), \
+                    self.assertRaises(SystemExit):
+                self._run_index(db, docs, "--append")
+
+    def test_plain_index_still_rebuilds_from_scratch(self):
+        with tempfile.TemporaryDirectory() as d:
+            docs, db = self._setup(d)
+            self._write(docs, "gone.txt", "will be wiped")
+            self._run_index(db, docs)
+            os.remove(os.path.join(docs, "gone.txt"))
+            self._write(docs, "kept.txt", "fresh")
+            self._run_index(db, docs)
+            self.assertEqual(self._sources(db), ["kept.txt"])
+
+
 if __name__ == "__main__":
     unittest.main()
