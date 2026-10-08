@@ -64,7 +64,8 @@ Common options for `ollama_chat.py` go after the `chat` or `duel` subcommand:
 | --- | --- | --- |
 | `--host` | Ollama server base URL | `http://localhost:11434` |
 | `--think` | Request thinking and display the separate thinking field when returned | Off |
-| `--max-tokens` | Per-response generation budget | 300, or 2048 with `--think` |
+| `--no-think` | Explicitly disable thinking (the default; saves tokens) | Off |
+| `--max-tokens` | Per-response generation budget | 1024, or 2048 with `--think` |
 | `--timeout` | Per-request timeout, in seconds | 1200 |
 | `--display` / `--no-display` | Show live duel stats (progress bar, tokens/sec) on the Arduino Uno Q's built-in 8x13 LED matrix | Off |
 | `--save-json` | Write the finished transcript to this JSON file | Off |

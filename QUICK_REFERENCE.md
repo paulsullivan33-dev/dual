@@ -132,7 +132,8 @@ subcommand (`ollama_chat.py --think chat` is the same as
 | `--model` | `qwen3:4b` | Model to chat with (`chat` only) |
 | `--system` | none | System prompt: the persona or ground rules for the model (`chat` only) |
 | `--think` | off | Ask for and print the model's reasoning separately from its reply. Thinking uses the same token budget as the reply. Some models reject it (`qwen2.5-coder`, `smollm2`) |
-| `--max-tokens` | 300, or 2048 with `--think` | Most tokens one reply may use; replies stop when they hit it |
+| `--no-think` | (default) | Explicitly disable the model's thinking so no tokens are spent on reasoning |
+| `--max-tokens` | 1024, or 2048 with `--think` | Most tokens one reply may use; replies stop when they hit it |
 | `--temperature` | server default | Randomness: lower is more focused, higher is more varied (around 0.2–1.2 is typical) |
 | `--num-ctx` | server default | Context window in tokens: how much conversation the model can see at once |
 | `--timeout` | 1200 | Seconds to wait for one reply before giving up |

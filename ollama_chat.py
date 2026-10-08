@@ -122,10 +122,14 @@ def main():
     common = argparse.ArgumentParser(add_help=False)
     common.add_argument("--host", default=DEFAULT_HOST,
                         help="Ollama base URL")
-    common.add_argument("--think", action="store_true",
-                        help="show the model's reasoning (thinking) as well as its reply")
+    common.add_argument("--think", dest="think", action="store_true", default=False,
+                        help="enable the model's thinking and show its reasoning "
+                             "as well as its reply")
+    common.add_argument("--no-think", dest="think", action="store_false",
+                        help="explicitly disable the model's thinking (this is "
+                             "the default; saves tokens)")
     common.add_argument("--max-tokens", type=int, default=None,
-                        help="max tokens per response (default 300, or 2048 with --think, "
+                        help="max tokens per response (default 1024, or 2048 with --think, "
                              "since thinking tokens count against the same budget)")
     common.add_argument("--timeout", type=float, default=DEFAULT_TIMEOUT,
                         help=f"per-request timeout in seconds (default {DEFAULT_TIMEOUT})")
@@ -159,10 +163,13 @@ def main():
 
     setup_utf8_stdout()
 
+    # Thinking is off by default: without --think we send "think": false so
+    # the model spends zero tokens on reasoning. (--no-think just spells out
+    # the default explicitly.)
     # Thinking tokens come out of the same num_predict budget as the reply,
     # so --think needs a much larger default or the reply gets starved.
     if args.max_tokens is None:
-        args.max_tokens = 2048 if args.think else 300
+        args.max_tokens = 2048 if args.think else 1024
     if args.mode == "chat":
         cmd_chat(args)
     else:
