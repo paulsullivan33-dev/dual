@@ -178,8 +178,9 @@ def read_epub(path):
     with zipfile.ZipFile(path) as zf:
         try:
             container = ET.fromstring(zf.read("META-INF/container.xml"))
-        except KeyError:
-            raise ValueError("not an EPUB (no META-INF/container.xml)")
+        except KeyError as exc:
+            raise ValueError(
+                "not an EPUB (no META-INF/container.xml)") from exc
         opf_path = next(
             (el.get("full-path") for el in container.iter()
              if local(el.tag) == "rootfile"), None)
@@ -288,6 +289,7 @@ def cmd_index(args):
         # re-running is idempotent: no duplicates, changed files replaced.
         meta = dict(conn.execute("SELECT key, value FROM meta"))
         if meta.get("embed_model") and meta["embed_model"] != args.embed_model:
+            conn.close()  # Windows can't delete an open db file on cleanup
             sys.exit(
                 f"This index was built with '{meta['embed_model']}', not "
                 f"'{args.embed_model}'. Embeddings from different models "

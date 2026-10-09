@@ -142,7 +142,7 @@ class EpubTests(unittest.TestCase):
 <spine><itemref idref="ch1"/><itemref idref="ch2"/></spine></package>"""
         ch1 = ("<html><body><h1>Chapter One</h1>"
                "<p>First &amp; paragraph.</p></body></html>")
-        ch2 = ("<html><body><p>Second chapter text.</p></body></html>")
+        ch2 = "<html><body><p>Second chapter text.</p></body></html>"
         path = os.path.join(d, "book.epub")
         with zipfile.ZipFile(path, "w") as zf:
             zf.writestr("META-INF/container.xml", container)
@@ -164,7 +164,7 @@ class EpubTests(unittest.TestCase):
             path = self._make_epub(d)
             self.assertIn("Chapter One", rag_demo.read_document(path))
             txt = os.path.join(d, "plain.txt")
-            with open(txt, "w") as fh:
+            with open(txt, "w", encoding="utf-8") as fh:
                 fh.write("hello")
             self.assertEqual(rag_demo.read_document(txt), "hello")
 
