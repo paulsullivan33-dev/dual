@@ -95,18 +95,22 @@ def chat(host, model, system, user_text):
 def chunk_text(text, chunk_words=250, overlap_words=50):
     """Split text into word windows with overlap.
 
+    Windows are sliced straight from the original text, so line breaks
+    survive and retrieved chunks stay readable instead of collapsing
+    into one long line.
+
     Overlap matters: without it, an idea that straddles a chunk boundary
     gets cut in half and neither chunk makes sense alone. Try different
     --chunk-words / --overlap-words values and re-index to feel the effect.
     """
-    words = text.split()
-    if not words:
+    matches = list(re.finditer(r"\S+", text))
+    if not matches:
         return []
     chunks, start = [], 0
-    while start < len(words):
-        end = min(start + chunk_words, len(words))
-        chunks.append(" ".join(words[start:end]))
-        if end == len(words):
+    while start < len(matches):
+        end = min(start + chunk_words, len(matches))
+        chunks.append(text[matches[start].start():matches[end - 1].end()])
+        if end == len(matches):
             break
         start = end - overlap_words
     return chunks

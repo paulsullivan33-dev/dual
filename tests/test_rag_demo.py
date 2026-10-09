@@ -51,6 +51,13 @@ class ChunkingTests(unittest.TestCase):
         self.assertEqual(rag_demo.chunk_text(""), [])
         self.assertEqual(rag_demo.chunk_text("   "), [])
 
+    def test_line_breaks_survive_chunking(self):
+        text = "line one\nline two\n\nsecond para here"
+        chunks = rag_demo.chunk_text(text, chunk_words=10, overlap_words=0)
+        self.assertEqual(chunks, [text])
+        self.assertIn("\n", chunks[0])
+        self.assertIn("\n\n", chunks[0])
+
 
 class CosineTests(unittest.TestCase):
     def test_identical_vectors_score_one(self):
