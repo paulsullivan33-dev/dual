@@ -291,3 +291,20 @@ class RunAgentUntaggedTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+class FormatSnapshotTests(unittest.TestCase):
+    def test_empty_mapping_uses_empty_directory_message(self):
+        self.assertEqual(
+            ollama_agent.format_snapshot({}),
+            "The project directory is currently empty.",
+        )
+
+    def test_sorts_paths_and_preserves_empty_file_content(self):
+        self.assertEqual(
+            ollama_agent.format_snapshot({"z.txt": "last", "a.txt": ""}),
+            "Current project files:\n\n--- a.txt ---\n\n\n--- z.txt ---\nlast",
+        )
+
+    def test_non_mapping_input_is_rejected_by_mapping_lookup(self):
+        with self.assertRaises(TypeError):
+            ollama_agent.format_snapshot(["file.txt"])
