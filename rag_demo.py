@@ -71,6 +71,7 @@ def chat(host, model, system, user_text):
     body = ollama_post(host, "/api/chat", {
         "model": model,
         "stream": False,
+        "think": False,
         "messages": [
             {"role": "system", "content": system},
             {"role": "user", "content": user_text},
