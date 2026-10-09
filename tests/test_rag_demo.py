@@ -100,6 +100,10 @@ class ThinkStripTests(unittest.TestCase):
         out = self._chat("<think>line one\nline two</think>\nThe answer.")
         self.assertEqual(out, "The answer.")
 
+    def test_lone_closing_tag_strips_preceding_thinking(self):
+        out = self._chat("Let me think about this.\n</think>\nThe answer.")
+        self.assertEqual(out, "The answer.")
+
     def test_no_think_block_unchanged(self):
         out = self._chat("Just the answer.")
         self.assertEqual(out, "Just the answer.")

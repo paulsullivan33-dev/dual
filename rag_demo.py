@@ -79,10 +79,14 @@ def chat(host, model, system, user_text):
         ],
     })
     content = body["message"]["content"]
-    # qwen3-family models can leak <think>...</think> blocks into the
-    # content even with think:false, so strip them here.
+    # qwen3-family models leak thinking into the content even with
+    # think:false, in two shapes: full <think>...</think> blocks, or
+    # bare thinking prose terminated by a lone </think>. Strip both.
     content = re.sub(r"<think>.*?</think>", "", content,
-                     flags=re.DOTALL).strip()
+                     flags=re.DOTALL)
+    if "</think>" in content:
+        content = content.rsplit("</think>", 1)[-1]
+    content = content.strip()
     return content
 
 
