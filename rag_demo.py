@@ -29,6 +29,7 @@ import os
 import re
 import sqlite3
 import sys
+import textwrap
 import urllib.request
 import urllib.error
 
@@ -88,6 +89,28 @@ def chat(host, model, system, user_text):
         content = content.rsplit("</think>", 1)[-1]
     content = content.strip()
     return content
+
+
+# ---------------------------------------------------------------- display
+
+WRAP_WIDTH = 75
+
+
+def wrap_text(text, width=WRAP_WIDTH):
+    """Word-wrap text for console display, like the duel scripts do.
+
+    Breaks long lines at spaces so words are never split; blank lines
+    and existing paragraph breaks are kept as-is.
+    """
+    lines = []
+    for para in text.split("\n"):
+        if not para.strip():
+            lines.append("")
+        else:
+            lines.extend(textwrap.wrap(para, width=width,
+                                       break_long_words=False,
+                                       break_on_hyphens=False))
+    return "\n".join(lines)
 
 
 # ---------------------------------------------------------------- chunking
@@ -264,7 +287,7 @@ def answer_one(args, chunks):
             print(f"[{n}] {src} chunk {i}  (similarity {cosine(q_emb, emb):.3f})")
         print("------------------------\n")
     prompt = build_prompt(args.question, hits)
-    print(chat(args.host, args.chat_model, SYSTEM_PROMPT, prompt))
+    print(wrap_text(chat(args.host, args.chat_model, SYSTEM_PROMPT, prompt)))
 
 
 def cmd_ask(args):

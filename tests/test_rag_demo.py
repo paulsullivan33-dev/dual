@@ -111,6 +111,27 @@ class ThinkStripTests(unittest.TestCase):
         out = self._chat("Let me think about this.\n</think>\nThe answer.")
         self.assertEqual(out, "The answer.")
 
+
+class WrapTextTests(unittest.TestCase):
+    def test_long_line_wraps_at_word_boundaries(self):
+        text = "word " * 30
+        out = rag_demo.wrap_text(text.strip(), width=20)
+        self.assertGreater(len(out.split("\n")), 1)
+        for line in out.split("\n"):
+            self.assertLessEqual(len(line), 20)
+
+    def test_existing_breaks_preserved(self):
+        text = "para one\n\npara two"
+        self.assertEqual(rag_demo.wrap_text(text), text)
+
+
+class ThinkStripNoTagTests(unittest.TestCase):
+    def _chat(self, content):
+        with mock.patch.object(
+                rag_demo, "ollama_post",
+                return_value={"message": {"content": content}}):
+            return rag_demo.chat("http://x", "m", "sys", "q?")
+
     def test_no_think_block_unchanged(self):
         out = self._chat("Just the answer.")
         self.assertEqual(out, "Just the answer.")
