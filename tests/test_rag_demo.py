@@ -125,6 +125,50 @@ class WrapTextTests(unittest.TestCase):
         self.assertEqual(rag_demo.wrap_text(text), text)
 
 
+class EpubTests(unittest.TestCase):
+    def _make_epub(self, d):
+        import zipfile
+        container = """<?xml version="1.0"?>
+<container version="1.0"
+ xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
+<rootfiles><rootfile full-path="OEBPS/content.opf"
+ media-type="application/oebps-package+xml"/></rootfiles></container>"""
+        opf = """<?xml version="1.0"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0">
+<manifest>
+<item id="ch1" href="ch1.xhtml" media-type="application/xhtml+xml"/>
+<item id="ch2" href="ch2.xhtml" media-type="application/xhtml+xml"/>
+</manifest>
+<spine><itemref idref="ch1"/><itemref idref="ch2"/></spine></package>"""
+        ch1 = ("<html><body><h1>Chapter One</h1>"
+               "<p>First &amp; paragraph.</p></body></html>")
+        ch2 = ("<html><body><p>Second chapter text.</p></body></html>")
+        path = os.path.join(d, "book.epub")
+        with zipfile.ZipFile(path, "w") as zf:
+            zf.writestr("META-INF/container.xml", container)
+            zf.writestr("OEBPS/content.opf", opf)
+            zf.writestr("OEBPS/ch1.xhtml", ch1)
+            zf.writestr("OEBPS/ch2.xhtml", ch2)
+        return path
+
+    def test_epub_text_in_spine_order(self):
+        with tempfile.TemporaryDirectory() as d:
+            text = rag_demo.read_epub(self._make_epub(d))
+        self.assertLess(text.index("Chapter One"), text.index("First"))
+        self.assertLess(text.index("First"), text.index("Second chapter"))
+        self.assertIn("First & paragraph.", text)  # entities unescaped
+        self.assertNotIn("<p>", text)  # markup stripped
+
+    def test_read_document_dispatches_on_epub(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = self._make_epub(d)
+            self.assertIn("Chapter One", rag_demo.read_document(path))
+            txt = os.path.join(d, "plain.txt")
+            with open(txt, "w") as fh:
+                fh.write("hello")
+            self.assertEqual(rag_demo.read_document(txt), "hello")
+
+
 class ThinkStripNoTagTests(unittest.TestCase):
     def _chat(self, content):
         with mock.patch.object(

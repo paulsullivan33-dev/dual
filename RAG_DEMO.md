@@ -27,7 +27,7 @@ a SQLite file, so you can open it and inspect what's actually stored.
 
 ## Steps
 
-**1. Gather some documents.** Put any `.txt` or `.md` files in a folder.
+**1. Gather some documents.** Put any `.txt`, `.md`, or `.epub` files in a folder.
 Your own notes are ideal — the more the model *doesn't* already know,
 the clearer the demo.
 

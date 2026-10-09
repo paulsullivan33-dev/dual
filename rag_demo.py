@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """rag_demo.py -- a tiny retrieval-augmented generation (RAG) playground.
 
-Point it at a folder of your own .txt/.md files, ask questions, and watch
+Point it at a folder of your own .txt/.md/.epub files, ask questions, and watch
 a local model answer from YOUR documents instead of its training memory.
 
 Prerequisites: Ollama running locally, plus two models --
@@ -144,6 +144,83 @@ def read_text_file(path):
         return fh.read()
 
 
+def read_epub(path):
+    """Extract readable text from an EPUB, in spine (reading) order.
+
+    Stdlib only: an .epub is a zip; META-INF/container.xml points at
+    the .opf package file, whose <spine> lists the content documents
+    in order. Markup is stripped; block elements become line breaks.
+    """
+    import zipfile
+    import xml.etree.ElementTree as ET
+    from html.parser import HTMLParser
+    from html import unescape
+
+    def local(tag):
+        return tag.rsplit("}", 1)[-1]
+
+    class TextExtractor(HTMLParser):
+        BLOCKS = {"p", "h1", "h2", "h3", "h4", "h5", "h6", "div", "li",
+                  "blockquote", "br", "hr", "tr", "title", "section",
+                  "article"}
+
+        def __init__(self):
+            super().__init__()
+            self.parts = []
+
+        def handle_starttag(self, tag, _attrs):
+            if local(tag) in self.BLOCKS:
+                self.parts.append("\n")
+
+        def handle_data(self, data):
+            self.parts.append(data)
+
+    with zipfile.ZipFile(path) as zf:
+        try:
+            container = ET.fromstring(zf.read("META-INF/container.xml"))
+        except KeyError:
+            raise ValueError("not an EPUB (no META-INF/container.xml)")
+        opf_path = next(
+            (el.get("full-path") for el in container.iter()
+             if local(el.tag) == "rootfile"), None)
+        if not opf_path:
+            raise ValueError("no rootfile in container.xml")
+        opf = ET.fromstring(zf.read(opf_path))
+        base = opf_path.rsplit("/", 1)[0] + "/" if "/" in opf_path else ""
+        manifest, spine = {}, []
+        for el in opf.iter():
+            name = local(el.tag)
+            if name == "item":
+                manifest[el.get("id")] = el.get("href")
+            elif name == "itemref":
+                spine.append(el.get("idref"))
+        docs = []
+        for idref in spine:
+            href = manifest.get(idref)
+            if not href:
+                continue
+            try:
+                raw = zf.read(base + href).decode("utf-8", errors="replace")
+            except KeyError:
+                continue
+            ex = TextExtractor()
+            ex.feed(raw)
+            ex.close()
+            text = unescape("".join(ex.parts))
+            text = re.sub(r"[ \t]+", " ", text)
+            text = re.sub(r"\n{3,}", "\n\n", text).strip()
+            if text:
+                docs.append(text)
+    return "\n\n".join(docs)
+
+
+def read_document(path):
+    """Read a supported document file as plain text."""
+    if path.lower().endswith(".epub"):
+        return read_epub(path)
+    return read_text_file(path)
+
+
 # ---------------------------------------------------------------- database
 
 SCHEMA = """
@@ -197,10 +274,10 @@ def cmd_index(args):
         os.path.join(root, f)
         for root, _, names in os.walk(docs)
         for f in names
-        if f.lower().endswith((".txt", ".md", ".markdown"))
+        if f.lower().endswith((".txt", ".md", ".markdown", ".epub"))
     )
     if not files:
-        sys.exit(f"No .txt/.md files found under {docs}")
+        sys.exit(f"No .txt/.md/.epub files found under {docs}")
     print(f"Found {len(files)} files. Embedding with {args.embed_model} ...")
 
     conn = open_db(args.db)
@@ -232,9 +309,13 @@ def cmd_index(args):
         conn.execute("DELETE FROM meta")
     total_chunks = 0
     for n, path in enumerate(files, 1):
-        text = read_text_file(path)
-        chunks = chunk_text(text, args.chunk_words, args.overlap_words)
         rel = os.path.relpath(path, docs)
+        try:
+            text = read_document(path)
+        except Exception as e:  # one bad file shouldn't kill the run
+            print(f"  skipping {rel}: {e}")
+            continue
+        chunks = chunk_text(text, args.chunk_words, args.overlap_words)
         rows = []
         for i, c in enumerate(chunks):
             emb = embed_text(args.host, args.embed_model, c)
@@ -333,7 +414,7 @@ def main(argv=None):
                     help="Ollama embedding model")
     sub = ap.add_subparsers(dest="cmd", required=True)
 
-    p = sub.add_parser("index", help="embed a folder of .txt/.md files")
+    p = sub.add_parser("index", help="embed a folder of .txt/.md/.epub files")
     p.add_argument("--docs", required=True, help="folder of documents")
     p.add_argument("--chunk-words", type=int, default=250,
                    help="target words per chunk")
