@@ -85,6 +85,33 @@ class PromptTests(unittest.TestCase):
         self.assertIn("Question: q?", prompt)
 
 
+class ThinkStripTests(unittest.TestCase):
+    def _chat(self, content):
+        with mock.patch.object(
+                rag_demo, "ollama_post",
+                return_value={"message": {"content": content}}):
+            return rag_demo.chat("http://x", "m", "sys", "q?")
+
+    def test_think_block_stripped(self):
+        out = self._chat("<think>reasoning here</think>The answer.")
+        self.assertEqual(out, "The answer.")
+
+    def test_multiline_think_block_stripped(self):
+        out = self._chat("<think>line one\nline two</think>\nThe answer.")
+        self.assertEqual(out, "The answer.")
+
+    def test_no_think_block_unchanged(self):
+        out = self._chat("Just the answer.")
+        self.assertEqual(out, "Just the answer.")
+
+    def test_think_false_sent_to_ollama(self):
+        with mock.patch.object(
+                rag_demo, "ollama_post",
+                return_value={"message": {"content": "x"}}) as m:
+            rag_demo.chat("http://x", "m", "sys", "q?")
+        self.assertFalse(m.call_args[0][2]["think"])
+
+
 class DatabaseTests(unittest.TestCase):
     def test_chunk_and_embedding_round_trip(self):
         with tempfile.TemporaryDirectory() as d:

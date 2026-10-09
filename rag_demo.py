@@ -26,6 +26,7 @@ import argparse
 import json
 import math
 import os
+import re
 import sqlite3
 import sys
 import urllib.request
@@ -77,7 +78,12 @@ def chat(host, model, system, user_text):
             {"role": "user", "content": user_text},
         ],
     })
-    return body["message"]["content"]
+    content = body["message"]["content"]
+    # qwen3-family models can leak <think>...</think> blocks into the
+    # content even with think:false, so strip them here.
+    content = re.sub(r"<think>.*?</think>", "", content,
+                     flags=re.DOTALL).strip()
+    return content
 
 
 # ---------------------------------------------------------------- chunking
