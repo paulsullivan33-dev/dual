@@ -2075,5 +2075,47 @@ class ThermalGuardTest(unittest.TestCase):
             ollama_duel.thermal_pause_if_hot(None, "http://x", 80.0, 70.0)
 
 
+class CpuTempTest(unittest.TestCase):
+    def test_read_temps_parses_zones(self):
+        zones = ["/sys/class/thermal/thermal_zone0/temp",
+                 "/sys/class/thermal/thermal_zone1/temp"]
+
+        def fake_open(path, *args, **kwargs):
+            data = "54200\n" if "zone0" in path else "48100\n"
+            return mock.mock_open(read_data=data)()
+
+        with mock.patch("cpu_temp.glob.glob", return_value=zones), \
+             mock.patch("builtins.open", fake_open):
+            import cpu_temp
+            temps = cpu_temp.read_temps()
+        self.assertAlmostEqual(temps[zones[0]], 54.2)
+        self.assertAlmostEqual(temps[zones[1]], 48.1)
+
+    def test_read_temps_empty_when_no_zones(self):
+        with mock.patch("cpu_temp.glob.glob", return_value=[]):
+            import cpu_temp
+            self.assertEqual(cpu_temp.read_temps(), {})
+
+    def test_main_reports_no_sensor(self):
+        with mock.patch("cpu_temp.read_temps", return_value={}), \
+             mock.patch("cpu_temp.socket.gethostname",
+                        return_value="testbox"):
+            import cpu_temp
+            with mock.patch("sys.stderr", new=io.StringIO()) as err:
+                self.assertEqual(cpu_temp.main(), 1)
+            self.assertIn("testbox", err.getvalue())
+            self.assertIn("no readable", err.getvalue())
+
+    def test_main_prints_cpu_temp(self):
+        temps = {"/sys/class/thermal/thermal_zone0/temp": 54.2}
+        with mock.patch("cpu_temp.read_temps", return_value=temps), \
+             mock.patch("cpu_temp.socket.gethostname",
+                        return_value="testbox"):
+            import cpu_temp
+            with mock.patch("sys.stdout", new=io.StringIO()) as out:
+                self.assertEqual(cpu_temp.main(), 0)
+            self.assertIn("testbox: CPU temp 54.2C", out.getvalue())
+
+
 if __name__ == "__main__":
     unittest.main()
