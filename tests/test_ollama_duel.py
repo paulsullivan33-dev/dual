@@ -1354,6 +1354,13 @@ class ProfileTests(unittest.TestCase):
                          os.path.join(ollama_profiles.SCRIPT_DIR, "profiles", "arduino_q.json"))
         self.assertEqual(ollama_profiles.profile_path("x/y.json"), "x/y.json")
 
+    def test_arduino_q_profile_carries_thermal_guard(self):
+        profile = ollama_profiles.load_profile("arduino_q")
+        settings = profile["settings"]
+        self.assertTrue(settings["temp_guard"])
+        self.assertEqual(settings["max_temp"], 80)
+        self.assertEqual(settings["resume_temp"], 70)
+
     def test_invalid_profiles_exit_before_any_duel(self):
         bad = [
             {"modles": ["a", "b"]},                      # unknown key

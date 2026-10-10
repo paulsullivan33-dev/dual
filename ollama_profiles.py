@@ -22,6 +22,8 @@ PROFILE_SETTING_KINDS = {
     "repeat_penalty": ("number", 1), "host": ("str", None),
     "timeout": ("number", 1), "history_turns": ("int", 1),
     "display": ("bool", None),
+    "temp_guard": ("bool", None),
+    "max_temp": ("number", 1), "resume_temp": ("number", 1),
 }
 
 

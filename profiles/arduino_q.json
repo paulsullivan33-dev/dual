@@ -8,7 +8,10 @@
     "num_ctx": 4096,
     "think": false,
     "history_turns": 4,
-    "display": true
+    "display": true,
+    "temp_guard": true,
+    "max_temp": 80,
+    "resume_temp": 70
   },
   "scenarios": [
     "ai_consciousness_debate.json",
