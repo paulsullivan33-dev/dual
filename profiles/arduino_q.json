@@ -1,5 +1,5 @@
 {
-  "description": "Arduino Uno Q duel box (about 3.6 GB of RAM): small models on both sides, thinking off (smollm2 rejects it), and a 4096-token context window, since the box runs out of memory above that. Each turn sends only the last 4 replies, so long duels stay inside that window.",
+  "description": "Small-board duel profile (Arduino Uno Q and Raspberry Pi 4): small models on both sides, thinking off (smollm2 rejects it), and a 4096-token context window, since the boards run out of memory above that. Each turn sends only the last 4 replies, so long duels stay inside that window. The thermal guard pauses duels at 80C and resumes at 70C.",
   "models": [
     "qwen3:1.7b",
     "smollm2:1.7b"
