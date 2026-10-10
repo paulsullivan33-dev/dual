@@ -87,6 +87,15 @@ def test_show_text_scrolls_when_too_long():
     assert first[0] == 0x00 and last[-1] == 0x00  # padded scroll in/out
 
 
+def test_show_text_no_scroll_stays_on_screen():
+    bus = FakeBus()
+    m = UnoQMatrix(bus_obj=bus)
+    bus.writes.clear()
+    m.show_text("TURN 12 OF 24", scroll=False)
+    assert len(bus.writes) == 1  # one frame, left on screen
+    assert bus.last_frame == UnoQMatrix.render_text("TURN 12 OF 24")[:COLS]
+
+
 def test_progress_bar_math():
     bus = FakeBus()
     m = UnoQMatrix(bus_obj=bus)

@@ -292,13 +292,13 @@ def timestamped_log_path(log_path):
     return os.path.join(directory, f"{stamp}-{base}")
 
 
-def _matrix(matrix, method, *args):
+def _matrix(matrix, method, *args, **kwargs):
     """Best-effort LED matrix update. Returns the matrix, or None if the
     display died mid-duel (the duel itself continues either way)."""
     if matrix is None:
         return None
     try:
-        getattr(matrix, method)(*args)
+        getattr(matrix, method)(*args, **kwargs)
     except Exception as e:  # DisplayUnavailable or anything unexpected
         print(f"LED matrix lost ({e}); continuing without display.",
               file=sys.stderr)
@@ -493,7 +493,9 @@ def run_duel(host, topic, turns, participants, timeout, transcript, matrix=None,
 
             print("  (waiting for reply...)", file=sys.stderr, flush=True)
             thermal_pause_if_hot(matrix, ntfy_url, max_temp, resume_temp)
-            matrix = _matrix(matrix, "show_text", f"{turn + 1}/{turns}")
+            # Bare turn number, static: "4/10" is 23 columns on a 13-column
+            # display, so it would scroll off and leave the screen blank.
+            matrix = _matrix(matrix, "show_text", str(turn + 1), scroll=False)
             thinking, reply, done_reason, metrics = call_chat(host, me["model"], messages,
                                                              me["think"], me["options"],
                                                              timeout=timeout)

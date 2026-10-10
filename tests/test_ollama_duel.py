@@ -446,7 +446,7 @@ class MatrixSpeedTests(unittest.TestCase):
         shown = []
 
         class FakeMatrix:
-            def show_text(self, text):
+            def show_text(self, text, *args, **kwargs):
                 shown.append(text)
 
             def progress(self, done, total):
@@ -1408,7 +1408,7 @@ class ProfileTests(unittest.TestCase):
             def __init__(self):
                 calls.append("constructed")
 
-            def show_text(self, text, *args):
+            def show_text(self, text, *args, **kwargs):
                 calls.append(("show_text", text))
 
             def progress(self, *args):
@@ -1438,9 +1438,8 @@ class ProfileTests(unittest.TestCase):
                         f"expected a 'DUEL: <scenario>' banner, got {banners}")
         turn_texts = [c[1] for c in calls
                       if isinstance(c, tuple) and c[0] == "show_text"
-                      and len(c[1].split("/")) == 2
-                      and all(p.isdigit() for p in c[1].split("/"))]
-        self.assertEqual(turn_texts, ["1/2", "2/2"])  # one turn number per turn
+                      and c[1].isdigit()]
+        self.assertEqual(turn_texts, ["1", "2"])  # one turn number per turn
         self.assertIn(("show_text", "DONE"), calls)
 
     def test_no_display_flag_overrides_profile_display(self):

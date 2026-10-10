@@ -153,11 +153,12 @@ class UnoQMatrix:
             cols.pop()  # no trailing space
         return cols
 
-    def show_text(self, text, scroll_delay=0.1):
+    def show_text(self, text, scroll_delay=0.1, scroll=True):
         """Show text: static if it fits in 13 columns, otherwise one scroll
-        pass across the display."""
+        pass across the display. With scroll=False the text is written once
+        and stays on screen (anything past 13 columns is cut off)."""
         cols = self.render_text(text)
-        if len(cols) <= COLS:
+        if not scroll or len(cols) <= COLS:
             self._write(cols)
             return
         pad = [0x00] * COLS
