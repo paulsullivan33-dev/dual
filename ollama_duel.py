@@ -493,7 +493,7 @@ def run_duel(host, topic, turns, participants, timeout, transcript, matrix=None,
 
             print("  (waiting for reply...)", file=sys.stderr, flush=True)
             thermal_pause_if_hot(matrix, ntfy_url, max_temp, resume_temp)
-            matrix = _matrix(matrix, "progress", turn, turns)
+            matrix = _matrix(matrix, "show_text", f"{turn + 1}/{turns}")
             thinking, reply, done_reason, metrics = call_chat(host, me["model"], messages,
                                                              me["think"], me["options"],
                                                              timeout=timeout)

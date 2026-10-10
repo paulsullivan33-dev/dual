@@ -1436,7 +1436,11 @@ class ProfileTests(unittest.TestCase):
         banners = [c[1] for c in calls if c[0] == "show_text"]
         self.assertTrue(any(b.startswith("DUEL: ") for b in banners),
                         f"expected a 'DUEL: <scenario>' banner, got {banners}")
-        self.assertIn("progress", calls)  # one progress update per turn
+        turn_texts = [c[1] for c in calls
+                      if isinstance(c, tuple) and c[0] == "show_text"
+                      and len(c[1].split("/")) == 2
+                      and all(p.isdigit() for p in c[1].split("/"))]
+        self.assertEqual(turn_texts, ["1/2", "2/2"])  # one turn number per turn
         self.assertIn(("show_text", "DONE"), calls)
 
     def test_no_display_flag_overrides_profile_display(self):

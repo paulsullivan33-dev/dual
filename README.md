@@ -66,7 +66,7 @@ Common options for `ollama_chat.py` go after the `chat` or `duel` subcommand:
 | `--think` | Request thinking and display the separate thinking field when returned | Off |
 | `--max-tokens` | Per-response generation budget | 300, or 2048 with `--think` |
 | `--timeout` | Per-request timeout, in seconds | 1200 |
-| `--display` / `--no-display` | Show live duel stats (progress bar, tokens/sec) on the Arduino Uno Q's built-in 8x13 LED matrix | Off |
+| `--display` / `--no-display` | Show live duel stats (turn number, tokens/sec) on the Arduino Uno Q's built-in 8x13 LED matrix | Off |
 | `--save-json` | Write the finished transcript to this JSON file | Off |
 | `--temperature` | Sampling temperature passed to Ollama | Server default |
 | `--num-ctx` | Context window size passed to Ollama | Server default |
