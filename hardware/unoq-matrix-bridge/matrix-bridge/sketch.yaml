@@ -6,5 +6,6 @@ profiles:
       - platform: arduino:zephyr
     libraries:
       - Arduino_RouterBridge (0.4.3)
-      - Arduino_LED_Matrix  # bundled with the zephyr core
+      # NOTE: Arduino_LED_Matrix is bundled with the zephyr core -- do NOT
+      # list it here, or arduino-cli tries (and fails) to download it.
 default_profile: default
