@@ -752,7 +752,9 @@ def main():
         try:
             from unoq_matrix import DisplayUnavailable, create_matrix
             matrix = create_matrix()
-            matrix.show_text("DUEL")
+            scenario_name = os.path.splitext(os.path.basename(config_path))[0]
+            scenario_name = scenario_name.replace("_", " ").upper()
+            matrix.show_text(f"DUEL: {scenario_name}")
         except DisplayUnavailable as e:
             print(f"LED matrix unavailable ({e}); continuing without display.",
                   file=sys.stderr)

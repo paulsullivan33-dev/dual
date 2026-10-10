@@ -1409,7 +1409,9 @@ class ProfileTests(unittest.TestCase):
                                    extra_args=["--profile", prof],
                                    metrics=metrics)
         self.assertIn("constructed", calls)
-        self.assertIn(("show_text", "DUEL"), calls)
+        banners = [c[1] for c in calls if c[0] == "show_text"]
+        self.assertTrue(any(b.startswith("DUEL: ") for b in banners),
+                        f"expected a 'DUEL: <scenario>' banner, got {banners}")
         self.assertIn("progress", calls)  # one progress update per turn
         self.assertIn(("show_text", "DONE"), calls)
 
