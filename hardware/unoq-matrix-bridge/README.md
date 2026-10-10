@@ -5,7 +5,7 @@ No Docker, no App Lab — just a sketch on the STM32 and a pip package on Linux.
 
 ## Layout
 
-- `sketch/` — STM32 sketch exposing one RPC: `draw(<104 bytes>)`,
+- `matrix-bridge/` — STM32 sketch exposing one RPC: `draw(<104 bytes>)`,
   8 rows x 13 cols, row-major, brightness 0-7 per pixel.
 - `test_draw.py` — Linux smoke test: lights all LEDs, waits, clears.
 - `NOTES.md` — research background (why the matrix needs the MCU, the
@@ -18,9 +18,9 @@ ls -la /var/run/arduino-router.sock   # router daemon alive?
 # if the upload below complains the port is busy:
 sudo systemctl stop arduino-router
 
-arduino-cli compile --fqbn arduino:zephyr:unoq sketch/
+arduino-cli compile --fqbn arduino:zephyr:unoq matrix-bridge/
 arduino-cli upload --fqbn arduino:zephyr:unoq:flash_mode=flash \
-    --port /dev/ttyHS1 sketch/
+    --port /dev/ttyHS1 matrix-bridge/
 
 sudo systemctl start arduino-router   # if you stopped it
 ```
