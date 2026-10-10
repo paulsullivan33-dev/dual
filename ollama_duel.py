@@ -339,8 +339,10 @@ def thermal_pause_if_hot(matrix, ntfy_url, max_temp, resume_temp):
             return
         host = socket.gethostname()
         start = time.monotonic()
+        # stdout, not stderr: the transcript log mirrors stdout, so the
+        # pause is on the permanent record, not just the console.
         print(f"CPU at {temp:.1f}C (>= {max_temp:.0f}C); pausing duel to "
-              f"cool down to {resume_temp:.0f}C.", file=sys.stderr)
+              f"cool down to {resume_temp:.0f}C.")
         ntfy_post(ntfy_url, f"duel paused for cooling [{host}]",
                   f"CPU at {temp:.1f}C (>= {max_temp:.0f}C); pausing until "
                   f"it cools to {resume_temp:.0f}C.", tags="thermometer")
@@ -352,8 +354,7 @@ def thermal_pause_if_hot(matrix, ntfy_url, max_temp, resume_temp):
                 break
         paused_s = time.monotonic() - start
         cooled = f"{temp:.1f}C" if temp is not None else "unknown"
-        print(f"CPU cooled to {cooled}; resuming duel after {paused_s:.0f}s.",
-              file=sys.stderr)
+        print(f"CPU cooled to {cooled}; resuming duel after {paused_s:.0f}s.")
         ntfy_post(ntfy_url, f"duel resumed [{host}]",
                   f"CPU cooled to {cooled} after {paused_s:.0f}s pause; "
                   f"resuming.", tags="thermometer")

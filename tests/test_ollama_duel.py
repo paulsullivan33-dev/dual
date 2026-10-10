@@ -2074,6 +2074,18 @@ class ThermalGuardTest(unittest.TestCase):
              mock.patch("ollama_duel.time.sleep"):
             ollama_duel.thermal_pause_if_hot(None, "http://x", 80.0, 70.0)
 
+    def test_pause_messages_go_to_stdout(self):
+        # stdout is mirrored to the transcript log; the pause must be on
+        # the permanent record, not just the console.
+        temps = [85.0, 69.0]
+        with mock.patch("ollama_duel.read_cpu_temp", side_effect=temps), \
+             mock.patch("ollama_duel.time.sleep"), \
+             mock.patch("ollama_duel.ntfy_post"), \
+             mock.patch("sys.stdout", new=io.StringIO()) as out:
+            ollama_duel.thermal_pause_if_hot(None, None, 80.0, 70.0)
+            self.assertIn("pausing duel", out.getvalue())
+            self.assertIn("resuming duel", out.getvalue())
+
 
 class CpuTempTest(unittest.TestCase):
     def test_read_temps_parses_zones(self):
