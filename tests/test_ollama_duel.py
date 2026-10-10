@@ -1392,6 +1392,7 @@ class ProfileTests(unittest.TestCase):
 
         module = types.ModuleType("unoq_matrix")
         module.UnoQMatrix = FakeMatrix
+        module.create_matrix = FakeMatrix
         module.DisplayUnavailable = DisplayUnavailable
         return module
 

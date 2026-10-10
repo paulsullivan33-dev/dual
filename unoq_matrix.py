@@ -16,6 +16,15 @@ The driver is fully optional by design:
 
 Note: the matrix shows the boot logo for ~20-30 seconds during Linux
 startup; only touch it after the board has finished booting.
+
+Two transports exist. ``UnoQMatrix`` drives the matrix over I2C -- that
+path turned out to be dead on real hardware (no device answers at 0x70;
+the matrix is wired to the STM32 MCU, not the Linux I2C bus). It is kept
+for compatibility. ``BridgeMatrix`` is the working transport: it talks to
+the stock ``arduino-router`` daemon over its Unix socket using the
+``arduino-router-bridge`` pip package, calling the ``draw`` RPC exposed by
+the ``matrix-bridge`` sketch (see ``hardware/unoq-matrix-bridge/``).
+``create_matrix()`` tries the Bridge first and falls back to I2C.
 """
 
 import time
@@ -162,3 +171,92 @@ class UnoQMatrix:
         total = max(1, total)
         filled = min(COLS, max(0, round(COLS * done / total)))
         self._write([0x7F] * filled + [0x00] * (COLS - filled))
+
+
+class BridgeMatrix(UnoQMatrix):
+    """The Uno Q's built-in 8x13 LED matrix, via the Arduino Router Bridge.
+
+    The working transport: the stock ``arduino-router`` daemon on the Q
+    bridges Linux to the STM32 MCU over a Unix socket, and the
+    ``matrix-bridge`` sketch (see ``hardware/unoq-matrix-bridge/``) exposes
+    a ``draw`` RPC taking 104 brightness bytes (8 rows x 13 cols,
+    row-major, 0-7).
+
+    Requires the ``arduino-router-bridge`` pip package; it is imported
+    lazily so importing this module stays safe everywhere. Raises
+    DisplayUnavailable on any failure so callers can fall back to headless.
+
+    The text/progress/clear interface is inherited from UnoQMatrix; only
+    the transport (``_write``) differs. ``__init__`` deliberately skips
+    UnoQMatrix's I2C setup.
+    """
+
+    ROWS = 8
+    ON_BRIGHTNESS = 7  # full with the sketch's setGrayscaleBits(3)
+
+    def __init__(self, bridge=None):
+        # Deliberately does not call UnoQMatrix.__init__: that sets up the
+        # dead I2C transport, which this class replaces entirely. The shared
+        # text/progress/clear logic is still inherited.
+        # pylint: disable=super-init-not-called
+        if bridge is None:
+            try:
+                from arduino.router_bridge import Bridge
+            except ImportError as exc:
+                raise DisplayUnavailable(
+                    "arduino-router-bridge is not installed "
+                    "(pip install arduino-router-bridge)"
+                ) from exc
+            bridge = Bridge()
+        self._bridge = bridge
+        try:
+            connected = self._bridge.connect(timeout=5)
+        except Exception as e:
+            raise DisplayUnavailable(
+                f"cannot reach the Arduino router: {e}"
+            ) from e
+        if not connected:
+            raise DisplayUnavailable(
+                "no Arduino router at unix:///var/run/arduino-router.sock"
+            )
+        # Probe the sketch the way UnoQMatrix probes I2C: a clear that fails
+        # here (e.g. RPC "no client provides the method") means the sketch
+        # isn't flashed yet.
+        self.clear()
+
+    def _write(self, columns):
+        """Convert 13 column bytes (LSB = top pixel) to 104 row-major
+        brightness bytes and send them to the sketch's ``draw`` RPC."""
+        cols = [(c & 0x7F) for c in list(columns)[:COLS]]
+        cols += [0x00] * (COLS - len(cols))
+        frame = bytearray(self.ROWS * COLS)
+        for ci, byte in enumerate(cols):
+            for r in range(self.ROWS):
+                frame[r * COLS + ci] = (
+                    self.ON_BRIGHTNESS if (byte >> r) & 1 else 0
+                )
+        try:
+            self._bridge.call("draw", bytes(frame), timeout=5)
+        except Exception as e:
+            raise DisplayUnavailable(f"bridge draw call failed: {e}")
+
+
+def create_matrix():
+    """Return the best available LED matrix driver.
+
+    Tries the Router Bridge transport first (the working one), then the
+    legacy I2C driver. Raises DisplayUnavailable if neither works; the
+    error names the bridge failure since that's the actionable one (flash
+    the sketch / install the pip package).
+    """
+    try:
+        return BridgeMatrix()
+    except DisplayUnavailable as e:
+        bridge_err = e
+    try:
+        return UnoQMatrix()
+    except DisplayUnavailable:
+        pass
+    raise DisplayUnavailable(
+        f"no working LED matrix transport ({bridge_err})"
+    )

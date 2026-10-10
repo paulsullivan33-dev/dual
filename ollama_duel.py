@@ -750,8 +750,8 @@ def main():
     matrix = None
     if want_display:
         try:
-            from unoq_matrix import DisplayUnavailable, UnoQMatrix
-            matrix = UnoQMatrix()
+            from unoq_matrix import DisplayUnavailable, create_matrix
+            matrix = create_matrix()
             matrix.show_text("DUEL")
         except DisplayUnavailable as e:
             print(f"LED matrix unavailable ({e}); continuing without display.",

@@ -1,0 +1,10 @@
+# Build profile for the matrix-bridge sketch.
+# Board core: arduino:zephyr (Uno Q). Flashes via /dev/ttyHS1 from the Q itself.
+profiles:
+  default:
+    platforms:
+      - platform: arduino:zephyr
+    libraries:
+      - Arduino_RouterBridge (0.4.3)
+      - Arduino_LED_Matrix  # bundled with the zephyr core
+default_profile: default
