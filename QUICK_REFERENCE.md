@@ -421,6 +421,21 @@ python ollama_duel.py scenarios/roast_battle.json --no-display
 8×13 LED matrix (needs `python3-smbus` on the board). On any other machine
 it prints a warning and carries on without the display.
 
+### Thermal guard
+
+```shell
+python ollama_duel.py scenarios/speed_race.json --max-temp 75 --resume-temp 65
+python ollama_duel.py scenarios/speed_race.json --no-temp-guard
+```
+
+Before every turn the duel reads the CPU temperature from
+`/sys/class/thermal` (Raspberry Pi and most ARM boards). At or above
+`--max-temp` (default 80°C) it pauses — one ntfy notice with the temp, and
+`COOLING` on the LED matrix if `--display` is on — then re-checks every 60
+seconds until the chip cools to `--resume-temp` (default 70°C) and resumes
+with a second notice. Machines with no readable sensor skip the guard
+silently.
+
 ### Options
 
 | Option | What it does |
@@ -440,6 +455,9 @@ it prints a warning and carries on without the display.
 | `--ntfy-url` | Send a completion notice to this ntfy topic URL |
 | `--no-ntfy` | Never send a notice, even if one is configured |
 | `--display` / `--no-display` | LED matrix on the Arduino Uno Q |
+| `--max-temp` | Pause the duel when the CPU reaches this °C (default 80) |
+| `--resume-temp` | Resume once the CPU cools to this °C (default 70) |
+| `--no-temp-guard` | Disable the thermal pause guard |
 | `--run-code` / `--no-run-code` | Run (or never run) each reply's last Python block, showing the result to both speakers |
 | `--dry-run` | Print turn 1's messages and exit without calling Ollama |
 
@@ -489,6 +507,9 @@ entry (that speaker only, overriding the top level).
 | `results_log` | top | `run_results.log` | Run summary path |
 | `ntfy_url` | top | none | Completion notice URL |
 | `display` | top | false | LED matrix on the Uno Q |
+| `max_temp` | top | 80 | Pause the duel at this CPU °C |
+| `resume_temp` | top | 70 | Resume once cooled to this CPU °C |
+| `temp_guard` | top | true | Thermal pause guard on/off |
 | `run_code` | top | false | Run each reply's last Python block and show the result to both speakers (not a sandbox) |
 | `run_code_args` | top | none | Arguments for each run, e.g. `["--test"]` |
 | `run_code_timeout` | top | 30 | Seconds before a run is stopped |

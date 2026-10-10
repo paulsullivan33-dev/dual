@@ -39,10 +39,13 @@ output/ folder (see ollama_common.output_path); absolute paths are used as-is.
 """
 
 import argparse
+import glob
 import json
 import os
 import re
+import socket
 import sys
+import time
 from datetime import datetime
 
 from ollama_common import (
@@ -59,7 +62,7 @@ from ollama_common import (
     wrap_text,
 )
 from ollama_reporting import (append_run_summary, format_duel_stats, format_run_summary,
-                              load_default_ntfy_url, notify_duel_done)
+                              load_default_ntfy_url, notify_duel_done, ntfy_post)
 from ollama_coderun import (DEFAULT_RUN_TIMEOUT, count_runs, describe_run,
                             extract_program, run_program)
 from ollama_judge import normalize_judge, run_judge
@@ -72,6 +75,7 @@ TOP_LEVEL_KEYS = {
     "history_turns", "log_file", "save_json", "timeout",
     "display", "dedup_guard", "results_log", "ntfy_url", "models",
     "run_code", "run_code_args", "run_code_timeout", "tags", "judge",
+    "max_temp", "resume_temp", "temp_guard",
 }
 MODEL_KEYS = {"model", "name", "system", "think", "max_tokens", "temperature",
               "num_ctx", "repeat_penalty", "turn_prompt", "first_turn_prompt",
@@ -199,6 +203,9 @@ def load_config(path, profile=None):
             isinstance(run_args, list) and all(isinstance(a, str) for a in run_args)):
         sys.exit(f'"run_code_args" in top level must be a list of strings, got {run_args!r}.')
     _validate_field(cfg, "dedup_guard", "bool", "top level")
+    _validate_field(cfg, "temp_guard", "bool", "top level")
+    _validate_field(cfg, "max_temp", "number", "top level", minimum=1)
+    _validate_field(cfg, "resume_temp", "number", "top level", minimum=1)
     _validate_field(cfg, "results_log", "str", "top level")
     _validate_field(cfg, "ntfy_url", "str", "top level")
     tags = cfg.get("tags")
@@ -299,6 +306,62 @@ def _matrix(matrix, method, *args):
     return matrix
 
 
+def read_cpu_temp():
+    """CPU temperature in degrees C, or None when no sensor is readable.
+
+    Reads the first thermal zone exposing a temp file (thermal_zone0 is
+    the CPU on Raspberry Pi and most ARM boards; values are millidegrees
+    C). A missing/unreadable sensor returns None, which disables the
+    thermal guard for the run instead of failing it.
+    """
+    for path in sorted(glob.glob("/sys/class/thermal/thermal_zone*/temp")):
+        try:
+            with open(path, encoding="utf-8") as f:
+                return int(f.read().strip()) / 1000.0
+        except (OSError, ValueError):
+            continue
+    return None
+
+
+def thermal_pause_if_hot(matrix, ntfy_url, max_temp, resume_temp):
+    """Pause the duel while the CPU is hotter than max_temp.
+
+    Sleeps in 60-second checks until the temp drops to resume_temp, then
+    returns. Sends one ntfy notice on pause and one on resume, each with
+    the temp. A None max_temp (guard disabled) or no readable sensor
+    returns immediately. Best-effort throughout: nothing here raises.
+    """
+    try:
+        if max_temp is None:
+            return
+        temp = read_cpu_temp()
+        if temp is None or temp < max_temp:
+            return
+        host = socket.gethostname()
+        start = time.monotonic()
+        print(f"CPU at {temp:.1f}C (>= {max_temp:.0f}C); pausing duel to "
+              f"cool down to {resume_temp:.0f}C.", file=sys.stderr)
+        ntfy_post(ntfy_url, f"duel paused for cooling [{host}]",
+                  f"CPU at {temp:.1f}C (>= {max_temp:.0f}C); pausing until "
+                  f"it cools to {resume_temp:.0f}C.", tags="thermometer")
+        _matrix(matrix, "show_text", "COOLING")
+        while True:
+            time.sleep(60)
+            temp = read_cpu_temp()
+            if temp is None or temp <= resume_temp:
+                break
+        paused_s = time.monotonic() - start
+        cooled = f"{temp:.1f}C" if temp is not None else "unknown"
+        print(f"CPU cooled to {cooled}; resuming duel after {paused_s:.0f}s.",
+              file=sys.stderr)
+        ntfy_post(ntfy_url, f"duel resumed [{host}]",
+                  f"CPU cooled to {cooled} after {paused_s:.0f}s pause; "
+                  f"resuming.", tags="thermometer")
+    except Exception as e:  # noqa: BLE001 -- guard must never break a duel
+        print(f"Warning: thermal guard failed ({e}); continuing.",
+              file=sys.stderr)
+
+
 def build_turn_messages(participants, i, topic, transcript, run_reports=None):
     """Build the message list for participant `i`'s next turn.
 
@@ -390,7 +453,8 @@ def context_usage_note(name, used, num_ctx, level):
 
 
 def run_duel(host, topic, turns, participants, timeout, transcript, matrix=None,
-             dedup_guard=True, run_code=None):
+             dedup_guard=True, run_code=None, ntfy_url=None,
+             max_temp=None, resume_temp=None):
     """Run the duel's turn loop, printing each reply as it arrives.
 
     Each participant is a dict with name, model, system, think, options,
@@ -427,6 +491,7 @@ def run_duel(host, topic, turns, participants, timeout, transcript, matrix=None,
                                            run_reports)
 
             print("  (waiting for reply...)", file=sys.stderr, flush=True)
+            thermal_pause_if_hot(matrix, ntfy_url, max_temp, resume_temp)
             matrix = _matrix(matrix, "progress", turn, turns)
             thinking, reply, done_reason, metrics = call_chat(host, me["model"], messages,
                                                              me["think"], me["options"],
@@ -641,6 +706,15 @@ def main():
                          "8x13 LED matrix (needs python3-smbus on the Uno Q)")
     ap.add_argument("--no-display", dest="display", action="store_false",
                     help="force the LED matrix display off")
+    ap.add_argument("--max-temp", type=float, default=None,
+                    help="pause the duel when the CPU reaches this temperature "
+                         "(C); default 80")
+    ap.add_argument("--resume-temp", type=float, default=None,
+                    help="resume the duel once the CPU cools to this "
+                         "temperature (C); default 70")
+    ap.add_argument("--no-temp-guard", dest="temp_guard", action="store_false",
+                    default=None,
+                    help="disable the thermal pause guard")
     ap.add_argument("--run-code", dest="run_code", action="store_true", default=None,
                     help="run the last Python code block of each reply (timeout, "
                          "no keyboard input) and show the result to both speakers. "
@@ -701,6 +775,13 @@ def main():
     timeout = first_not_none(args.timeout, cfg.get("timeout"), DEFAULT_TIMEOUT)
     save_json_path = output_path(first_not_none(args.save_json, cfg.get("save_json")))
     want_display = first_not_none(args.display, cfg.get("display"), False)
+    temp_guard = first_not_none(args.temp_guard, cfg.get("temp_guard"), True)
+    if temp_guard:
+        max_temp = first_not_none(args.max_temp, cfg.get("max_temp"), 80.0)
+        resume_temp = first_not_none(
+            args.resume_temp, cfg.get("resume_temp"), 70.0)
+    else:
+        max_temp = resume_temp = None
     dedup_guard = first_not_none(cfg.get("dedup_guard"), True)
     # Running model-written code is strictly opt-in: the scenario's run_code
     # or --run-code; --no-run-code always wins. Profiles can't turn it on.
@@ -831,7 +912,10 @@ def main():
         model_stats, matrix, stop_note = run_duel(host, topic, turns, participants, timeout,
                                                   transcript, matrix=matrix,
                                                   dedup_guard=dedup_guard,
-                                                  run_code=run_code)
+                                                  run_code=run_code,
+                                                  ntfy_url=ntfy_url,
+                                                  max_temp=max_temp,
+                                                  resume_temp=resume_temp)
         judge = cfg.get("judge") if args.judge else None
         if judge and transcript and stop_note is None:
             # A third model scores the finished duel. Best-effort: a judge

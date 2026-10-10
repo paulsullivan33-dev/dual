@@ -144,13 +144,30 @@ def format_token_stats_line(model_stats):
     return "tokens: " + ", ".join(parts)
 
 
+def ntfy_post(url, title, message, tags=""):
+    """POST one notification. Best-effort: failures warn on stderr and
+    never fail the caller. A falsy url skips silently."""
+    import urllib.request  # stdlib; imported here so --help stays instant
+    if not url:
+        return
+    try:
+        req = urllib.request.Request(url, data=message.encode("utf-8"),
+                                     method="POST")
+        req.add_header("Title", title)
+        if tags:
+            req.add_header("Tags", tags)
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            resp.read()
+    except Exception as e:  # noqa: BLE001 -- notification must not fail the run
+        print(f"Warning: ntfy notification failed: {e}", file=sys.stderr)
+
+
 def notify_duel_done(url, config_path, participants, turns, transcript,
                      run_started, stop_note, crashed, model_stats=None,
                      code_runs=None, log_path=None, verdict=None):
     """POST a short completion notice to ntfy. Best-effort: any failure
     warns on stderr and never fails the run."""
     import socket
-    import urllib.request  # stdlib; imported here so --help stays instant
     scenario = os.path.basename(config_path)
     host = socket.gethostname()
     duration_s = (datetime.now() - run_started).total_seconds()
@@ -182,12 +199,4 @@ def notify_duel_done(url, config_path, participants, turns, transcript,
         body += "\n" + (winner.strip() if winner else "Verdict recorded")
     if stop_note and not crashed:
         body += "\n" + stop_note.strip().splitlines()[0][:200]
-    try:
-        req = urllib.request.Request(url, data=body.encode("utf-8"),
-                                     method="POST")
-        req.add_header("Title", title)
-        req.add_header("Tags", tags)
-        with urllib.request.urlopen(req, timeout=15) as resp:
-            resp.read()
-    except Exception as e:  # noqa: BLE001 -- notification must not fail the run
-        print(f"Warning: ntfy notification failed: {e}", file=sys.stderr)
+    ntfy_post(url, title, body, tags=tags)

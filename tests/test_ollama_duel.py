@@ -116,6 +116,22 @@ class LoadConfigTests(unittest.TestCase):
         self.assertEqual(cfg["models"][0]["name"], "m1")  # defaulted from "model"
         self.assertEqual(cfg["models"][1]["name"], "Two")  # explicit name kept
 
+    def test_thermal_keys_accepted(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = write_json(d, "cfg.json", minimal_config(
+                max_temp=75, resume_temp=65, temp_guard=True))
+            cfg = ollama_duel.load_config(path)
+        self.assertEqual(cfg["max_temp"], 75)
+        self.assertEqual(cfg["resume_temp"], 65)
+        self.assertTrue(cfg["temp_guard"])
+
+    def test_thermal_keys_reject_bad_types(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = write_json(d, "cfg.json",
+                              minimal_config(max_temp="hot"))
+            with self.assertRaises(SystemExit):
+                ollama_duel.load_config(path)
+
     def test_missing_file_exits(self):
         with self.assertRaises(SystemExit):
             ollama_duel.load_config("no-such-file.json")
@@ -813,7 +829,8 @@ class DedupGuardTests(unittest.TestCase):
         seen = {}
 
         def fake_run_duel(host, topic, turns, participants, timeout,
-                          transcript, matrix=None, dedup_guard=True, run_code=None):
+                          transcript, matrix=None, dedup_guard=True,
+                          run_code=None, **kwargs):
             seen["dedup_guard"] = dedup_guard
             return {}, None, None
 
@@ -1976,6 +1993,79 @@ class ShippedScenariosTagTests(unittest.TestCase):
                 self.assertTrue(tags, "scenario has no tags")
                 unknown = set(tags) - self.KNOWN
                 self.assertFalse(unknown, f"unknown tags: {unknown}")
+
+
+class ThermalGuardTest(unittest.TestCase):
+    def test_read_cpu_temp_none_when_no_zones(self):
+        with mock.patch("ollama_duel.glob.glob", return_value=[]):
+            self.assertIsNone(ollama_duel.read_cpu_temp())
+
+    def test_read_cpu_temp_parses_millidegrees(self):
+        fake = mock.mock_open(read_data="84700\n")
+        zones = ["/sys/class/thermal/thermal_zone0/temp"]
+        with mock.patch("ollama_duel.glob.glob", return_value=zones), \
+             mock.patch("builtins.open", fake):
+            self.assertAlmostEqual(ollama_duel.read_cpu_temp(), 84.7)
+
+    def test_read_cpu_temp_skips_unreadable_zones(self):
+        zones = ["/sys/class/thermal/thermal_zone0/temp",
+                 "/sys/class/thermal/thermal_zone1/temp"]
+
+        def fake_open(path, *args, **kwargs):
+            if "zone0" in path:
+                raise OSError("nope")
+            return mock.mock_open(read_data="65000\n")()
+
+        with mock.patch("ollama_duel.glob.glob", return_value=zones), \
+             mock.patch("builtins.open", fake_open):
+            self.assertAlmostEqual(ollama_duel.read_cpu_temp(), 65.0)
+
+    def test_pause_disabled_when_max_temp_none(self):
+        with mock.patch("ollama_duel.time.sleep") as sleep, \
+             mock.patch("ollama_duel.ntfy_post") as post:
+            ollama_duel.thermal_pause_if_hot(None, None, None, None)
+            sleep.assert_not_called()
+            post.assert_not_called()
+
+    def test_no_pause_when_cool(self):
+        with mock.patch("ollama_duel.read_cpu_temp", return_value=60.0), \
+             mock.patch("ollama_duel.time.sleep") as sleep, \
+             mock.patch("ollama_duel.ntfy_post") as post:
+            ollama_duel.thermal_pause_if_hot(None, "http://x", 80.0, 70.0)
+            sleep.assert_not_called()
+            post.assert_not_called()
+
+    def test_no_pause_when_no_sensor(self):
+        with mock.patch("ollama_duel.read_cpu_temp", return_value=None), \
+             mock.patch("ollama_duel.time.sleep") as sleep:
+            ollama_duel.thermal_pause_if_hot(None, "http://x", 80.0, 70.0)
+            sleep.assert_not_called()
+
+    def test_pause_until_cooled_notifies_both_ends(self):
+        temps = [85.0, 84.0, 69.0]
+        with mock.patch("ollama_duel.read_cpu_temp", side_effect=temps), \
+             mock.patch("ollama_duel.time.sleep") as sleep, \
+             mock.patch("ollama_duel.ntfy_post") as post, \
+             mock.patch("ollama_duel.socket.gethostname",
+                        return_value="testbox"):
+            ollama_duel.thermal_pause_if_hot(None, "http://ntfy/x",
+                                             80.0, 70.0)
+            self.assertEqual(sleep.call_count, 2)
+            sleep.assert_called_with(60)
+            self.assertEqual(post.call_count, 2)
+            pause_args = post.call_args_list[0][0]
+            resume_args = post.call_args_list[1][0]
+            self.assertIn("paused for cooling", pause_args[1])
+            self.assertIn("testbox", pause_args[1])
+            self.assertIn("85.0", pause_args[2])
+            self.assertIn("resumed", resume_args[1])
+            self.assertIn("69.0", resume_args[2])
+
+    def test_pause_never_raises(self):
+        with mock.patch("ollama_duel.read_cpu_temp",
+                        side_effect=RuntimeError("boom")), \
+             mock.patch("ollama_duel.time.sleep"):
+            ollama_duel.thermal_pause_if_hot(None, "http://x", 80.0, 70.0)
 
 
 if __name__ == "__main__":
