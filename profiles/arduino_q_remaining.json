@@ -1,0 +1,53 @@
+{
+  "description": "Companion to arduino_q: the 35 remaining scenarios, with no overlap. Uses the same small-board models, 4096-token context, last 4 replies, thinking disabled, LED display, and thermal pauses at 80C with resume at 70C.",
+  "models": [
+    "qwen3:1.7b",
+    "smollm2:1.7b"
+  ],
+  "settings": {
+    "num_ctx": 4096,
+    "think": false,
+    "history_turns": 4,
+    "display": true,
+    "temp_guard": true,
+    "max_temp": 80,
+    "resume_temp": 70
+  },
+  "scenarios": [
+    "brutal_code_review.json",
+    "coder_vs_qwen_open_weights.json",
+    "data_detective_vs_skeptic.json",
+    "defend_indefensible.json",
+    "do_pineapples_bite.json",
+    "dolphin3_vs_qwen_moderation.json",
+    "glimmer_vs_qwen_open_weights.json",
+    "hot_takes_interview.json",
+    "mac_builder_vs_breaker.json",
+    "mac_defend_indefensible.json",
+    "mac_hot_takes.json",
+    "mac_pineapples_bite.json",
+    "mac_roast_battle.json",
+    "puzzle_maker_vs_solver.json",
+    "roast_battle_uncensored.json",
+    "saboteur_vs_detective.json",
+    "small_alien_tour_guides.json",
+    "small_apology_duel.json",
+    "small_coffee_vs_tea.json",
+    "small_dragon_shark_tank.json",
+    "small_ghost_roommates.json",
+    "small_haiku_battle.json",
+    "small_invention_pitch.json",
+    "small_limerick_duel.json",
+    "small_movie_ending_rewrite.json",
+    "small_pet_debate.json",
+    "small_recipe_showdown.json",
+    "small_sidekick_interview.json",
+    "small_squirrel_interrogation.json",
+    "small_time_capsule.json",
+    "small_toaster_therapy.json",
+    "support_no_patience.json",
+    "telephone_game.json",
+    "twenty_questions.json",
+    "vault_keeper_vs_social_engineer.json"
+  ]
+}
