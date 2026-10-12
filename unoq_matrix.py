@@ -239,7 +239,7 @@ class BridgeMatrix(UnoQMatrix):
         try:
             self._bridge.call("draw", bytes(frame), timeout=5)
         except Exception as e:
-            raise DisplayUnavailable(f"bridge draw call failed: {e}")
+            raise DisplayUnavailable(f"bridge draw call failed: {e}") from e
 
 
 def create_matrix():
