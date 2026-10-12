@@ -22,6 +22,64 @@ class BuildOptionsTests(unittest.TestCase):
         )
 
 
+class ThinkDefaultsTests(unittest.TestCase):
+    """Thinking is off by default (no wasted tokens); --think opts in."""
+
+    def _captured_args(self, argv):
+        seen = {}
+
+        def fake_cmd_chat(args):
+            seen.update(vars(args))
+
+        with mock.patch.object(sys, "argv", argv), \
+             mock.patch.object(ollama_chat, "cmd_chat", fake_cmd_chat):
+            ollama_chat.main()
+        return seen
+
+    def test_thinking_off_and_1024_tokens_by_default(self):
+        args = self._captured_args(["ollama_chat.py", "chat"])
+        self.assertFalse(args["think"])
+        self.assertEqual(args["max_tokens"], 1024)
+
+    def test_no_think_flag_is_explicit_off(self):
+        args = self._captured_args(["ollama_chat.py", "chat", "--no-think"])
+        self.assertFalse(args["think"])
+        self.assertEqual(args["max_tokens"], 1024)
+
+    def test_think_flag_enables_thinking_and_bigger_budget(self):
+        args = self._captured_args(["ollama_chat.py", "chat", "--think"])
+        self.assertTrue(args["think"])
+        self.assertEqual(args["max_tokens"], 2048)
+
+    def test_last_think_flag_wins(self):
+        args = self._captured_args(
+            ["ollama_chat.py", "chat", "--think", "--no-think"])
+        self.assertFalse(args["think"])
+        args = self._captured_args(
+            ["ollama_chat.py", "chat", "--no-think", "--think"])
+        self.assertTrue(args["think"])
+
+    def test_explicit_max_tokens_honored(self):
+        args = self._captured_args(
+            ["ollama_chat.py", "chat", "--max-tokens", "500"])
+        self.assertEqual(args["max_tokens"], 500)
+
+    def test_chat_sends_think_false_to_api_by_default(self):
+        sent = {}
+
+        def fake_call_chat(host, model, messages, think, options, timeout=None):
+            sent["think"] = think
+            return "", "hi", "stop", {}
+
+        argv = ["ollama_chat.py", "chat"]
+        with mock.patch.object(sys, "argv", argv), \
+             mock.patch.object(ollama_chat, "call_chat", fake_call_chat), \
+             mock.patch("builtins.input", side_effect=["hello", "quit"]), \
+             mock.patch.object(ollama_chat, "save_transcript_json_safe"):
+            ollama_chat.main()
+        self.assertFalse(sent["think"])
+
+
 class DuelTurnsValidationTests(unittest.TestCase):
     def _run_with_argv(self, argv):
         with mock.patch.object(sys, "argv", argv):
