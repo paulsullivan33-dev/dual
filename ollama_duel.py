@@ -183,7 +183,6 @@ def load_config(path, profile=None):
         m.setdefault("name", m["model"])
         _check_unknown_keys(m, MODEL_KEYS, f'model "{m["name"]}"')
 
-
     _validate_field(cfg, "host", "str", "top level")
     _validate_field(cfg, "topic", "str", "top level")
     _validate_field(cfg, "turns", "int", "top level", minimum=1)
@@ -618,14 +617,13 @@ def expand_configs(config_arg):
     it first. Anything else is returned as the single path, validated
     later by load_config exactly as before.
     """
-    import glob as globmod
     if os.path.isdir(config_arg):
-        paths = sorted(globmod.glob(os.path.join(config_arg, "*.json")))
+        paths = sorted(glob.glob(os.path.join(config_arg, "*.json")))
         if not paths:
             sys.exit(f"No .json scenario files in directory: {config_arg}")
         return paths
-    if globmod.has_magic(config_arg):
-        paths = sorted(globmod.glob(config_arg))
+    if glob.has_magic(config_arg):
+        paths = sorted(glob.glob(config_arg))
         if not paths:
             sys.exit(f"Glob matched no files: {config_arg}")
         return paths
