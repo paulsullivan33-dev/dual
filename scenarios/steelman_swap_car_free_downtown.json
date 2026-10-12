@@ -22,6 +22,9 @@
   "think": false,
   "timeout": 1500,
   "topic": "Should a mid-sized city close its downtown core to private cars? A structured debate with one rule: before you may rebut your opponent, you must first restate their strongest point so well that they would agree with your summary. Advocate opens.",
+  "tags": [
+    "debate"
+  ],
   "turns": 8,
   "turn_prompt": "Begin with 'Your strongest point is...' and restate {other}'s best argument fairly, in a way they would accept. Then respond to it with one new argument of your own. Two or three short paragraphs. Write only {name}'s words."
 }

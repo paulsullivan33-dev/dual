@@ -22,6 +22,10 @@
   "think": false,
   "timeout": 1500,
   "topic": "An exchange of letters between two strangers matched by a pen-pal programme: a lighthouse keeper on a remote island on Earth, and a hydroponics technician in the first settlement on Mars. Each letter takes weeks to arrive. Lighthouse Keeper writes first.",
+  "tags": [
+    "creative",
+    "roleplay"
+  ],
   "turns": 8,
   "turn_prompt": "Write {name}'s next letter to {other}: respond to something specific they wrote, share one new piece of news, ask one question, and sign off. Weeks have passed. Write only the letter.",
   "first_turn_prompt": "Write {name}'s first letter to {other}, a stranger: introduce yourself and your surroundings, and ask one question. Write only the letter."

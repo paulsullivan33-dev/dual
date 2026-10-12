@@ -22,5 +22,9 @@
   "think": false,
   "timeout": 1500,
   "topic": "Annual performance review. The employee is the team's strongest engineer and has had a technically excellent year, but three colleagues have separately said they avoid asking them for help because of dismissive replies. Manager opens the meeting.",
+  "tags": [
+    "roleplay",
+    "interview"
+  ],
   "turns": 10
 }

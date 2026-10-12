@@ -25,5 +25,9 @@
   "think": false,
   "timeout": 1500,
   "topic": "The People v. Whoever Ate the Office Birthday Cake. The cake vanished from the third-floor kitchen between 2:00 and 2:15 pm. The Attorney cross-examines the Witness, the only person seen near the kitchen. Attorney: begin your cross-examination.",
+  "tags": [
+    "debate",
+    "roleplay"
+  ],
   "turns": 12
 }

@@ -22,5 +22,9 @@
   "think": false,
   "timeout": 1500,
   "topic": "A wandering Elizabethan bard has been hired by mistake to help a modern teenager write a text message asking their crush to the school dance. Neither quite understands how the other talks. Bard opens.",
+  "tags": [
+    "creative",
+    "roleplay"
+  ],
   "turns": 10
 }

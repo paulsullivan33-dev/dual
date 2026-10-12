@@ -22,5 +22,9 @@
   "think": false,
   "timeout": 1500,
   "topic": "Plan the heist of the century: stealing back Grandma Odile's secret pie recipe card, which a rival baker has put on display in a glass case at the county fair. The fair closes at 9 pm. Mastermind: pitch the plan.",
+  "tags": [
+    "creative",
+    "roleplay"
+  ],
   "turns": 10
 }

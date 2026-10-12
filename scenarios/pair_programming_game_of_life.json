@@ -24,5 +24,9 @@
   "think": false,
   "timeout": 1500,
   "topic": "Pair-program Conway's Game of Life in Python as a single file: a step(live_cells) function that takes a set of (row, col) tuples and returns the next generation on an unbounded grid, plus assert-based tests at the bottom. Work in small steps. Start with one simple first version in a single code block.",
+  "tags": [
+    "code",
+    "game"
+  ],
   "turns": 10
 }

@@ -22,6 +22,10 @@
   "think": false,
   "timeout": 1500,
   "topic": "Write a short story together, exactly one sentence at a time. It begins on the night the town clock struck thirteen. Narrator One writes the first sentence.",
+  "tags": [
+    "creative",
+    "game"
+  ],
   "turns": 24,
   "turn_prompt": "Write exactly one sentence that continues the story directly from {other}'s last sentence. Only the sentence, nothing else.",
   "first_turn_prompt": "Write the first sentence of the story. Only the sentence, nothing else."

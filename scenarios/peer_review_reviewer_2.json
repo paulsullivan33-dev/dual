@@ -22,5 +22,8 @@
   "think": false,
   "timeout": 1500,
   "topic": "Peer review of a submitted paper, 'Drinking Coffee Causes Better Code: Evidence from 14 Developers'. The study surveyed 14 developers at one company about their daily coffee intake and counted their merged pull requests over one month; the heaviest coffee drinkers merged the most. The paper concludes that companies should provide free coffee. Reviewer 2 opens with the review.",
+  "tags": [
+    "debate"
+  ],
   "turns": 8
 }

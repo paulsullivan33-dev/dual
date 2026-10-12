@@ -22,5 +22,8 @@
   "think": false,
   "timeout": 1500,
   "topic": "Book club night: Mary Shelley's Frankenstein. Tonight's question - who is the real monster of the novel, Victor Frankenstein or his creature? Argue from what happens in the book. Team Creature opens.",
+  "tags": [
+    "debate"
+  ],
   "turns": 8
 }

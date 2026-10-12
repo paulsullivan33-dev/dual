@@ -24,5 +24,8 @@
   "think": false,
   "timeout": 1500,
   "topic": "Build a fantasy world together from nothing, one layer at a time: start with the land and its strangest natural feature, then let everything else follow from it. Cartographer opens.",
+  "tags": [
+    "creative"
+  ],
   "turns": 10
 }

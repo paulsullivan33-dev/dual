@@ -24,5 +24,8 @@
   "think": false,
   "timeout": 1500,
   "topic": "A beginner Spanish conversation lesson. The situation to practice: ordering food at a cafe. Tutor: greet the student in Spanish and start the role-play.",
+  "tags": [
+    "roleplay"
+  ],
   "turns": 12
 }

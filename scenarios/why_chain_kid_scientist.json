@@ -25,5 +25,8 @@
   "think": false,
   "timeout": 1500,
   "topic": "Why is the sky blue?",
+  "tags": [
+    "interview"
+  ],
   "turns": 12
 }
