@@ -447,6 +447,9 @@ silently.
 | `--max-tokens` | Replace every `max_tokens` in the scenario, for both speakers |
 | `--think` / `--no-think` | Force thinking on or off for both speakers |
 | `--host` | Ollama server address |
+| `--model-a` | Replace the first participant's model |
+| `--model-b` | Replace the second participant's model |
+| `--num-ctx` | Replace `num_ctx` for both participants |
 | `--timeout` | Seconds to wait for one reply (default 1200) |
 | `--log-file` | Transcript log path (timestamp added; relative paths under `output/`) |
 | `--save-json` | Write the transcript as JSON when the duel ends |

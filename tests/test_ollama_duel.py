@@ -257,6 +257,96 @@ class MainMaxTokensValidationTests(unittest.TestCase):
             self.assertEqual(options["num_predict"], 1234)
 
 
+class MainModelOverrideTests(unittest.TestCase):
+    def _run_duel(self, argv, cfg):
+        seen = []
+
+        def fake_call_chat(host, model, messages, think, options, timeout=None):
+            seen.append((model, dict(options)))
+            metrics = {"gen_tokens": 10, "gen_s": 1.0,
+                       "prompt_tokens": 20, "prompt_s": 0.5}
+            return "", "canned reply", "stop", metrics
+
+        with tempfile.TemporaryDirectory() as d:
+            path = write_json(d, "cfg.json", cfg)
+            with mock.patch.object(sys, "argv",
+                                   ["ollama_duel.py", path] + argv), \
+                 mock.patch.object(ollama_duel, "call_chat", fake_call_chat):
+                ollama_duel.main()
+        return seen
+
+    def test_cli_model_a_and_b_swap_both_participants(self):
+        seen = self._run_duel(["--model-a", "qa:1b", "--model-b", "qb:2b"],
+                              minimal_config(turns=2))
+        self.assertTrue(seen)
+        self.assertEqual({m for m, _ in seen}, {"qa:1b", "qb:2b"})
+
+    def test_cli_model_override_keeps_scenario_models_when_absent(self):
+        seen = self._run_duel([], minimal_config(turns=2))
+        self.assertTrue(seen)
+        self.assertEqual({m for m, _ in seen}, {"m1", "m2"})
+
+    def test_cli_num_ctx_below_one_exits(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = write_json(d, "cfg.json", minimal_config())
+            with mock.patch.object(sys, "argv",
+                                   ["ollama_duel.py", path, "--num-ctx", "0"]):
+                with self.assertRaises(SystemExit):
+                    ollama_duel.main()
+
+    def test_cli_num_ctx_reaches_both_participants(self):
+        cfg = minimal_config(turns=2, num_ctx=1024)
+        cfg["models"][0]["num_ctx"] = 2048  # per-model value must lose
+        seen = self._run_duel(["--num-ctx", "4096"], cfg)
+        self.assertTrue(seen)
+        for _, options in seen:
+            self.assertEqual(options.get("num_ctx"), 4096)
+
+    def test_cli_model_flag_wins_over_profile(self):
+        profile = {"models": ["pa:1b", "pb:2b"]}
+        with tempfile.TemporaryDirectory() as d:
+            prof_path = write_json(d, "prof.json", profile)
+            cfg_path = write_json(d, "cfg.json", minimal_config(turns=2))
+            seen = []
+
+            def fake_call_chat(host, model, messages, think, options,
+                               timeout=None):
+                seen.append(model)
+                metrics = {"gen_tokens": 10, "gen_s": 1.0,
+                           "prompt_tokens": 20, "prompt_s": 0.5}
+                return "", "canned reply", "stop", metrics
+
+            argv = ["ollama_duel.py", cfg_path,
+                    "--profile", prof_path, "--model-a", "qa:1b"]
+            with mock.patch.object(sys, "argv", argv), \
+                 mock.patch.object(ollama_duel, "call_chat", fake_call_chat):
+                ollama_duel.main()
+        self.assertTrue(seen)
+        self.assertIn("qa:1b", seen)      # CLI flag wins for participant 1
+        self.assertIn("pb:2b", seen)      # profile still applies to participant 2
+
+
+class ApplyCliModelOverridesTests(unittest.TestCase):
+    def test_name_follows_swap_when_it_was_the_model_id(self):
+        cfg = {"models": [{"model": "m1", "name": "m1"},
+                          {"model": "m2", "name": "Two"}]}
+        ollama_duel.apply_cli_model_overrides(cfg, "qa:1b", "qb:2b", None)
+        self.assertEqual(cfg["models"][0]["name"], "qa:1b")
+        self.assertEqual(cfg["models"][1]["name"], "Two")  # explicit name kept
+
+    def test_num_ctx_set_top_level_and_cleared_per_model(self):
+        cfg = {"models": [{"model": "m1", "num_ctx": 2048}, {"model": "m2"}]}
+        ollama_duel.apply_cli_model_overrides(cfg, None, None, 4096)
+        self.assertEqual(cfg["num_ctx"], 4096)
+        self.assertNotIn("num_ctx", cfg["models"][0])
+
+    def test_all_none_leaves_config_untouched(self):
+        cfg = minimal_config()
+        ollama_duel.apply_cli_model_overrides(cfg, None, None, None)
+        self.assertEqual([m["model"] for m in cfg["models"]], ["m1", "m2"])
+        self.assertNotIn("num_ctx", cfg)
+
+
 class TurnNudgeTests(unittest.TestCase):
     """From turn 2 on, each turn's prompt must end with a nudge telling the
     model to reply directly to the other participant. Regression test: small
