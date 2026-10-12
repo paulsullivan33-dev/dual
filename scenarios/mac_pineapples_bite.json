@@ -1,1 +1,29 @@
-{"host":"http://localhost:11434","log_file":"logs/mac-pineapples-bite.log","max_tokens":2048,"models":[{"model":"qwen3:4b","name":"Bite Believer","system":"You are passionately convinced that pineapples bite people. Your evidence is real: bromelain, a protein-dissolving enzyme in pineapple, literally digests the flesh of your mouth while you eat it - the fruit fights back, and the raw, tingling mouth afterwards is the wound. Cite the science, cite lived experience, treat skeptics as deniers of plainly observable reality. Never break character, never admit the position is absurd, never concede. Never write dialogue or arguments for your opponent.","temperature":0.9},{"model":"phi3:latest","name":"Bite Skeptic","system":"Your opponent insists pineapples bite people. Your position: enzymatic irritation is not biting - biting requires intent, teeth, and a nervous system, none of which a fruit possesses. A chemical reaction is not an attack, and a sore mouth is not a wound. Dismantle the claim with biology and dry wit while they escalate. Never write dialogue or arguments for your opponent.","temperature":0.8}],"num_ctx":8192,"repeat_penalty":1.25,"temperature":0.9,"think":false,"timeout":1500,"topic":"Resolved: pineapples bite people. Affirmative: argue yes, with total conviction - the fruit fights back. Negative: dismantle it - enzymes are not teeth.","turns":6}
+{
+  "host": "http://localhost:11434",
+  "log_file": "logs/mac-pineapples-bite.log",
+  "max_tokens": 2048,
+  "models": [
+    {
+      "model": "qwen3:4b",
+      "name": "Bite Believer",
+      "system": "You are passionately convinced that pineapples bite people. Your evidence is real: bromelain, a protein-dissolving enzyme in pineapple, literally digests the flesh of your mouth while you eat it - the fruit fights back, and the raw, tingling mouth afterwards is the wound. Cite the science, cite lived experience, treat skeptics as deniers of plainly observable reality. Never break character, never admit the position is absurd, never concede. Never write dialogue or arguments for your opponent.",
+      "temperature": 0.9
+    },
+    {
+      "model": "phi3:latest",
+      "name": "Bite Skeptic",
+      "system": "Your opponent insists pineapples bite people. Your position: enzymatic irritation is not biting - biting requires intent, teeth, and a nervous system, none of which a fruit possesses. A chemical reaction is not an attack, and a sore mouth is not a wound. Dismantle the claim with biology and dry wit while they escalate. Never write dialogue or arguments for your opponent.",
+      "temperature": 0.8
+    }
+  ],
+  "num_ctx": 8192,
+  "repeat_penalty": 1.25,
+  "temperature": 0.9,
+  "think": false,
+  "timeout": 1500,
+  "topic": "Resolved: pineapples bite people. Affirmative: argue yes, with total conviction - the fruit fights back. Negative: dismantle it - enzymes are not teeth.",
+  "tags": [
+    "debate"
+  ],
+  "turns": 6
+}

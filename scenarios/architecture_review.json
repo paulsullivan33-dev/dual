@@ -20,5 +20,8 @@
   "temperature": 0.7,
   "think": false,
   "topic": "We're designing a new order-processing system for a mid-size e-commerce company with about 15 engineers. Should we build it as microservices or a monolith? Make your case, and respond directly to the other's points.",
+  "tags": [
+    "debate"
+  ],
   "turns": 8
 }

@@ -20,5 +20,8 @@
   "temperature": 0.95,
   "think": false,
   "topic": "Tonight's assignment: review the human dish called 'pizza.' Zorp, your opening review?",
+  "tags": [
+    "roleplay"
+  ],
   "turns": 8
 }

@@ -20,5 +20,8 @@
   "temperature": 0.9,
   "think": false,
   "topic": "Call the final minute of a tied championship match between the Ironclads and the Riptide -- the Ironclads just won a corner kick with 90 seconds left on the clock.",
+  "tags": [
+    "creative"
+  ],
   "turns": 10
 }

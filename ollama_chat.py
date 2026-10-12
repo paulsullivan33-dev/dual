@@ -25,16 +25,17 @@ from ollama_common import (
     OllamaError,
     build_duel_json,
     call_chat,
+    output_path,
     save_transcript_json_safe,
     setup_utf8_stdout,
     wrap_text,
 )
 from ollama_duel import (
     DEFAULT_TURN_PROMPT,
-    format_duel_stats,
     print_duel_header,
     run_duel,
 )
+from ollama_reporting import format_duel_stats
 
 
 def _build_options(args):
@@ -60,17 +61,17 @@ def cmd_chat(args):
     messages = []
     if args.system:
         messages.append({"role": "system", "content": args.system})
-    print(f"Chatting with {args.model} -- blank line, 'quit', or Ctrl-C to exit.\n")
+    print(f"Chatting with {args.model} -- type 'quit', 'exit' or ':q' (or press Ctrl-C) to leave.\n")
     while True:
         try:
             text = input("You: ").strip()
         except (EOFError, KeyboardInterrupt):
             print("\nBye.")
-            save_transcript_json_safe(args.save_json, messages)
+            save_transcript_json_safe(output_path(args.save_json), messages)
             return
         if text.lower() in ("quit", "exit", ":q"):
             print("Bye.")
-            save_transcript_json_safe(args.save_json, messages)
+            save_transcript_json_safe(output_path(args.save_json), messages)
             return
         if not text:
             continue
@@ -111,7 +112,7 @@ def cmd_duel(args):
             print()
             print(format_duel_stats(model_stats))
     finally:
-        save_transcript_json_safe(args.save_json, build_duel_json(transcript, personas))
+        save_transcript_json_safe(output_path(args.save_json), build_duel_json(transcript, personas))
 
 
 def main():

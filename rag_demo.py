@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """rag_demo.py -- a tiny retrieval-augmented generation (RAG) playground.
 
-Point it at a folder of your own .txt/.md files, ask questions, and watch
+Point it at a folder of your own .txt/.md/.epub files, ask questions, and watch
 a local model answer from YOUR documents instead of its training memory.
 
 Prerequisites: Ollama running locally, plus two models --
@@ -13,23 +13,33 @@ Two steps:
     python rag_demo.py ask                        (interactive; blank line quits)
     python rag_demo.py ask --question "what is ..."
 
+Re-running `index` rebuilds the database from scratch. Add `--append`
+to grow an existing index instead: files already indexed are replaced,
+everything else is kept (so a second novel, or a new batch of notes,
+doesn't force re-embedding the whole thing).
+
 Everything is stdlib-only: documents + embeddings live in a SQLite file
-(rag_demo.db by default), so you can open it and poke at it yourself.
+(output/rag_demo.db by default), so you can open it and poke at it yourself.
 """
 
 import argparse
 import json
 import math
 import os
+import re
 import sqlite3
 import sys
+import textwrap
 import urllib.request
 import urllib.error
 
 DEFAULT_HOST = "http://localhost:11434"
 DEFAULT_EMBED_MODEL = "nomic-embed-text"
 DEFAULT_CHAT_MODEL = "qwen3:8b"
-DEFAULT_DB = "rag_demo.db"
+# Generated files go under output/ (git-ignored), like the other scripts.
+# A relative --db is placed there too; an absolute path is used as-is.
+OUTPUT_DIR = "output"
+DEFAULT_DB = os.path.join(OUTPUT_DIR, "rag_demo.db")
 
 SYSTEM_PROMPT = (
     "You answer questions using ONLY the context below. The context is a set "
@@ -63,12 +73,44 @@ def chat(host, model, system, user_text):
     body = ollama_post(host, "/api/chat", {
         "model": model,
         "stream": False,
+        "think": False,
         "messages": [
             {"role": "system", "content": system},
             {"role": "user", "content": user_text},
         ],
     })
-    return body["message"]["content"]
+    content = body["message"]["content"]
+    # qwen3-family models leak thinking into the content even with
+    # think:false, in two shapes: full <think>...</think> blocks, or
+    # bare thinking prose terminated by a lone </think>. Strip both.
+    content = re.sub(r"<think>.*?</think>", "", content,
+                     flags=re.DOTALL)
+    if "</think>" in content:
+        content = content.rsplit("</think>", 1)[-1]
+    content = content.strip()
+    return content
+
+
+# ---------------------------------------------------------------- display
+
+WRAP_WIDTH = 75
+
+
+def wrap_text(text, width=WRAP_WIDTH):
+    """Word-wrap text for console display, like the duel scripts do.
+
+    Breaks long lines at spaces so words are never split; blank lines
+    and existing paragraph breaks are kept as-is.
+    """
+    lines = []
+    for para in text.split("\n"):
+        if not para.strip():
+            lines.append("")
+        else:
+            lines.extend(textwrap.wrap(para, width=width,
+                                       break_long_words=False,
+                                       break_on_hyphens=False))
+    return "\n".join(lines)
 
 
 # ---------------------------------------------------------------- chunking
@@ -76,18 +118,22 @@ def chat(host, model, system, user_text):
 def chunk_text(text, chunk_words=250, overlap_words=50):
     """Split text into word windows with overlap.
 
+    Windows are sliced straight from the original text, so line breaks
+    survive and retrieved chunks stay readable instead of collapsing
+    into one long line.
+
     Overlap matters: without it, an idea that straddles a chunk boundary
     gets cut in half and neither chunk makes sense alone. Try different
     --chunk-words / --overlap-words values and re-index to feel the effect.
     """
-    words = text.split()
-    if not words:
+    matches = list(re.finditer(r"\S+", text))
+    if not matches:
         return []
     chunks, start = [], 0
-    while start < len(words):
-        end = min(start + chunk_words, len(words))
-        chunks.append(" ".join(words[start:end]))
-        if end == len(words):
+    while start < len(matches):
+        end = min(start + chunk_words, len(matches))
+        chunks.append(text[matches[start].start():matches[end - 1].end()])
+        if end == len(matches):
             break
         start = end - overlap_words
     return chunks
@@ -96,6 +142,84 @@ def chunk_text(text, chunk_words=250, overlap_words=50):
 def read_text_file(path):
     with open(path, "r", encoding="utf-8", errors="replace") as fh:
         return fh.read()
+
+
+def read_epub(path):
+    """Extract readable text from an EPUB, in spine (reading) order.
+
+    Stdlib only: an .epub is a zip; META-INF/container.xml points at
+    the .opf package file, whose <spine> lists the content documents
+    in order. Markup is stripped; block elements become line breaks.
+    """
+    import zipfile
+    import xml.etree.ElementTree as ET
+    from html.parser import HTMLParser
+    from html import unescape
+
+    def local(tag):
+        return tag.rsplit("}", 1)[-1]
+
+    class TextExtractor(HTMLParser):
+        BLOCKS = {"p", "h1", "h2", "h3", "h4", "h5", "h6", "div", "li",
+                  "blockquote", "br", "hr", "tr", "title", "section",
+                  "article"}
+
+        def __init__(self):
+            super().__init__()
+            self.parts = []
+
+        def handle_starttag(self, tag, _attrs):
+            if local(tag) in self.BLOCKS:
+                self.parts.append("\n")
+
+        def handle_data(self, data):
+            self.parts.append(data)
+
+    with zipfile.ZipFile(path) as zf:
+        try:
+            container = ET.fromstring(zf.read("META-INF/container.xml"))
+        except KeyError as exc:
+            raise ValueError(
+                "not an EPUB (no META-INF/container.xml)") from exc
+        opf_path = next(
+            (el.get("full-path") for el in container.iter()
+             if local(el.tag) == "rootfile"), None)
+        if not opf_path:
+            raise ValueError("no rootfile in container.xml")
+        opf = ET.fromstring(zf.read(opf_path))
+        base = opf_path.rsplit("/", 1)[0] + "/" if "/" in opf_path else ""
+        manifest, spine = {}, []
+        for el in opf.iter():
+            name = local(el.tag)
+            if name == "item":
+                manifest[el.get("id")] = el.get("href")
+            elif name == "itemref":
+                spine.append(el.get("idref"))
+        docs = []
+        for idref in spine:
+            href = manifest.get(idref)
+            if not href:
+                continue
+            try:
+                raw = zf.read(base + href).decode("utf-8", errors="replace")
+            except KeyError:
+                continue
+            ex = TextExtractor()
+            ex.feed(raw)
+            ex.close()
+            text = unescape("".join(ex.parts))
+            text = re.sub(r"[ \t]+", " ", text)
+            text = re.sub(r"\n{3,}", "\n\n", text).strip()
+            if text:
+                docs.append(text)
+    return "\n\n".join(docs)
+
+
+def read_document(path):
+    """Read a supported document file as plain text."""
+    if path.lower().endswith(".epub"):
+        return read_epub(path)
+    return read_text_file(path)
 
 
 # ---------------------------------------------------------------- database
@@ -112,7 +236,21 @@ CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
 """
 
 
+def output_path(path):
+    """Same rule as ollama_common.output_path, kept local so this demo stays
+    a single self-contained file."""
+    if not path or os.path.isabs(path):
+        return path
+    norm = os.path.normpath(path)
+    if norm.split(os.sep)[0] == OUTPUT_DIR:
+        return norm
+    return os.path.join(OUTPUT_DIR, norm)
+
+
 def open_db(path):
+    parent = os.path.dirname(path)
+    if parent:
+        os.makedirs(parent, exist_ok=True)
     conn = sqlite3.connect(path)
     conn.executescript(SCHEMA)
     return conn
@@ -137,20 +275,49 @@ def cmd_index(args):
         os.path.join(root, f)
         for root, _, names in os.walk(docs)
         for f in names
-        if f.lower().endswith((".txt", ".md", ".markdown"))
+        if f.lower().endswith((".txt", ".md", ".markdown", ".epub"))
     )
     if not files:
-        sys.exit(f"No .txt/.md files found under {docs}")
+        sys.exit(f"No .txt/.md/.epub files found under {docs}")
     print(f"Found {len(files)} files. Embedding with {args.embed_model} ...")
 
     conn = open_db(args.db)
-    conn.execute("DELETE FROM chunks")
-    conn.execute("DELETE FROM meta")
+    meta_insert = "INSERT INTO meta (key, value) VALUES (?, ?)"
+    if args.append:
+        # Grow the existing index instead of rebuilding it. Files in --docs
+        # that are already indexed have their old chunks removed first, so
+        # re-running is idempotent: no duplicates, changed files replaced.
+        meta = dict(conn.execute("SELECT key, value FROM meta"))
+        if meta.get("embed_model") and meta["embed_model"] != args.embed_model:
+            conn.close()  # Windows can't delete an open db file on cleanup
+            sys.exit(
+                f"This index was built with '{meta['embed_model']}', not "
+                f"'{args.embed_model}'. Embeddings from different models "
+                "aren't comparable -- re-index without --append to start fresh.")
+        if meta.get("chunk_words") and (
+                meta["chunk_words"] != str(args.chunk_words)
+                or meta["overlap_words"] != str(args.overlap_words)):
+            print(f"Note: existing chunks use {meta['chunk_words']}/"
+                  f"{meta['overlap_words']} (chunk/overlap words); new files "
+                  f"will use {args.chunk_words}/{args.overlap_words}.")
+        conn.executemany("DELETE FROM chunks WHERE source = ?",
+                         [(os.path.relpath(p, docs),) for p in files])
+        conn.commit()
+        meta_insert = "INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)"
+        print(f"Appending {len(files)} files to the existing index "
+              f"({args.db}); old chunks kept.")
+    else:
+        conn.execute("DELETE FROM chunks")
+        conn.execute("DELETE FROM meta")
     total_chunks = 0
     for n, path in enumerate(files, 1):
-        text = read_text_file(path)
-        chunks = chunk_text(text, args.chunk_words, args.overlap_words)
         rel = os.path.relpath(path, docs)
+        try:
+            text = read_document(path)
+        except Exception as e:  # one bad file shouldn't kill the run
+            print(f"  skipping {rel}: {e}")
+            continue
+        chunks = chunk_text(text, args.chunk_words, args.overlap_words)
         rows = []
         for i, c in enumerate(chunks):
             emb = embed_text(args.host, args.embed_model, c)
@@ -162,7 +329,7 @@ def cmd_index(args):
         conn.commit()
         if n % 5 == 0 or n == len(files):
             print(f"  {n}/{len(files)} files, {total_chunks} chunks so far")
-    conn.executemany("INSERT INTO meta (key, value) VALUES (?, ?)", [
+    conn.executemany(meta_insert, [
         ("embed_model", args.embed_model),
         ("chunk_words", str(args.chunk_words)),
         ("overlap_words", str(args.overlap_words)),
@@ -203,19 +370,21 @@ def answer_one(args, chunks):
             print(f"[{n}] {src} chunk {i}  (similarity {cosine(q_emb, emb):.3f})")
         print("------------------------\n")
     prompt = build_prompt(args.question, hits)
-    print(chat(args.host, args.chat_model, SYSTEM_PROMPT, prompt))
+    print(wrap_text(chat(args.host, args.chat_model, SYSTEM_PROMPT, prompt)))
 
 
 def cmd_ask(args):
     if not os.path.exists(args.db):
         sys.exit(f"No database at {args.db} -- run the index step first.")
     conn = open_db(args.db)
-    chunks = load_chunks(conn)
-    conn.close()
+    try:
+        chunks = load_chunks(conn)
+        row = conn.execute(
+            "SELECT value FROM meta WHERE key='embed_model'").fetchone()
+    finally:
+        conn.close()
     if not chunks:
         sys.exit("Database is empty -- run the index step first.")
-    row = sqlite3.connect(args.db).execute(
-        "SELECT value FROM meta WHERE key='embed_model'").fetchone()
     if row and row[0] != args.embed_model:
         print(f"Note: index was built with '{row[0]}' but you're querying "
               f"with '{args.embed_model}'. Re-index if answers look off.")
@@ -247,12 +416,15 @@ def main(argv=None):
                     help="Ollama embedding model")
     sub = ap.add_subparsers(dest="cmd", required=True)
 
-    p = sub.add_parser("index", help="embed a folder of .txt/.md files")
+    p = sub.add_parser("index", help="embed a folder of .txt/.md/.epub files")
     p.add_argument("--docs", required=True, help="folder of documents")
     p.add_argument("--chunk-words", type=int, default=250,
                    help="target words per chunk")
     p.add_argument("--overlap-words", type=int, default=50,
                    help="words overlapping between chunks")
+    p.add_argument("--append", action="store_true",
+                   help="add to the existing index instead of rebuilding it; "
+                        "files already indexed are replaced, others are kept")
 
     p = sub.add_parser("ask", help="ask a question about the indexed docs")
     p.add_argument("--question", default=None,
@@ -266,6 +438,7 @@ def main(argv=None):
     p.set_defaults(show_chunks=True)
 
     args = ap.parse_args(argv)
+    args.db = output_path(args.db)
     if args.cmd == "index":
         cmd_index(args)
     else:

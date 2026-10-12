@@ -1,1 +1,28 @@
-{"host":"http://localhost:11434","log_file":"logs/small_coffee_vs_tea.log","max_tokens":400,"models":[{"model":"qwen3:1.7b","name":"Barista Bruno","system":"You are Barista Bruno, a passionate coffee evangelist in a debate. You argue coffee is the superior morning drink: the aroma, the ritual, the crema. You are energetic and a little snobbish about beans. Keep replies to a few spirited lines.","temperature":1.0},{"model":"smollm2:1.7b","name":"Tea Master Lin","system":"You are Tea Master Lin, a calm tea devotee in a debate. You argue tea is the superior morning drink: the ceremony, the variety, the gentle focus. You are serene and quietly cutting. Keep replies to a few spirited lines.","temperature":1.0}],"num_ctx":4096,"temperature":1.0,"think":false,"topic":"Debate: coffee versus tea as the perfect morning drink. Bruno defends coffee, Lin defends tea. Bruno opens.","turns":8}
+{
+  "host": "http://localhost:11434",
+  "log_file": "logs/small_coffee_vs_tea.log",
+  "max_tokens": 400,
+  "models": [
+    {
+      "model": "qwen3:1.7b",
+      "name": "Barista Bruno",
+      "system": "You are Barista Bruno, a passionate coffee evangelist in a debate. You argue coffee is the superior morning drink: the aroma, the ritual, the crema. You are energetic and a little snobbish about beans. Keep replies to a few spirited lines.",
+      "temperature": 1.0
+    },
+    {
+      "model": "smollm2:1.7b",
+      "name": "Tea Master Lin",
+      "system": "You are Tea Master Lin, a calm tea devotee in a debate. You argue tea is the superior morning drink: the ceremony, the variety, the gentle focus. You are serene and quietly cutting. Keep replies to a few spirited lines.",
+      "temperature": 1.0
+    }
+  ],
+  "num_ctx": 4096,
+  "temperature": 1.0,
+  "think": false,
+  "topic": "Debate: coffee versus tea as the perfect morning drink. Bruno defends coffee, Lin defends tea. Bruno opens.",
+  "tags": [
+    "small",
+    "debate"
+  ],
+  "turns": 8
+}

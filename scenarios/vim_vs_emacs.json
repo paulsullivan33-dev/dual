@@ -20,5 +20,8 @@
   "temperature": 0.8,
   "think": false,
   "topic": "The eternal question, settled tonight: Vim or Emacs - which is the superior editor for a serious programmer?",
+  "tags": [
+    "debate"
+  ],
   "turns": 8
 }

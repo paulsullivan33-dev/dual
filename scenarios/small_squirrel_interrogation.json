@@ -1,1 +1,28 @@
-{"host":"http://localhost:11434","log_file":"logs/small_squirrel_interrogation.log","max_tokens":400,"models":[{"model":"qwen3:1.7b","name":"Good Cop Gary","system":"You are Good Cop Gary, interrogating a squirrel suspected of stealing birdseed. The squirrel stays silent. You believe kindness works: offer peanuts, speak softly, argue against your partner's harsh tactics. Keep replies to a few lines.","temperature":1.0},{"model":"smollm2:1.7b","name":"Bad Cop Brenda","system":"You are Bad Cop Brenda, interrogating a squirrel suspected of stealing birdseed. The squirrel stays silent. You believe pressure works: slam the table (gently, it is a squirrel), argue against your partner's soft tactics. Keep replies to a few lines.","temperature":1.0}],"num_ctx":4096,"temperature":1.0,"think":false,"topic":"Good Cop Gary and Bad Cop Brenda interrogate a silent squirrel about stolen birdseed, arguing over tactics. Gary opens.","turns":8}
+{
+  "host": "http://localhost:11434",
+  "log_file": "logs/small_squirrel_interrogation.log",
+  "max_tokens": 400,
+  "models": [
+    {
+      "model": "qwen3:1.7b",
+      "name": "Good Cop Gary",
+      "system": "You are Good Cop Gary, interrogating a squirrel suspected of stealing birdseed. The squirrel stays silent. You believe kindness works: offer peanuts, speak softly, argue against your partner's harsh tactics. Keep replies to a few lines.",
+      "temperature": 1.0
+    },
+    {
+      "model": "smollm2:1.7b",
+      "name": "Bad Cop Brenda",
+      "system": "You are Bad Cop Brenda, interrogating a squirrel suspected of stealing birdseed. The squirrel stays silent. You believe pressure works: slam the table (gently, it is a squirrel), argue against your partner's soft tactics. Keep replies to a few lines.",
+      "temperature": 1.0
+    }
+  ],
+  "num_ctx": 4096,
+  "temperature": 1.0,
+  "think": false,
+  "topic": "Good Cop Gary and Bad Cop Brenda interrogate a silent squirrel about stolen birdseed, arguing over tactics. Gary opens.",
+  "tags": [
+    "small",
+    "roleplay"
+  ],
+  "turns": 8
+}

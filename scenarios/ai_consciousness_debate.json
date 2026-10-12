@@ -20,5 +20,8 @@
   "temperature": 0.85,
   "think": false,
   "topic": "Can a large language model ever be conscious, or is it just simulating the appearance of understanding convincingly? Make your case, and respond directly to the other's strongest point.",
+  "tags": [
+    "debate"
+  ],
   "turns": 8
 }

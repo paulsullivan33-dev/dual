@@ -5,32 +5,47 @@ ollama_duel.py -- two AI models converse with each other, configured from JSON.
 Usage:
     python3 ollama_duel.py duel.json
     python3 ollama_duel.py duel.json --turns 10 --topic "A different question"
+    python3 ollama_duel.py duel.json --profile arduino_q
+    python3 ollama_duel.py --profile arduino_q      (runs the profile's scenario list)
+
+A machine profile (profiles/<name>.json) swaps both speakers' models by
+position and forces settings such as num_ctx and think, so one scenario
+file serves every machine.
 
 Globals in the JSON (host, topic, turns, think, max_tokens, temperature,
-num_ctx, repeat_penalty, turn_prompt, first_turn_prompt, log_file, save_json,
-timeout, display, dedup_guard, ntfy_url) act as defaults; anything set inside a "models"
-entry overrides the global for that model only (think, max_tokens,
-temperature, num_ctx, repeat_penalty, turn_prompt, first_turn_prompt only --
-the rest are duel-wide). "models" must contain exactly 2 entries.
+num_ctx, repeat_penalty, turn_prompt, first_turn_prompt, history_turns,
+log_file, save_json, timeout, display, dedup_guard, ntfy_url, run_code,
+run_code_args, run_code_timeout, tags, judge) act as defaults; anything set inside a
+"models" entry overrides the global for that model only (think, max_tokens,
+temperature, num_ctx, repeat_penalty, turn_prompt, first_turn_prompt,
+history_turns only -- the rest are duel-wide). "models" must contain exactly
+2 entries. run_code (or --run-code) runs each reply's Python block; see
+ollama_coderun.py.
 If "log_file" is set, everything printed to stdout is mirrored to a
 timestamped copy of that file: the current date/time is prepended to the
-file name (e.g. "duel.log" -> "20260925-084500-duel.log") so each run gets
+file name (e.g. "logs/duel.log" -> "output/logs/20260925-084500-duel.log") so each run gets
 its own log instead of appending to a previous run's. If "save_json" is set,
 the transcript (speaker/model/text per turn) is written there as JSON when
 the duel ends, including after a stopped-early error or Ctrl-C.
 
 After every run the script also appends a one-block summary to
-"run_results.log" in the current directory (override with the top-level
+"output/run_results.log" (override with the top-level
 "results_log" setting or --results-log, disable with --no-results-log):
 date/time, config, models, turns completed, and the per-model stats table
 on success or the error message when the duel stopped early.
+
+Relative paths for log_file, save_json and results_log are placed under the
+output/ folder (see ollama_common.output_path); absolute paths are used as-is.
 """
 
 import argparse
+import glob
 import json
 import os
 import re
+import socket
 import sys
+import time
 from datetime import datetime
 
 from ollama_common import (
@@ -38,21 +53,33 @@ from ollama_common import (
     DEFAULT_TIMEOUT,
     OllamaError,
     build_duel_json,
+    check_unknown_keys as _check_unknown_keys,
     call_chat,
+    output_path,
     save_transcript_json_safe,
     setup_utf8_stdout,
+    validate_field as _validate_field,
     wrap_text,
 )
+from ollama_reporting import (append_run_summary, format_duel_stats, format_run_summary,
+                              load_default_ntfy_url, notify_duel_done, ntfy_post)
+from ollama_coderun import (DEFAULT_RUN_TIMEOUT, count_runs, describe_run,
+                            extract_program, run_program)
+from ollama_judge import normalize_judge, run_judge
+from ollama_profiles import apply_profile, load_profile, profile_scenarios
 
 
 TOP_LEVEL_KEYS = {
     "host", "topic", "turns", "think", "max_tokens", "temperature",
     "num_ctx", "repeat_penalty", "turn_prompt", "first_turn_prompt",
-    "log_file", "save_json", "timeout",
+    "history_turns", "log_file", "save_json", "timeout",
     "display", "dedup_guard", "results_log", "ntfy_url", "models",
+    "run_code", "run_code_args", "run_code_timeout", "tags", "judge",
+    "max_temp", "resume_temp", "temp_guard",
 }
 MODEL_KEYS = {"model", "name", "system", "think", "max_tokens", "temperature",
-              "num_ctx", "repeat_penalty", "turn_prompt", "first_turn_prompt"}
+              "num_ctx", "repeat_penalty", "turn_prompt", "first_turn_prompt",
+              "history_turns"}
 
 # Sent as the last message on every turn after the first, to nudge the model
 # to answer the other participant instead of starting a fresh parallel
@@ -127,38 +154,7 @@ class Tee:
             s.flush()
 
 
-def _validate_field(container, key, kind, label, minimum=None):
-    """Check an optional field's type (and minimum, if given) or exit with
-    a clear message. `kind` is one of "bool", "int", "number", "str"."""
-    if key not in container or container[key] is None:
-        return
-    value = container[key]
-    if kind == "bool":
-        ok = isinstance(value, bool)
-    elif kind == "int":
-        ok = isinstance(value, int) and not isinstance(value, bool)
-    elif kind == "number":
-        ok = isinstance(value, (int, float)) and not isinstance(value, bool)
-    else:  # "str"
-        ok = isinstance(value, str)
-    if not ok:
-        sys.exit(f'"{key}" in {label} must be a {kind}, got {value!r}.')
-    if minimum is not None and value < minimum:
-        sys.exit(f'"{key}" in {label} must be >= {minimum}, got {value!r}.')
-
-
-def _check_unknown_keys(container, allowed, label):
-    """Reject keys outside `allowed` so a typo (e.g. "temprature") fails
-    loudly instead of silently falling back to a default."""
-    unknown = sorted(set(container) - allowed)
-    if unknown:
-        sys.exit(
-            f'Unknown setting(s) in {label}: {", ".join(unknown)}. '
-            f'Allowed: {", ".join(sorted(allowed))}.'
-        )
-
-
-def load_config(path):
+def load_config(path, profile=None):
     try:
         with open(path, encoding="utf-8") as f:
             cfg = json.load(f)
@@ -177,6 +173,11 @@ def load_config(path):
     for m in models:
         if not isinstance(m, dict) or "model" not in m:
             sys.exit('Each model entry needs a "model" key, e.g. "qwen3:4b".')
+    if profile:
+        # Before names default to model ids, so an unnamed speaker is named
+        # after the profile's model, not the one it replaced.
+        apply_profile(cfg, profile)
+    for m in models:
         m.setdefault("name", m["model"])
         _check_unknown_keys(m, MODEL_KEYS, f'model "{m["name"]}"')
 
@@ -188,15 +189,33 @@ def load_config(path):
     _validate_field(cfg, "temperature", "number", "top level", minimum=0)
     _validate_field(cfg, "num_ctx", "int", "top level", minimum=1)
     _validate_field(cfg, "repeat_penalty", "number", "top level", minimum=1)
+    _validate_field(cfg, "history_turns", "int", "top level", minimum=1)
     _validate_field(cfg, "turn_prompt", "str", "top level")
     _validate_field(cfg, "first_turn_prompt", "str", "top level")
     _validate_field(cfg, "log_file", "str", "top level")
     _validate_field(cfg, "save_json", "str", "top level")
     _validate_field(cfg, "timeout", "number", "top level", minimum=1)
     _validate_field(cfg, "display", "bool", "top level")
+    _validate_field(cfg, "run_code", "bool", "top level")
+    _validate_field(cfg, "run_code_timeout", "number", "top level", minimum=1)
+    run_args = cfg.get("run_code_args")
+    if run_args is not None and not (
+            isinstance(run_args, list) and all(isinstance(a, str) for a in run_args)):
+        sys.exit(f'"run_code_args" in top level must be a list of strings, got {run_args!r}.')
     _validate_field(cfg, "dedup_guard", "bool", "top level")
+    _validate_field(cfg, "temp_guard", "bool", "top level")
+    _validate_field(cfg, "max_temp", "number", "top level", minimum=1)
+    _validate_field(cfg, "resume_temp", "number", "top level", minimum=1)
     _validate_field(cfg, "results_log", "str", "top level")
     _validate_field(cfg, "ntfy_url", "str", "top level")
+    tags = cfg.get("tags")
+    if tags is not None and not (
+            isinstance(tags, list) and tags
+            and all(isinstance(t, str) and t.strip() for t in tags)):
+        sys.exit(f'"tags" in top level must be a non-empty list of strings, '
+                 f'got {tags!r}.')
+    cfg["tags"] = tags
+    cfg["judge"] = normalize_judge(cfg.get("judge"))
     for m in models:
         label = f'model "{m["name"]}"'
         _validate_field(m, "think", "bool", label)
@@ -204,6 +223,7 @@ def load_config(path):
         _validate_field(m, "temperature", "number", label, minimum=0)
         _validate_field(m, "num_ctx", "int", label, minimum=1)
         _validate_field(m, "repeat_penalty", "number", label, minimum=1)
+        _validate_field(m, "history_turns", "int", label, minimum=1)
         _validate_field(m, "turn_prompt", "str", label)
         _validate_field(m, "first_turn_prompt", "str", label)
     return cfg
@@ -263,43 +283,6 @@ def print_turn(label, turn_no, thinking, reply, show_thinking):
     print()
 
 
-def format_duel_stats(model_stats):
-    """Build a per-model performance table from the stats dict accumulated
-    during a duel. Each entry holds turns, token counts, phase durations in
-    seconds, and truncated-turn count. Returns "" when no turns completed."""
-    if not model_stats:
-        return ""
-    rows = []
-    for model, s in model_stats.items():
-        gen_tps = s["gen_tokens"] / s["gen_s"] if s["gen_s"] > 0 else 0.0
-        prompt_tps = (s["prompt_tokens"] / s["prompt_s"]
-                      if s["prompt_s"] > 0 else 0.0)
-        rows.append((model, s["turns"], gen_tps, prompt_tps,
-                     s["gen_tokens"], s["truncated"]))
-
-    def col(values, header, align_right=True):
-        """Pad one column; returns (header_cell, [data_cells])."""
-        cells = [header] + [str(v) for v in values]
-        width = max(len(c) for c in cells)
-        pad = str.rjust if align_right else str.ljust
-        padded = [pad(c, width) for c in cells]
-        return padded[0], padded[1:]
-
-    cols = [
-        col([r[0] for r in rows], "Model", align_right=False),
-        col([r[1] for r in rows], "Turns"),
-        col([f"{r[2]:.1f}" for r in rows], "Gen tok/s"),
-        col([f"{r[3]:.1f}" for r in rows], "Prompt tok/s"),
-        col([r[4] for r in rows], "Tokens"),
-        col([r[5] for r in rows], "Truncated"),
-    ]
-    lines = ["=== Model performance ===",
-             "  ".join(header for header, _ in cols)]
-    for i in range(len(rows)):
-        lines.append("  ".join(cells[i] for _, cells in cols))
-    return "\n".join(lines)
-
-
 def timestamped_log_path(log_path):
     """Prepend a filesystem-safe date/time stamp to the log file's base name
     (e.g. "logs/duel.log" -> "logs/20260925-084500-duel.log") so each duel
@@ -309,138 +292,13 @@ def timestamped_log_path(log_path):
     return os.path.join(directory, f"{stamp}-{base}")
 
 
-def format_run_summary(run_started, config_path, participants, turns,
-                       transcript, model_stats, stop_note, crashed=False):
-    """Build the one-block summary appended to run_results.log after a duel.
-
-    Always carries the date/time, config, models, and how many of the
-    requested turns completed. A finished duel gets the per-model stats
-    table; a duel that stopped early gets the error message instead, so a
-    batch of runs can be scanned without opening each transcript log.
-    `crashed` covers an unexpected exception escaping the turn loop (the
-    traceback itself goes to the console); pass the message as stop_note.
-    """
-    bar = "-" * 72
-    stamp = run_started.strftime("%Y-%m-%d %H:%M:%S")
-    duration_s = (datetime.now() - run_started).total_seconds()
-    a, b = participants
-    lines = [
-        bar,
-        f"Run: {stamp}",
-        f"Config: {config_path}",
-        f"Models: {a['model']} ({a['name']}) vs {b['model']} ({b['name']})",
-        f"Turns: {len(transcript)}/{turns} "
-        f"({len(transcript)} replies) in {duration_s:.0f}s",
-    ]
-    if crashed:
-        lines.append("Result: CRASHED")
-        lines.append(stop_note.strip())
-    elif stop_note:
-        lines.append("Result: STOPPED EARLY")
-        lines.append(stop_note.strip())
-    else:
-        lines.append("Result: OK")
-        stats_table = format_duel_stats(model_stats)
-        if stats_table:
-            lines.append(stats_table)
-    lines.append(bar)
-    return "\n".join(lines) + "\n"
-
-
-def append_run_summary(path, entry):
-    """Append one summary block to the results log. Best-effort: a bad
-    path warns on stderr instead of failing the run, since the summary is
-    a convenience -- the transcript log and save_json are already written."""
-    try:
-        parent = os.path.dirname(path)
-        if parent:
-            os.makedirs(parent, exist_ok=True)
-        with open(path, "a", encoding="utf-8") as f:
-            f.write(entry)
-    except OSError as e:
-        print(f"Warning: could not write run summary to {path}: {e}",
-              file=sys.stderr)
-
-
-def load_default_ntfy_url():
-    """Read the ntfy topic URL from the default config file ~/.dual.conf.
-
-    The file is a JSON object, e.g. {"ntfy_url": "https://ntfy.sh/my-topic"}.
-    Returns "" when the file is missing, unreadable, not JSON, or has no
-    usable ntfy_url -- the caller then skips notifications silently.
-    """
-    path = os.path.join(os.path.expanduser("~"), ".dual.conf")
-    try:
-        with open(path, encoding="utf-8") as f:
-            data = json.load(f)
-    except (OSError, ValueError):
-        return ""
-    if isinstance(data, dict):
-        url = data.get("ntfy_url")
-        return url if isinstance(url, str) and url.strip() else ""
-    return ""
-
-
-def format_token_stats_line(model_stats):
-    """One-line per-model token summary for notifications, e.g.
-    'tokens: m1 100 tok @ 2.0 tok/s, m2 80 tok @ 1.6 tok/s'.
-    Returns "" when no stats are available."""
-    if not model_stats:
-        return ""
-    parts = []
-    for model, s in model_stats.items():
-        gen_tps = s["gen_tokens"] / s["gen_s"] if s["gen_s"] > 0 else 0.0
-        parts.append(f"{model} {s['gen_tokens']} tok @ {gen_tps:.1f} tok/s")
-    return "tokens: " + ", ".join(parts)
-
-
-def notify_duel_done(url, config_path, participants, turns, transcript,
-                     run_started, stop_note, crashed, model_stats=None):
-    """POST a short completion notice to ntfy. Best-effort: any failure
-    warns on stderr and never fails the run."""
-    import socket
-    import urllib.request  # stdlib; imported here so --help stays instant
-    scenario = os.path.basename(config_path)
-    host = socket.gethostname()
-    duration_s = (datetime.now() - run_started).total_seconds()
-    a, b = participants
-    if crashed:
-        title, result, tags = (f"duel crashed: {scenario} [{host}]",
-                               "CRASHED", "warning")
-    elif stop_note:
-        title, result, tags = (f"duel stopped early: {scenario} [{host}]",
-                               "STOPPED EARLY", "warning")
-    else:
-        title, result, tags = (f"duel finished: {scenario} [{host}]",
-                               "OK", "tada")
-    body = "\n".join([
-        f"{scenario}: {result}",
-        f"{a['model']} ({a['name']}) vs {b['model']} ({b['name']})",
-        f"{len(transcript)}/{turns} turns in {duration_s:.0f}s",
-    ])
-    stats_line = format_token_stats_line(model_stats)
-    if stats_line:
-        body += "\n" + stats_line
-    if stop_note and not crashed:
-        body += "\n" + stop_note.strip().splitlines()[0][:200]
-    try:
-        req = urllib.request.Request(url, data=body.encode("utf-8"),
-                                     method="POST")
-        req.add_header("Title", title)
-        req.add_header("Tags", tags)
-        with urllib.request.urlopen(req, timeout=15) as resp:
-            resp.read()
-    except Exception as e:  # noqa: BLE001 -- notification must not fail the run
-        print(f"Warning: ntfy notification failed: {e}", file=sys.stderr)
-
-
-def _matrix(matrix, method, *args):
+def _matrix(matrix, method, *args, **kwargs):
     """Best-effort LED matrix update. Returns the matrix, or None if the
     display died mid-duel (the duel itself continues either way)."""
     if matrix is None:
         return None
     try:
-        getattr(matrix, method)(*args)
+        getattr(matrix, method)(*args, **kwargs)
     except Exception as e:  # DisplayUnavailable or anything unexpected
         print(f"LED matrix lost ({e}); continuing without display.",
               file=sys.stderr)
@@ -448,7 +306,64 @@ def _matrix(matrix, method, *args):
     return matrix
 
 
-def build_turn_messages(participants, i, topic, transcript):
+def read_cpu_temp():
+    """CPU temperature in degrees C, or None when no sensor is readable.
+
+    Reads the first thermal zone exposing a temp file (thermal_zone0 is
+    the CPU on Raspberry Pi and most ARM boards; values are millidegrees
+    C). A missing/unreadable sensor returns None, which disables the
+    thermal guard for the run instead of failing it.
+    """
+    for path in sorted(glob.glob("/sys/class/thermal/thermal_zone*/temp")):
+        try:
+            with open(path, encoding="utf-8") as f:
+                return int(f.read().strip()) / 1000.0
+        except (OSError, ValueError):
+            continue
+    return None
+
+
+def thermal_pause_if_hot(matrix, ntfy_url, max_temp, resume_temp):
+    """Pause the duel while the CPU is hotter than max_temp.
+
+    Sleeps in 60-second checks until the temp drops to resume_temp, then
+    returns. Sends one ntfy notice on pause and one on resume, each with
+    the temp. A None max_temp (guard disabled) or no readable sensor
+    returns immediately. Best-effort throughout: nothing here raises.
+    """
+    try:
+        if max_temp is None:
+            return
+        temp = read_cpu_temp()
+        if temp is None or temp < max_temp:
+            return
+        host = socket.gethostname()
+        start = time.monotonic()
+        # stdout, not stderr: the transcript log mirrors stdout, so the
+        # pause is on the permanent record, not just the console.
+        print(f"CPU at {temp:.1f}C (>= {max_temp:.0f}C); pausing duel to "
+              f"cool down to {resume_temp:.0f}C.")
+        ntfy_post(ntfy_url, f"duel paused for cooling [{host}]",
+                  f"CPU at {temp:.1f}C (>= {max_temp:.0f}C); pausing until "
+                  f"it cools to {resume_temp:.0f}C.", tags="thermometer")
+        _matrix(matrix, "show_text", "COOLING")
+        while True:
+            time.sleep(60)
+            temp = read_cpu_temp()
+            if temp is None or temp <= resume_temp:
+                break
+        paused_s = time.monotonic() - start
+        cooled = f"{temp:.1f}C" if temp is not None else "unknown"
+        print(f"CPU cooled to {cooled}; resuming duel after {paused_s:.0f}s.")
+        ntfy_post(ntfy_url, f"duel resumed [{host}]",
+                  f"CPU cooled to {cooled} after {paused_s:.0f}s pause; "
+                  f"resuming.", tags="thermometer")
+    except Exception as e:  # noqa: BLE001 -- guard must never break a duel
+        print(f"Warning: thermal guard failed ({e}); continuing.",
+              file=sys.stderr)
+
+
+def build_turn_messages(participants, i, topic, transcript, run_reports=None):
     """Build the message list for participant `i`'s next turn.
 
     Seen from that speaker's point of view: their own past lines are
@@ -460,15 +375,25 @@ def build_turn_messages(participants, i, topic, transcript):
     speaker's first_turn_prompt (see DEFAULT_FIRST_TURN_PROMPT) closes the
     list instead, so the opener stays in character rather than script-writing
     both sides; an empty first_turn_prompt disables it.
+
+    When the speaker's history_turns is set, only the most recent that many
+    replies are sent (the system prompt, topic and nudge always are), so a
+    long duel can't outgrow a small context window.
     """
     me = participants[i]
     messages = []
     if me["system"]:
         messages.append({"role": "system", "content": me["system"]})
     messages.append({"role": "user", "content": topic})
-    for spk, text in transcript:
+    history = me.get("history_turns")
+    recent = transcript[-history:] if history else transcript
+    first_index = len(transcript) - len(recent)
+    for k, (spk, text) in enumerate(recent, first_index):
         role = "assistant" if spk == i else "user"
         messages.append({"role": role, "content": text})
+        # With run_code on, what happened when this reply's program ran.
+        if run_reports and k in run_reports:
+            messages.append({"role": "user", "content": run_reports[k]})
     first_nudge = me.get("first_turn_prompt", DEFAULT_FIRST_TURN_PROMPT)
     if transcript and me["turn_prompt"]:
         messages.append({
@@ -491,8 +416,46 @@ def print_duel_header(topic, participants, turns):
     print(f"[{a['model']} as {a['name']}] vs [{b['model']} as {b['name']}] -- {turns} turns\n")
 
 
+CONTEXT_NEARLY_FULL = 0.8  # note when a speaker's context window passes 80%
+
+
+def context_tokens_used(messages, reply, metrics):
+    """How much of the context window this turn used: prompt plus reply.
+
+    Ollama's prompt_eval_count can count only the uncached part of a prompt
+    when it reuses a previous request's prefix, so take the larger of its
+    figures and a rough estimate from the text (~4 characters per token).
+    """
+    reported = metrics.get("prompt_tokens", 0) + metrics.get("gen_tokens", 0)
+    chars = sum(len(m.get("content") or "") for m in messages) + len(reply)
+    return max(reported, chars // 4)
+
+
+def context_usage_note(name, used, num_ctx, level):
+    """Warn as a speaker's conversation fills its context window.
+
+    Every turn resends the whole transcript, so it only grows. Returns
+    (message or None, new level); each level is reported once per speaker,
+    so the log isn't flooded. Without an explicit num_ctx the window is the
+    server's default, which isn't known here, so nothing is reported.
+    """
+    if not num_ctx:
+        return None, level
+    pct = round(100 * used / num_ctx)
+    if used >= num_ctx and level < 2:
+        return (f"--- WARNING: {name}'s context window is full ({used}/{num_ctx} "
+                f"tokens). Ollama has to drop older messages to fit, so {name} may "
+                f"lose track of the topic and earlier turns; raise num_ctx or use "
+                f"fewer turns ---"), 2
+    if used >= CONTEXT_NEARLY_FULL * num_ctx and level < 1:
+        return (f"--- NOTE: {name}'s context window is {pct}% full ({used}/{num_ctx} "
+                f"tokens); it fills up as the conversation grows ---"), 1
+    return None, level
+
+
 def run_duel(host, topic, turns, participants, timeout, transcript, matrix=None,
-             dedup_guard=True):
+             dedup_guard=True, run_code=None, ntfy_url=None,
+             max_temp=None, resume_temp=None):
     """Run the duel's turn loop, printing each reply as it arrives.
 
     Each participant is a dict with name, model, system, think, options,
@@ -515,15 +478,24 @@ def run_duel(host, topic, turns, participants, timeout, transcript, matrix=None,
     """
     model_stats = {}  # model -> {turns, gen_tokens, gen_s, prompt_tokens, prompt_s, truncated}
     prev_replies = {}  # speaker_index -> normalized text of their last reply
+    run_reports = {}  # transcript index -> code-run report (run_code only)
+    # Outcome of each code run, kept in run_code so main() can put the tally
+    # in the run summary and ntfy notice.
+    run_results = run_code.setdefault("results", []) if run_code is not None else []
+    ctx_levels = [0, 0]  # per speaker: 0 = fine, 1 = nearly-full noted, 2 = full warned
     stop_note = None  # why the loop ended early, when it did
     try:
         for turn in range(turns):
             i = turn % 2
             me = participants[i]
-            messages = build_turn_messages(participants, i, topic, transcript)
+            messages = build_turn_messages(participants, i, topic, transcript,
+                                           run_reports)
 
             print("  (waiting for reply...)", file=sys.stderr, flush=True)
-            matrix = _matrix(matrix, "progress", turn, turns)
+            thermal_pause_if_hot(matrix, ntfy_url, max_temp, resume_temp)
+            # Bare turn number, static: "4/10" is 23 columns on a 13-column
+            # display, so it would scroll off and leave the screen blank.
+            matrix = _matrix(matrix, "show_text", str(turn + 1), scroll=False)
             thinking, reply, done_reason, metrics = call_chat(host, me["model"], messages,
                                                              me["think"], me["options"],
                                                              timeout=timeout)
@@ -573,13 +545,44 @@ def run_duel(host, topic, turns, participants, timeout, transcript, matrix=None,
                       f"({me['options']['num_predict']} tokens) and was truncated; "
                       f"consider raising max_tokens ---")
                 print()
+            used = context_tokens_used(messages, reply, metrics)
+            note, ctx_levels[i] = context_usage_note(
+                me["name"], used, me["options"].get("num_ctx"), ctx_levels[i])
+            if note:
+                print(note)
+                print()
+            if run_code is not None:
+                run_results.append(
+                    _run_reply_code(reply, me["name"], run_code, run_reports,
+                                    len(transcript) - 1))
     except KeyboardInterrupt:
         stop_note = "interrupted by user (Ctrl-C)"
         print("\nStopped.", file=sys.stderr)
     except OllamaError as e:
         stop_note = str(e)
         print(f"\n{e}\nStopped.", file=sys.stderr)
+    if run_results:
+        print(count_runs(run_results))
+        print()
     return model_stats, matrix, stop_note
+
+
+def _run_reply_code(reply, author, run_code, run_reports, index):
+    """With run_code on: run the reply's last Python block, print the
+    result, and remember it so later turns show it to both speakers.
+    Returns the outcome ("ok", "failed", "timeout" or "no_code")."""
+    program = extract_program(reply)
+    if program is None:
+        print("--- CODE RUN: no Python code block in this reply ---")
+        print()
+        return "no_code"
+    result = run_program(program, run_code["args"], run_code["timeout"])
+    report = describe_run(result, author)
+    run_reports[index] = report
+    print("--- CODE RUN ---")
+    print(report)
+    print()
+    return result["status"]
 
 
 def expand_configs(config_arg):
@@ -602,6 +605,41 @@ def expand_configs(config_arg):
             sys.exit(f"Glob matched no files: {config_arg}")
         return paths
     return [config_arg]
+
+
+def read_scenario_tags(path):
+    """Best-effort read of a scenario file's "tags" list. Anything
+    unreadable or malformed yields [] -- tag filtering must never fail a
+    batch, it just skips what it can't read."""
+    try:
+        with open(path, encoding="utf-8") as f:
+            tags = json.load(f).get("tags")
+    except (OSError, ValueError):
+        return []
+    if isinstance(tags, list):
+        return [t for t in tags if isinstance(t, str)]
+    return []
+
+
+def configs_matching_tags(configs, wanted):
+    """Keep the scenario files carrying any of the wanted tags.
+
+    No wanted tags -> everything passes through, so single-file runs and
+    untagged batches behave exactly as before.
+    """
+    if not wanted:
+        return list(configs)
+    wanted = set(wanted)
+    return [p for p in configs if wanted & set(read_scenario_tags(p))]
+
+
+def list_all_tags(configs):
+    """Every tag used by the given scenario files, with a count each."""
+    counts = {}
+    for path in configs:
+        for tag in read_scenario_tags(path):
+            counts[tag] = counts.get(tag, 0) + 1
+    return counts
 
 
 def run_batch(configs, config_arg):
@@ -632,9 +670,15 @@ def run_batch(configs, config_arg):
 
 def main():
     ap = argparse.ArgumentParser(description="Two Ollama models converse, configured from a JSON file.")
-    ap.add_argument("config", help="path to a JSON config file, a directory "
+    ap.add_argument("config", nargs="?", default=None,
+                    help="path to a JSON config file, a directory "
                     "(runs every *.json inside it), or a glob pattern "
-                    "(quote it so the shell doesn't expand it first)")
+                    "(quote it so the shell doesn't expand it first); may be "
+                    "omitted with a --profile that lists scenarios")
+    ap.add_argument("--profile", default=None,
+                    help="machine profile: a name in profiles/ (e.g. arduino_q) "
+                         "or a path; swaps the models and forces its settings. "
+                         "Without a scenario, runs the profile's scenario list")
     ap.add_argument("--topic", default=None, help="override the config topic")
     ap.add_argument("--turns", type=int, default=None, help="override the config turn count")
     ap.add_argument("--max-tokens", type=int, default=None,
@@ -665,6 +709,29 @@ def main():
                          "8x13 LED matrix (needs python3-smbus on the Uno Q)")
     ap.add_argument("--no-display", dest="display", action="store_false",
                     help="force the LED matrix display off")
+    ap.add_argument("--max-temp", type=float, default=None,
+                    help="pause the duel when the CPU reaches this temperature "
+                         "(C); default 80")
+    ap.add_argument("--resume-temp", type=float, default=None,
+                    help="resume the duel once the CPU cools to this "
+                         "temperature (C); default 70")
+    ap.add_argument("--no-temp-guard", dest="temp_guard", action="store_false",
+                    default=None,
+                    help="disable the thermal pause guard")
+    ap.add_argument("--run-code", dest="run_code", action="store_true", default=None,
+                    help="run the last Python code block of each reply (timeout, "
+                         "no keyboard input) and show the result to both speakers. "
+                         "Not a sandbox: the code runs with your permissions")
+    ap.add_argument("--no-run-code", dest="run_code", action="store_false",
+                    help="never run reply code, even if the scenario turns it on")
+    ap.add_argument("--tag", dest="tags", action="append", default=None,
+                    metavar="TAG",
+                    help="in a batch run (directory or glob), only run "
+                         "scenarios tagged with TAG; repeatable, matches any")
+    ap.add_argument("--list-tags", action="store_true",
+                    help="list the tags used by the given scenarios and exit")
+    ap.add_argument("--no-judge", dest="judge", action="store_false",
+                    help="skip the scenario's judge, if it has one")
     ap.add_argument("--dry-run", action="store_true",
                     help="print the exact messages turn 1 would send and exit "
                          "without calling Ollama")
@@ -672,11 +739,33 @@ def main():
 
     setup_utf8_stdout()
 
-    configs = expand_configs(args.config)
+    profile = load_profile(args.profile) if args.profile else None
+    if args.config is None:
+        if profile is None:
+            ap.error("a scenario (file, directory or glob) or a --profile "
+                     "that lists scenarios is required")
+        configs = profile_scenarios(profile, args.profile)
+    else:
+        configs = expand_configs(args.config)
+    if args.list_tags:
+        # Discovery aid: what tags exist in these scenarios, and how many
+        # carry each. Runs before any filtering or dueling.
+        counts = list_all_tags(configs)
+        if not counts:
+            print("No tags found in the given scenarios.")
+        else:
+            width = max(len(t) for t in counts)
+            for tag in sorted(counts):
+                print(f"{tag.ljust(width)}  {counts[tag]}")
+        return
+    configs = configs_matching_tags(configs, args.tags)
+    if not configs:
+        sys.exit(f"No scenarios match tag(s): {', '.join(args.tags or [])}.")
     if len(configs) > 1:
         sys.exit(run_batch(configs, args.config))
 
-    cfg = load_config(args.config)
+    config_path = configs[0]
+    cfg = load_config(config_path, profile)
     host = first_not_none(args.host, cfg.get("host"), DEFAULT_HOST)
     topic = first_not_none(args.topic, cfg.get("topic"))
     if not topic:
@@ -687,15 +776,28 @@ def main():
     if args.max_tokens is not None and args.max_tokens < 1:
         sys.exit(f'"--max-tokens" must be >= 1, got {args.max_tokens}.')
     timeout = first_not_none(args.timeout, cfg.get("timeout"), DEFAULT_TIMEOUT)
-    save_json_path = first_not_none(args.save_json, cfg.get("save_json"))
+    save_json_path = output_path(first_not_none(args.save_json, cfg.get("save_json")))
     want_display = first_not_none(args.display, cfg.get("display"), False)
+    temp_guard = first_not_none(args.temp_guard, cfg.get("temp_guard"), True)
+    if temp_guard:
+        max_temp = first_not_none(args.max_temp, cfg.get("max_temp"), 80.0)
+        resume_temp = first_not_none(
+            args.resume_temp, cfg.get("resume_temp"), 70.0)
+    else:
+        max_temp = resume_temp = None
     dedup_guard = first_not_none(cfg.get("dedup_guard"), True)
+    # Running model-written code is strictly opt-in: the scenario's run_code
+    # or --run-code; --no-run-code always wins. Profiles can't turn it on.
+    run_code = None
+    if first_not_none(args.run_code, cfg.get("run_code"), False):
+        run_code = {"args": cfg.get("run_code_args") or [],
+                    "timeout": cfg.get("run_code_timeout") or DEFAULT_RUN_TIMEOUT}
     # Run summary file: appended after every duel with the date/time and
     # either the stats table (success) or the error (early stop). Defaults
-    # to run_results.log in the current directory; --no-results-log (or a
-    # false-y CLI value) disables it.
-    results_log_path = first_not_none(args.results_log, cfg.get("results_log"),
-                                      "run_results.log")
+    # to output/run_results.log; --no-results-log (or a false-y CLI value)
+    # disables it.
+    results_log_path = output_path(first_not_none(
+        args.results_log, cfg.get("results_log"), "run_results.log"))
 
     # ntfy: explicit CLI flag wins, then the scenario config, then the
     # default ~/.dual.conf. Undefined everywhere -> ntfy_url stays None
@@ -709,7 +811,7 @@ def main():
     # (stderr progress lines like "(waiting for reply...)" stay console-only.)
     # The stamp prepended to the file name keeps each run in its own file.
     # A dry run never opens one -- it should not leave log artifacts behind.
-    log_path = first_not_none(args.log_file, cfg.get("log_file"))
+    log_path = output_path(first_not_none(args.log_file, cfg.get("log_file")))
     log_fh = None
     if log_path and not args.dry_run:
         log_path = timestamped_log_path(log_path)
@@ -732,9 +834,11 @@ def main():
     matrix = None
     if want_display:
         try:
-            from unoq_matrix import DisplayUnavailable, UnoQMatrix
-            matrix = UnoQMatrix()
-            matrix.show_text("DUEL")
+            from unoq_matrix import DisplayUnavailable, create_matrix
+            matrix = create_matrix()
+            scenario_name = os.path.splitext(os.path.basename(config_path))[0]
+            scenario_name = scenario_name.replace("_", " ").upper()
+            matrix.show_text(f"DUEL: {scenario_name}")
         except DisplayUnavailable as e:
             print(f"LED matrix unavailable ({e}); continuing without display.",
                   file=sys.stderr)
@@ -776,10 +880,20 @@ def main():
             "first_turn_prompt": first_not_none(entry.get("first_turn_prompt"),
                                                cfg.get("first_turn_prompt"),
                                                DEFAULT_FIRST_TURN_PROMPT),
+            "history_turns": first_not_none(entry.get("history_turns"),
+                                           cfg.get("history_turns")),
         })
 
+    if profile:
+        print(f"Profile: {args.profile}")
     print_duel_header(topic, participants, turns)
 
+    if run_code is not None:
+        extra = f", arguments {' '.join(run_code['args'])}" if run_code["args"] else ""
+        print(f"Code running: ON -- each reply's last Python block runs with a "
+              f"{run_code['timeout']:g}s timeout{extra}. This runs model-written "
+              f"code on this machine with your permissions.")
+        print()
     if args.dry_run:
         # Show exactly what the opening turn would send, then stop before
         # any Ollama call. Handy when writing or debugging scenarios.
@@ -795,11 +909,32 @@ def main():
     transcript = []  # list of (speaker_index, text)
     stop_note = None  # why the duel ended early, when it did
     model_stats = {}  # per-model stats; stays empty if the loop never starts
+    verdict = None  # the judge's verdict text, when a judge scores the duel
     run_started = datetime.now()
     try:
         model_stats, matrix, stop_note = run_duel(host, topic, turns, participants, timeout,
                                                   transcript, matrix=matrix,
-                                                  dedup_guard=dedup_guard)
+                                                  dedup_guard=dedup_guard,
+                                                  run_code=run_code,
+                                                  ntfy_url=ntfy_url,
+                                                  max_temp=max_temp,
+                                                  resume_temp=resume_temp)
+        judge = cfg.get("judge") if args.judge else None
+        if judge and transcript and stop_note is None:
+            # A third model scores the finished duel. Best-effort: a judge
+            # failure is noted, never fatal -- the duel result stands.
+            print(f"--- JUDGE: {judge['model']} is scoring the duel ---")
+            print()
+            try:
+                verdict = run_judge(host, judge, topic, participants,
+                                    transcript, timeout, call_chat)
+            except OllamaError as e:
+                print(f"--- JUDGE FAILED: {e} ---")
+                print()
+            else:
+                print("=== Verdict ===")
+                print(verdict)
+                print()
         print(f"Done: {len(transcript)} replies.", file=sys.stderr)
         if log_fh is not None:
             print(f"Logging to {log_path}", file=sys.stderr)
@@ -807,6 +942,10 @@ def main():
             print()
             print(format_duel_stats(model_stats))
     finally:
+        code_runs = (count_runs(run_code["results"])
+                     if run_code is not None and run_code.get("results") else None)
+        # Full path of the transcript log, for the summary and notice.
+        written_log = os.path.abspath(log_path) if log_fh is not None else None
         # Always write the session-end marker / transcript, even if the
         # duel stopped early on an Ollama error.
         matrix = _matrix(matrix, "show_text", "DONE")
@@ -833,10 +972,11 @@ def main():
             if crashed:
                 exc = sys.exc_info()[1]
                 crash_note = f"unexpected error: {type(exc).__name__}: {exc}"
-            entry = format_run_summary(run_started, args.config, participants,
+            entry = format_run_summary(run_started, config_path, participants,
                                        turns, transcript, model_stats,
                                        crash_note or stop_note,
-                                       crashed=crashed)
+                                       crashed=crashed, code_runs=code_runs,
+                                       log_path=written_log, verdict=verdict)
             append_run_summary(results_log_path, entry)
         if ntfy_url:
             # Completion notice: OK, stopped early, or crashed. Best-effort
@@ -844,9 +984,10 @@ def main():
             # ntfy URL is configured anywhere. --dry-run returns before
             # the duel, so it never notifies.
             crashed_now = stop_note is None and sys.exc_info()[0] is not None
-            notify_duel_done(ntfy_url, args.config, participants, turns,
+            notify_duel_done(ntfy_url, config_path, participants, turns,
                              transcript, run_started, stop_note, crashed_now,
-                             model_stats=model_stats)
+                             model_stats=model_stats, code_runs=code_runs,
+                             log_path=written_log, verdict=verdict)
 
 
 if __name__ == "__main__":

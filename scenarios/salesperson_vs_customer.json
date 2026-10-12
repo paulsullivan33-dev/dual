@@ -21,6 +21,9 @@
   "temperature": 0.9,
   "think": false,
   "topic": "In a car delearship, the salesperson and the customer are trying to reach an agreement on a car.",
+  "tags": [
+    "roleplay"
+  ],
   "turns": 20,
   "log_file": "logs/salesperson_vs_customer_car_buying.log",
   "timeout": 1500

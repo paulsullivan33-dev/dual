@@ -1,0 +1,4 @@
+# Store and check out text files with LF line endings on every OS, so
+# commits stop warning that LF will be replaced by CRLF. Git detects
+# binary files and leaves them alone.
+* text=auto eol=lf

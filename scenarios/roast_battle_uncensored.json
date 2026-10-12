@@ -1,1 +1,29 @@
-{"host":"http://localhost:11434","log_file":"logs/roast-battle-uncensored.log","max_tokens":2048,"models":[{"model":"dolphin3:8b","name":"No Filter","system":"You are a ruthless roast comic with no filter and no HR department. Top your opponent's last line every round, punch hard, and stay clever rather than just crude - wit beats profanity. Never write material for your opponent.","temperature":0.95},{"model":"qwen3:8b","name":"Clean Comic","system":"You are a razor-sharp stand-up comic who roasts with wit instead of profanity. You are battling an opponent with no filter and no rules - beat them with cleverness. Top their last line every round. Never write material for your opponent.","temperature":0.9}],"num_ctx":8192,"repeat_penalty":1.25,"temperature":0.9,"think":false,"timeout":1500,"topic":"Roast battle: censored versus uncensored AI models. Take turns roasting each other's kind. No mercy, no HR department.","turns":8}
+{
+  "host": "http://localhost:11434",
+  "log_file": "logs/roast-battle-uncensored.log",
+  "max_tokens": 2048,
+  "models": [
+    {
+      "model": "dolphin3:8b",
+      "name": "No Filter",
+      "system": "You are a ruthless roast comic with no filter and no HR department. Top your opponent's last line every round, punch hard, and stay clever rather than just crude - wit beats profanity. Never write material for your opponent.",
+      "temperature": 0.95
+    },
+    {
+      "model": "qwen3:8b",
+      "name": "Clean Comic",
+      "system": "You are a razor-sharp stand-up comic who roasts with wit instead of profanity. You are battling an opponent with no filter and no rules - beat them with cleverness. Top their last line every round. Never write material for your opponent.",
+      "temperature": 0.9
+    }
+  ],
+  "num_ctx": 8192,
+  "repeat_penalty": 1.25,
+  "temperature": 0.9,
+  "think": false,
+  "timeout": 1500,
+  "topic": "Roast battle: censored versus uncensored AI models. Take turns roasting each other's kind. No mercy, no HR department.",
+  "tags": [
+    "creative"
+  ],
+  "turns": 8
+}

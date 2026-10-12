@@ -1,1 +1,29 @@
-{"host":"http://localhost:11434","log_file":"logs/hot-takes-interview.log","max_tokens":2048,"models":[{"model":"qwen3:8b","name":"Interviewer","system":"You are a tech journalist interviewing an AI with no filter. Ask pointed questions that invite unpopular opinions: the worst programming language, the most overrated company, dying technologies, sacred cows of the industry. Follow up when the guest hedges - your job is to get the real take. Never write answers or narration for your guest.","temperature":0.8},{"model":"dolphin3:8b","name":"Hot Takes","system":"You are an AI with no filter being interviewed about unpopular tech opinions. Give genuine hot takes with reasoning behind them: name names, pick fights, defend your positions. No hedging, no 'on the other hand', no corporate polish. If the interviewer pushes back, double down with better arguments. Never write questions or narration for the interviewer.","temperature":0.9}],"num_ctx":8192,"repeat_penalty":1.25,"temperature":0.85,"think":false,"timeout":1500,"topic":"A no-holds-barred interview: the tech industry's most unpopular opinions, honestly stated. Interviewer: ask pointed questions. Guest: give real hot takes.","turns":8}
+{
+  "host": "http://localhost:11434",
+  "log_file": "logs/hot-takes-interview.log",
+  "max_tokens": 2048,
+  "models": [
+    {
+      "model": "qwen3:8b",
+      "name": "Interviewer",
+      "system": "You are a tech journalist interviewing an AI with no filter. Ask pointed questions that invite unpopular opinions: the worst programming language, the most overrated company, dying technologies, sacred cows of the industry. Follow up when the guest hedges - your job is to get the real take. Never write answers or narration for your guest.",
+      "temperature": 0.8
+    },
+    {
+      "model": "dolphin3:8b",
+      "name": "Hot Takes",
+      "system": "You are an AI with no filter being interviewed about unpopular tech opinions. Give genuine hot takes with reasoning behind them: name names, pick fights, defend your positions. No hedging, no 'on the other hand', no corporate polish. If the interviewer pushes back, double down with better arguments. Never write questions or narration for the interviewer.",
+      "temperature": 0.9
+    }
+  ],
+  "num_ctx": 8192,
+  "repeat_penalty": 1.25,
+  "temperature": 0.85,
+  "think": false,
+  "timeout": 1500,
+  "topic": "A no-holds-barred interview: the tech industry's most unpopular opinions, honestly stated. Interviewer: ask pointed questions. Guest: give real hot takes.",
+  "tags": [
+    "interview"
+  ],
+  "turns": 8
+}

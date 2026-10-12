@@ -20,5 +20,8 @@
   "temperature": 0.6,
   "think": false,
   "topic": "Review this Python function as if it were a pull request diff:\n\ndef get_user(db, username):\n    query = f\"SELECT * FROM users WHERE name = '{username}'\"\n    return db.execute(query).fetchall()\n\nGive your verdict: approve, request changes, or comment — and defend it.",
+  "tags": [
+    "code"
+  ],
   "turns": 6
 }

@@ -27,18 +27,28 @@ a SQLite file, so you can open it and inspect what's actually stored.
 
 ## Steps
 
-**1. Gather some documents.** Put any `.txt` or `.md` files in a folder.
+**1. Gather some documents.** Put any `.txt`, `.md`, or `.epub` files in a folder.
 Your own notes are ideal — the more the model *doesn't* already know,
 the clearer the demo.
 
 **2. Index them.** This splits each file into overlapping chunks, embeds
-every chunk with `nomic-embed-text`, and stores it all in `rag_demo.db`:
+every chunk with `nomic-embed-text`, and stores it all in `output/rag_demo.db`:
 
 ```bash
 python rag_demo.py index --docs ./my-docs
 ```
 
-Re-running `index` rebuilds the database from scratch.
+Re-running `index` rebuilds the database from scratch. To add more
+files later without re-embedding everything, use `--append`:
+
+```bash
+python rag_demo.py index --docs ./more-docs --append
+```
+
+It keeps the existing chunks and only (re-)embeds the files in
+`--docs` — handy for dropping a second novel into the same index, or
+picking up new notes. It refuses to mix embedding models, since their
+vectors aren't comparable.
 
 **3. Ask questions.**
 

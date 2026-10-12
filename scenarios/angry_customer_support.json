@@ -20,5 +20,8 @@
   "temperature": 0.75,
   "think": false,
   "topic": "Hi, I'm calling about my order -- it arrived completely smashed, and this is the third time I've had to explain this because I keep getting transferred. I want this fixed right now.",
+  "tags": [
+    "roleplay"
+  ],
   "turns": 12
 }

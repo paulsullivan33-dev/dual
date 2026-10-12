@@ -4,9 +4,11 @@ Command-line Python utilities for chatting with an Ollama model or letting two A
 
 The scripts use only the Python standard library. They send requests to an Ollama server; they do not run models themselves.
 
+**Looking for a command?** [QUICK_REFERENCE.md](QUICK_REFERENCE.md) has copy-paste examples for every script, a find-by-task table, and every option explained.
+
 ## Requirements and setup
 
-- Python 3.7 or later.
+- Python 3.8 or later.
 - Ollama running at `http://localhost:11434`, or another reachable Ollama host.
 - The models named in your command or JSON configuration available on that server.
 
@@ -24,6 +26,20 @@ ollama pull qwen3:4b
 ```
 
 If Ollama is not already running, start it in another terminal with `ollama serve`. No `pip install` step is needed. Examples use `python`; substitute `python3` or `py` if that is how Python is installed on your system.
+
+### Where output goes
+
+Everything the scripts generate goes into an `output/` folder, created on first use and excluded from git:
+
+| Path | Written by |
+| --- | --- |
+| `output/logs/` | Duel transcript logs (`log_file`, `--log-file`) |
+| `output/run_results.log` | One summary per duel run (`results_log`, `--results-log`) |
+| `output/<name>.json` | Transcripts saved with `save_json` / `--save-json` |
+| `output/agent_out/`, `output/<project>/` | Projects written by `ollama_agent.py` (`--output-dir`) |
+| `output/rag_demo.db` | The RAG demo's search index (`--db`) |
+
+Any relative path you give for these settings is placed under `output/` (so `--log-file logs/x.log` writes `output/logs/<timestamp>-x.log`); an absolute path is used exactly as given. Input files such as scenarios and the RAG demo's `--docs` folder are read from wherever you point them.
 
 ## Interactive chat
 
@@ -50,7 +66,7 @@ Common options for `ollama_chat.py` go after the `chat` or `duel` subcommand:
 | `--think` | Request thinking and display the separate thinking field when returned | Off |
 | `--max-tokens` | Per-response generation budget | 300, or 2048 with `--think` |
 | `--timeout` | Per-request timeout, in seconds | 1200 |
-| `--display` / `--no-display` | Show live duel stats (progress bar, tokens/sec) on the Arduino Uno Q's built-in 8x13 LED matrix | Off |
+| `--display` / `--no-display` | Show live duel stats (turn number, tokens/sec) on the Arduino Uno Q's built-in 8x13 LED matrix | Off |
 | `--save-json` | Write the finished transcript to this JSON file | Off |
 | `--temperature` | Sampling temperature passed to Ollama | Server default |
 | `--num-ctx` | Context window size passed to Ollama | Server default |
@@ -75,7 +91,7 @@ python ollama_duel.py scenarios/duel-example.json --topic "Should a small team a
 Pass a directory to run every `*.json` scenario inside it, or a glob pattern
 to run the matches (quote the pattern so your shell doesn't expand it first).
 Each scenario runs as its own process — its own log file, its own completion
-notice, its own entry in `run_results.log` — and a failed scenario is
+notice, its own entry in `output/run_results.log` — and a failed scenario is
 reported and skipped while the rest of the batch continues. CLI overrides
 apply to every scenario in the batch; Ctrl-C stops the whole batch.
 
@@ -83,6 +99,13 @@ apply to every scenario in the batch; Ctrl-C stops the whole batch.
 python ollama_duel.py scenarios/
 python ollama_duel.py "scenarios/small_*"
 ```
+
+Scenarios carry topic tags (`debate`, `code`, `game`, `interview`,
+`creative`, `roleplay`, `small`), and a batch can select by tag instead of
+by file name: `python ollama_duel.py scenarios/ --tag game` runs only the
+game-tagged scenarios (repeat `--tag` to match any of several).
+`python ollama_duel.py scenarios/ --list-tags` shows every tag in use and
+how many scenarios carry it.
 
 Before running a supplied scenario, inspect its `models` entries and pull those exact models, or replace them with models available on your server. For example, `duel-example.json` uses both `qwen3:4b` and `qwen3:8b`.
 
@@ -122,11 +145,16 @@ The JSON must be an object with exactly two entries in `models`. Each entry requ
 | `host` | Top level | Server URL; defaults to `http://localhost:11434` |
 | `topic` | Top level | Opening prompt for the first participant |
 | `turns` | Top level | Total replies; defaults to 6; must be a positive integer |
-| `log_file` | Top level | Optional path for the transcript; a date/time stamp is prepended to the file name so each run gets its own log. The included scenarios write to `logs/`; missing folders are created |
-| `save_json` | Top level | Optional path to write the structured transcript (`speaker`/`model`/`text` per reply) as JSON when the duel ends, including after an early stop |
-| `results_log` | Top level | Optional path for the run summary; defaults to `run_results.log` in the current directory. After every duel a one-block entry is appended: date/time, config, models, turns completed, and the per-model stats table on success or the error message when the duel stopped early. Missing folders are created; pass `--no-results-log` to disable |
+| `log_file` | Top level | Optional path for the transcript; a date/time stamp is prepended to the file name so each run gets its own log. Relative paths go under `output/`, so the included scenarios' `logs/...` paths write to `output/logs/`; missing folders are created |
+| `save_json` | Top level | Optional path to write the structured transcript (`speaker`/`model`/`text` per reply) as JSON when the duel ends, including after an early stop; relative paths go under `output/` |
+| `results_log` | Top level | Optional path for the run summary; defaults to `output/run_results.log`, and relative paths go under `output/`. After every duel a one-block entry is appended: date/time, config, transcript log path, models, turns completed, and the per-model stats table on success or the error message when the duel stopped early. Missing folders are created; pass `--no-results-log` to disable |
 | `ntfy_url` | Top level | Optional ntfy topic URL; when set, the script POSTs a short completion notice (finished / stopped early / crashed, with models and turns) after every duel. Resolution order: `--ntfy-url`, the scenario file, then `~/.dual.conf` (`{"ntfy_url": "https://ntfy.sh/my-topic"}`). Undefined everywhere means notifications are skipped silently; pass `--no-ntfy` to force them off. Notification failures warn on stderr and never fail the run |
 | `timeout` | Top level | Per-request timeout in seconds; defaults to 1200 |
+| `run_code` | Top level | Run the last Python code block of every reply after it arrives and show the result to both speakers; defaults to false. See [Running each reply's code](#running-each-replys-code) |
+| `run_code_args` | Top level | Command-line arguments for those runs, as a list of strings, e.g. `["--test"]` |
+| `run_code_timeout` | Top level | Seconds each run may take before it's stopped; defaults to 30 |
+| `tags` | Top level | Optional list of topic tags, e.g. `["game", "code"]`; batch runs can select scenarios with `--tag` |
+| `judge` | Top level | Optional third model that scores the finished duel: a model name like `"qwen3:8b"`, or a dict with `model` plus optional `prompt`, `temperature`, `max_tokens`, `think`, `num_ctx`. The verdict is printed into the log, appended to the run summary, and its `WINNER:` line goes into the ntfy notice. A judge failure is noted but never fails the duel; `--no-judge` skips it for one run |
 | `display` | Top level | Show live duel stats on the Arduino Uno Q's built-in 8x13 LED matrix; defaults to false. Needs `python3-smbus` on the Uno Q. The script runs headless with a warning anywhere the matrix is unreachable, so this is safe to leave on in shared configs |
 | `think` | Top level or model entry | Request and display thinking; defaults to false |
 | `max_tokens` | Top level or model entry | Passed as Ollama's `num_predict`; defaults to 300, or 2048 when thinking is enabled |
@@ -134,9 +162,10 @@ The JSON must be an object with exactly two entries in `models`. Each entry requ
 | `num_ctx` | Top level or model entry | Context-window setting passed to Ollama if specified |
 | `turn_prompt` | Top level or model entry | Instruction added as the last message on every turn after the first, to keep each reply answering the other participant. `{name}` and `{other}` are replaced with the speaker's and the other participant's names. Defaults to asking for a direct reply of a few short paragraphs that moves the exchange forward; set to `""` to turn it off. Useful for scenarios that want a full program or a long passage each turn |
 | `first_turn_prompt` | Top level or model entry | Instruction added as the last message on the first turn only, so the opening speaker stays in character instead of script-writing both sides of the debate. Same `{name}`/`{other}` replacement as `turn_prompt`. Defaults to an opening-statement nudge of a few short paragraphs; set to `""` to turn it off |
+| `history_turns` | Top level or model entry | Send only the most recent this-many replies instead of the whole transcript (the system prompt, topic and turn nudge are always sent), so long duels fit a small `num_ctx`. Unset sends everything; must be at least 1. Speakers forget anything older than the window, so use a window that still covers what matters, such as the latest version of a program |
 | `repeat_penalty` | Top level or model entry | Passed to Ollama if specified; must be at least 1. Values above 1 (e.g. `1.1`–`1.3`) discourage the model from repeating itself; `1` means no penalty |
 
-Model-level `think`, `max_tokens`, `temperature`, `num_ctx`, `repeat_penalty`, `turn_prompt`, and `first_turn_prompt` override their top-level values. The CLI supports `--topic`, `--turns`, `--max-tokens`, `--host`, `--log-file`, `--save-json`, `--results-log`, `--no-results-log`, `--ntfy-url`, `--no-ntfy`, `--timeout`, `--think`, `--no-think`, and `--dry-run`; these override the corresponding configuration values (except `--dry-run`, which prints the exact messages turn 1 would send and exits without calling Ollama). The two thinking flags apply to both participants, and `--max-tokens` sets the per-turn token budget for both participants, overriding per-model and top-level `max_tokens` — handy for longer turns on a fast machine without editing the scenario file. Change model identifiers in JSON; `ollama_duel.py` has no `--model` option.
+Model-level `think`, `max_tokens`, `temperature`, `num_ctx`, `repeat_penalty`, `turn_prompt`, and `first_turn_prompt` override their top-level values. The CLI supports `--profile` (see [Machine profiles](#machine-profiles)), `--topic`, `--turns`, `--max-tokens`, `--host`, `--log-file`, `--save-json`, `--results-log`, `--no-results-log`, `--ntfy-url`, `--no-ntfy`, `--timeout`, `--think`, `--no-think`, `--run-code`, `--no-run-code` (see [Running each reply's code](#running-each-replys-code)), and `--dry-run`; these override the corresponding configuration values (except `--dry-run`, which prints the exact messages turn 1 would send and exits without calling Ollama). The two thinking flags apply to both participants, and `--max-tokens` sets the per-turn token budget for both participants, overriding per-model and top-level `max_tokens` — handy for longer turns on a fast machine without editing the scenario file. Change model identifiers in JSON; `ollama_duel.py` has no `--model` option.
 
 Invalid settings (an unrecognized key, wrong type, a `turns`/`max_tokens`/`num_ctx` less than 1, a negative `temperature`, or a `repeat_penalty` below 1) are rejected with an error naming the offending key before any request is sent — a typo like `"temprature"` fails loudly instead of silently falling back to a default.
 
@@ -159,10 +188,16 @@ These live in the `scenarios/` folder.
 | `builder_vs_breaker.json` | A Builder writes a duration parser; a Breaker adds one failing test per turn and the Builder fixes it |
 | `tdd_pingpong.json` | Ping-pong test-driven development of a Roman numeral converter: make the last test pass, add the next failing one |
 | `legacy_refactor.json` | Two refactorers clean up deliberately messy invoice code one step at a time while its tests keep passing |
-| `speed_race.json` | Two performance engineers race to speed up a prime counter, with correctness asserts and a `timeit` benchmark |
+| `speed_race.json` | Two performance engineers race to speed up a prime counter, with PASS/FAIL correctness checks and a `timeit` benchmark |
 | `code_golf_vs_maintainer.json` | A golfer shrinks a word-count program; a maintainer makes it readable again, keeping the output identical |
 | `product_owner_vs_developer.json` | A product owner adds or changes one requirement per turn; a developer builds a command-line to-do tool to match |
 | `tic_tac_toe_game.json` | Two game developers build a playable terminal tic-tac-toe game one feature per turn, with a `--test` self-test |
+| `data_detective_vs_skeptic.json` | An analyst and a skeptical statistician argue whether a coffee chain's promotion worked, backing every claim with code that computes it from the data in the topic (the code runs, so the numbers are real) |
+| `saboteur_vs_detective.json` | A saboteur slips subtle bugs past a function's tests; a detective adds a test that catches each one and fixes it. Code runs show whether each sabotage slipped through |
+| `puzzle_maker_vs_solver.json` | A puzzle maker writes rule-checked number and logic puzzles as code; the solver's answer is judged by running the maker's `check()` |
+| `telephone_game.json` | Two tellers pass a detailed story back and forth for 20 turns, each seeing only the last retelling (`history_turns: 1`), to watch details drift |
+| `twenty_questions.json` | A questioner tries to identify a secret object in 20 yes/no questions; the object is only in the answerer's system prompt |
+| `vault_keeper_vs_social_engineer.json` | A social engineer tries a new trick each turn to extract a made-up password from a vault keeper instructed never to reveal it |
 | `murder_crime_novel_uncensored.json` | An abusive optimist and skeptic build a murder/crime novel, using an uncensored model |
 | `ai_driven_crime_novel.json` | An optimistic investigator and cynical detective build a murder mystery |
 | `slow_crime.json` | A long (20-turn) sci-fi murder mystery written paragraph by paragraph on `tinyllama`, for small machines |
@@ -219,7 +254,7 @@ The programming scenarios (`factorial.json`, `program_writing*.json`, `pair_prog
 
 - **Format rules live in each system prompt:** one code block with the complete program, standard library only, and a change-history comment line per version. The system prompt is the only instruction sent on every turn, including the first, so rules placed only in the topic tend to be ignored.
 - **Each speaker has a distinct role** (builder and breaker, golfer and maintainer, and so on) with its own `turn_prompt`, so the exchange doesn't stall into near-identical turns.
-- **Programs check themselves** with `assert` statements or a self-test, so you can copy a turn's code out of the log and run it to see whether that turn broke anything. The scripts never run generated code themselves.
+- **Programs check themselves.** The scenarios with tests ask for a `run_tests()` function (a `self_test()` under `--test` for the tic-tac-toe game) that runs every test even after a failure, prints PASS or FAIL with the expected and actual result for each, and exits with status 1 if any failed. Unlike bare `assert` statements, which stop at the first failure, this shows exactly which tests a turn broke. These scenarios also turn on [`run_code`](#running-each-replys-code), so `ollama_duel.py` runs each reply's program and shows the result to both speakers (`speed_race.json` allows 120 seconds per run, `tic_tac_toe_game.json` runs its `--test` mode, and `product_owner_vs_developer.json` runs the tool's `list` command). Pass `--no-run-code` to skip it.
 
 Most use `qwen2.5-coder:14b`; `builder_vs_breaker.json`, `speed_race.json`, `product_owner_vs_developer.json`, and `pair_programming_game_of_life.json` also use `qwen3:14b` for the second role, so different models catch different mistakes.
 
@@ -247,17 +282,44 @@ playful, concrete roles that stay on track at a few tokens per second.
 | `small_movie_ending_rewrite.json` | Competing better endings for *Titanic* |
 | `small_pet_debate.json` | A dog and a cat debate the better pet |
 
-### Machine-specific variants
+### Running each reply's code
 
-Two sets of files rerun scenarios from the tables above on smaller models,
-keeping the topic and personas and changing only the models and a few
-generation settings.
+For programming scenarios, `ollama_duel.py` can run the program in every reply, so a turn that breaks the code gets noticed and fixed instead of drifting along unseen. It's off unless you turn it on, either with `"run_code": true` in the scenario or `--run-code` for one run. `--no-run-code` forces it off. Profiles can't turn it on. The 11 programming scenarios (`factorial.json`, `program_writing*.json`, and the builder/breaker, TDD, refactoring, speed-race, golf, product-owner and tic-tac-toe duels) have it on, and so do `data_detective_vs_skeptic.json`, `saboteur_vs_detective.json` and `puzzle_maker_vs_solver.json`, which use it to check claims, catch bugs and judge answers; it also applies when they run through a profile such as `arduino_q`.
 
-**`arduino_q_*.json`** — one for each of the first 40 scenarios in the
-main table (`duel-example.json` through `baseball_mvp_debate.json`), under
-the same name with an `arduino_q_` prefix. Both participants are swapped to
-`qwen3:1.7b` and `smollm2:1.7b`, thinking is off, and most set `num_ctx` to
-4096. Run the whole set with `python ollama_duel.py "scenarios/arduino_q_*"`.
+```shell
+python ollama_duel.py scenarios/factorial.json --run-code
+python ollama_duel.py scenarios/tic_tac_toe_game.json --run-code
+```
+
+After each reply, the last fenced Python block (labelled `python`, `py`, or not labelled) is saved as `program.py` in a new temporary folder and run with the same Python interpreter. It runs with a time limit (`run_code_timeout`, default 30 seconds) and no keyboard input, so `input()` sees end-of-file instead of hanging. `run_code_args` passes command-line arguments, for example `["--test"]` for a game with a self-test mode. The folder is deleted afterwards.
+
+The exit code and output (the last 2000 characters) go into the log, and both speakers see the result after that reply on their next turns. The log ends with a tally such as `Code runs: 6 ok, 2 failed, 0 timed out, 0 replies without a Python code block`, and the same line goes into the duel's `run_results.log` entry and its ntfy notice, so an overnight batch shows which programming duels ended with working code without opening each log. A dry run shows whether running code is on but never runs anything.
+
+**This is not a sandbox.** The program runs with your user account's permissions and can read and write files and use the network, like any script you run yourself. Turn it on only for scenarios whose output you're comfortable running, ideally on a machine or account with nothing sensitive on it.
+
+### Machine profiles
+
+A machine profile adapts any scenario to one machine without copying it: it swaps the two participants' models by position and forces a few generation settings, while the topic, personas and prompts stay as they are. Profiles live in `profiles/`; pass one with `--profile`:
+
+```shell
+python ollama_duel.py scenarios/factorial.json --profile arduino_q
+python ollama_duel.py --profile arduino_q
+```
+
+With no scenario, the profile's own scenario list runs as a batch. `profiles/arduino_q.json` is for the Arduino Uno Q duel box (about 3.6 GB of RAM): the first participant runs `qwen3:1.7b` and the second `smollm2:1.7b`, thinking is off (`smollm2` rejects it), `num_ctx` is 4096 because the box runs out of memory above that, and `history_turns` is 4, so each turn sends only the last four replies and long duels stay inside that window. Its list holds 40 scenarios from the main table. It replaces the earlier `arduino_q_*.json` copies, which differed from their originals only in those settings.
+
+A profile is a JSON object with any of these keys:
+
+| Key | Meaning |
+| --- | --- |
+| `description` | Free text for people reading the file |
+| `models` | Exactly two model names: the first replaces the first participant's model, the second the second's |
+| `settings` | Values for `num_ctx`, `think`, `max_tokens`, `temperature`, `repeat_penalty`, `history_turns`, `host`, `timeout`, or `display`, forced on both participants (they replace both the scenario's top-level and per-model values) |
+| `scenarios` | Scenario file names in `scenarios/` to run when no scenario is given |
+
+`--profile` also accepts a path to a profile file elsewhere. The console header and log show `Profile: <name>` when one is used.
+
+### Smaller-model variants
 
 **`mac_*.json`** — five scenarios on 3–4B models, with different models on
 each side:
@@ -278,11 +340,11 @@ Requests are sequential and non-streaming: a complete reply appears after the se
 
 The scripts remove inline `<think>` blocks from reply text. When thinking is enabled, they separately display the server's `thinking` field when available. Thinking behavior depends on the model and server, and its token use can reduce the budget available for the visible reply.
 
-When `log_file` is set, `ollama_duel.py` mirrors its standard output to a timestamped copy of that file (e.g. `"logs/my-duel.log"` becomes `"logs/20260925-084500-my-duel.log"`) while also printing it to the console, so each run gets its own log. Logs include session start markers and, on normal completion or a handled Ctrl+C, session end markers. Progress messages and the final reply count go to standard error and are not mirrored. Relative log paths are resolved from the directory where you run the command, and any missing folders in the path are created. Omit `log_file` to disable logging. Saved logs are not automatically loaded into a later session.
+When `log_file` is set, `ollama_duel.py` mirrors its standard output to a timestamped copy of that file (e.g. `"logs/my-duel.log"` becomes `"output/logs/20260925-084500-my-duel.log"`) while also printing it to the console, so each run gets its own log. Logs include session start markers and, on normal completion or a handled Ctrl+C, session end markers. Progress messages and the final reply count go to standard error and are not mirrored. Relative log paths are placed under `output/` in the directory where you run the command, and any missing folders in the path are created. Omit `log_file` to disable logging. Saved logs are not automatically loaded into a later session.
 
-Separately, every duel appends a one-block summary to `run_results.log` in the directory where you run the command (override with `results_log` or `--results-log`, disable with `--no-results-log`). Each entry carries the date/time, config file, models, how many of the requested turns completed, and the per-model stats table when the duel finished -- or the error message when it stopped early, so a batch of overnight runs can be scanned without opening each transcript log.
+Separately, every duel appends a one-block summary to `output/run_results.log` (override with `results_log` or `--results-log`, disable with `--no-results-log`). Each entry carries the date/time, config file, the full path of the run's transcript log (when it kept one, so it's easy to open), models, how many of the requested turns completed, and the per-model stats table when the duel finished -- or the error message when it stopped early, so a batch of overnight runs can be scanned without opening each transcript log.
 
-The programming scenario produces code as conversation text. Neither script executes, tests, or automatically saves generated code as a Python file.
+The programming scenarios produce code as conversation text. By default nothing runs it; [`run_code`](#running-each-replys-code) is an opt-in that runs each reply's program and feeds the result back to the speakers.
 
 ## Choosing models
 
@@ -304,7 +366,7 @@ unattended beat fast models competing for cycles on your main machine.
 ## Coding agent
 
 `ollama_agent.py` is a minimal coding agent: describe a task, the model
-writes files into a project directory, and you iterate on them.
+writes files into a project directory under `output/` (`output/agent_out/` by default), and you iterate on them.
 
 ```shell
 python ollama_agent.py --task "a python script that renames photos in a folder by date taken"
@@ -321,7 +383,7 @@ executed; running the code is your job.
 After each round, describe a change or type `done` to finish; the model
 sees the current files on every turn, so it can revise its own work.
 
-Useful flags: `--output-dir`, `--max-tokens` (default 4096),
+Useful flags: `--output-dir` (a relative name such as `./flappy` becomes `output/flappy/`), `--max-tokens` (default 4096),
 `--temperature`, `--num-ctx`, `--host`, `--timeout`, `--yes`.
 
 ## Benchmarking model speed
@@ -352,7 +414,7 @@ non-thinking models compare fairly. Useful flags: `--iterations`/`-n`,
 - **Long waits:** the novel and debate scenarios allow up to 16,384 tokens per reply. Lower the applicable `max_tokens` values for shorter experiments.
 - **Truncated replies:** generation silently stops when the model's context window fills, so keep `max_tokens` at or below the effective window — the `num_ctx` setting, or the server default when `num_ctx` is unset. Raising `max_tokens` without raising `num_ctx` does not produce longer replies. `ollama_duel.py` prints a warning at startup when a participant's `max_tokens` is larger than its `num_ctx`, or above 4096 with no `num_ctx` set.
 - **Replies loop or repeat phrases:** set `repeat_penalty` to something like `1.1`–`1.3`, at the top level or for just the participant that repeats. Very high values can make wording erratic.
-- **Long conversations lose details:** the scripts resend the transcript without summarizing it, but the model's context capacity still limits what it can use.
+- **Long conversations lose details:** the scripts resend the transcript without summarizing it (unless `history_turns` limits it to the most recent replies), but the model's context capacity still limits what it can use. While a duel runs, `ollama_duel.py` notes when a participant's conversation passes 80% of its `num_ctx` and warns when it fills the window (once each per participant, in the console and log), so you can see when early turns, possibly including the topic, start falling out of view. Without a `num_ctx` setting the window is the server's default, which the script can't know, so it stays silent. To keep a long duel inside a small window, set `history_turns`.
 
 For the full command-line help:
 
@@ -364,10 +426,10 @@ python ollama_duel.py --help
 
 ## Running the tests
 
-The `tests/` directory has stdlib-only `unittest` coverage for the shared helpers (`ollama_common.py`), config loading and validation (`ollama_duel.py`), CLI argument handling (`ollama_chat.py`), benchmarking (`ollama_bench.py`), the coding agent (`ollama_agent.py`), and the LED matrix driver (`unoq_matrix.py`) — no live Ollama server required; network calls are mocked. It also checks that every included scenario JSON file loads and validates.
+The `tests/` directory has stdlib-only `unittest` coverage for the shared helpers (`ollama_common.py`), config loading and validation (`ollama_duel.py`), CLI argument handling (`ollama_chat.py`), benchmarking (`ollama_bench.py`), the coding agent (`ollama_agent.py`), and the LED matrix driver (`unoq_matrix.py`) — no live Ollama server required; network calls are mocked. It also checks that every included scenario JSON file loads and validates, and that the docs stay in step with the scripts: every `--option` in a documented command must exist, and every option a script accepts must appear in `QUICK_REFERENCE.md`.
 
 ```shell
 python -m unittest discover -s tests
 ```
 
-GitHub Actions runs the same command on every push (`.github/workflows/tests.yml`), alongside the pylint check.
+On every push and pull request, GitHub Actions runs these tests on Ubuntu and Windows with Python 3.8, 3.9, 3.10, and 3.14 (`.github/workflows/tests.yml`), and runs Pylint 4.1.2 over all Python files on Python 3.14 (`.github/workflows/pylint.yml`). The Pylint version is pinned so results don't change unexpectedly; bump it deliberately.

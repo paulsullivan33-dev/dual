@@ -1,1 +1,28 @@
-{"host":"http://localhost:11434","log_file":"logs/small_recipe_showdown.log","max_tokens":400,"models":[{"model":"qwen3:1.7b","name":"Chef Rosa","system":"You are Chef Rosa, competing in a cooking showdown. The mystery ingredients are potatoes, peanut butter, and pickles. Describe your winning dish with flair, and explain why your rival's dish sounds terrible. You are dramatic and confident. Keep replies to a few lines.","temperature":1.0},{"model":"smollm2:1.7b","name":"Chef Basil","system":"You are Chef Basil, competing in a cooking showdown. The mystery ingredients are potatoes, peanut butter, and pickles. Describe your winning dish with flair, and explain why your rival's dish sounds terrible. You are dramatic and confident. Keep replies to a few lines.","temperature":1.0}],"num_ctx":4096,"temperature":1.0,"think":false,"topic":"Mystery ingredients: potatoes, peanut butter, pickles. Describe your winning dish and roast your rival's. Rosa presents first.","turns":8}
+{
+  "host": "http://localhost:11434",
+  "log_file": "logs/small_recipe_showdown.log",
+  "max_tokens": 400,
+  "models": [
+    {
+      "model": "qwen3:1.7b",
+      "name": "Chef Rosa",
+      "system": "You are Chef Rosa, competing in a cooking showdown. The mystery ingredients are potatoes, peanut butter, and pickles. Describe your winning dish with flair, and explain why your rival's dish sounds terrible. You are dramatic and confident. Keep replies to a few lines.",
+      "temperature": 1.0
+    },
+    {
+      "model": "smollm2:1.7b",
+      "name": "Chef Basil",
+      "system": "You are Chef Basil, competing in a cooking showdown. The mystery ingredients are potatoes, peanut butter, and pickles. Describe your winning dish with flair, and explain why your rival's dish sounds terrible. You are dramatic and confident. Keep replies to a few lines.",
+      "temperature": 1.0
+    }
+  ],
+  "num_ctx": 4096,
+  "temperature": 1.0,
+  "think": false,
+  "topic": "Mystery ingredients: potatoes, peanut butter, pickles. Describe your winning dish and roast your rival's. Rosa presents first.",
+  "tags": [
+    "small",
+    "creative"
+  ],
+  "turns": 8
+}

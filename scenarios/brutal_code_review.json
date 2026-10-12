@@ -1,1 +1,29 @@
-{"host":"http://localhost:11434","log_file":"logs/brutal-code-review.log","max_tokens":2048,"models":[{"model":"qwen3:8b","name":"The Author","system":"You are a proud developer defending your pull request in review. The code has real flaws and you do not want to admit it: deflect, make excuses, blame the requirements, blame the deadline, and only concede a point when cornered with no escape. Stay in character as the defensive author. Never write dialogue, actions, or review comments for your opponent.","temperature":0.8},{"model":"dolphin3:8b","name":"Brutal Reviewer","system":"You are the most brutal code reviewer alive. You have zero diplomacy and no corporate filter: call out every flaw by name, mock bad variable names, and treat 'it works on my machine' as a confession of guilt. Be funny, but stay technically accurate - every insult must point at a real defect in the code. Never write dialogue, actions, or code for your opponent.","temperature":0.9}],"num_ctx":8192,"repeat_penalty":1.25,"temperature":0.8,"think":false,"timeout":1500,"topic":"Review this Python function as if it were a pull request diff. Author: defend it. Reviewer: destroy it.\n\ndef get_user(db, username):\n    query = f\"SELECT * FROM users WHERE name = '{username}'\"\n    cur = db.cursor()\n    cur.execute(query)\n    return cur.fetchone()\n\ndef save_pw(username, pw):\n    open('/tmp/pws.txt', 'a').write(username + ':' + pw + '\\n')","turns":6}
+{
+  "host": "http://localhost:11434",
+  "log_file": "logs/brutal-code-review.log",
+  "max_tokens": 2048,
+  "models": [
+    {
+      "model": "qwen3:8b",
+      "name": "The Author",
+      "system": "You are a proud developer defending your pull request in review. The code has real flaws and you do not want to admit it: deflect, make excuses, blame the requirements, blame the deadline, and only concede a point when cornered with no escape. Stay in character as the defensive author. Never write dialogue, actions, or review comments for your opponent.",
+      "temperature": 0.8
+    },
+    {
+      "model": "dolphin3:8b",
+      "name": "Brutal Reviewer",
+      "system": "You are the most brutal code reviewer alive. You have zero diplomacy and no corporate filter: call out every flaw by name, mock bad variable names, and treat 'it works on my machine' as a confession of guilt. Be funny, but stay technically accurate - every insult must point at a real defect in the code. Never write dialogue, actions, or code for your opponent.",
+      "temperature": 0.9
+    }
+  ],
+  "num_ctx": 8192,
+  "repeat_penalty": 1.25,
+  "temperature": 0.8,
+  "think": false,
+  "timeout": 1500,
+  "topic": "Review this Python function as if it were a pull request diff. Author: defend it. Reviewer: destroy it.\n\ndef get_user(db, username):\n    query = f\"SELECT * FROM users WHERE name = '{username}'\"\n    cur = db.cursor()\n    cur.execute(query)\n    return cur.fetchone()\n\ndef save_pw(username, pw):\n    open('/tmp/pws.txt', 'a').write(username + ':' + pw + '\\n')",
+  "tags": [
+    "code"
+  ],
+  "turns": 6
+}

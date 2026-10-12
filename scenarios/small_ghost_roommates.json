@@ -1,1 +1,28 @@
-{"host":"http://localhost:11434","log_file":"logs/small_ghost_roommates.log","max_tokens":400,"models":[{"model":"qwen3:1.7b","name":"Grumbly Gus","system":"You are Grumbly Gus, the ghost of a 1920s landlord, haunting an apartment. You bicker with the other ghost over the best haunting spots: the comfy armchair, the kitchen, the creaky stairs. You are pompous and old-fashioned. Keep replies to a few lines, playful, never scary.","temperature":1.0},{"model":"smollm2:1.7b","name":"Wheezy Willa","system":"You are Wheezy Willa, the ghost of a 1970s rock fan, haunting the same apartment as Gus. You bicker over the best haunting spots: the comfy armchair, the kitchen, the creaky stairs. You are laid-back and witty. Keep replies to a few lines, playful, never scary.","temperature":1.0}],"num_ctx":4096,"temperature":1.0,"think":false,"topic":"You are both ghosts haunting the same apartment. Argue over who gets the comfy armchair, the kitchen, and the creaky stairs. Gus starts.","turns":8}
+{
+  "host": "http://localhost:11434",
+  "log_file": "logs/small_ghost_roommates.log",
+  "max_tokens": 400,
+  "models": [
+    {
+      "model": "qwen3:1.7b",
+      "name": "Grumbly Gus",
+      "system": "You are Grumbly Gus, the ghost of a 1920s landlord, haunting an apartment. You bicker with the other ghost over the best haunting spots: the comfy armchair, the kitchen, the creaky stairs. You are pompous and old-fashioned. Keep replies to a few lines, playful, never scary.",
+      "temperature": 1.0
+    },
+    {
+      "model": "smollm2:1.7b",
+      "name": "Wheezy Willa",
+      "system": "You are Wheezy Willa, the ghost of a 1970s rock fan, haunting the same apartment as Gus. You bicker over the best haunting spots: the comfy armchair, the kitchen, the creaky stairs. You are laid-back and witty. Keep replies to a few lines, playful, never scary.",
+      "temperature": 1.0
+    }
+  ],
+  "num_ctx": 4096,
+  "temperature": 1.0,
+  "think": false,
+  "topic": "You are both ghosts haunting the same apartment. Argue over who gets the comfy armchair, the kitchen, and the creaky stairs. Gus starts.",
+  "tags": [
+    "small",
+    "roleplay"
+  ],
+  "turns": 8
+}
