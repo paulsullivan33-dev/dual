@@ -6,7 +6,7 @@
   ],
   "turns": 10,
   "think": false,
-  "max_tokens": 2048,
+  "max_tokens": 1536,
   "num_ctx": 16384,
   "temperature": 0.5,
   "log_file": "logs/builder_vs_breaker.log",
@@ -27,6 +27,6 @@
       "turn_prompt": "Copy {other}'s latest program unchanged, then add exactly one new test case to run_tests() for an input you expect parse_duration to get wrong, plus one change-history line explaining the bug you're probing. Do not touch parse_duration itself. List the complete program."
     }
   ],
-  "timeout": 1500,
+  "timeout": 3600,
   "run_code": true
 }
