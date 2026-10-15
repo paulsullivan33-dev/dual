@@ -1,0 +1,60 @@
+{
+  "description": "iGPU laptop (Intel Arc): 3B models on both sides (Qwen vs Llama) for fast turns, thinking off, an 8192-token context window, and only the last 4 replies sent each turn. Judged remotely by llama3.1:8b on the ProDesk, bigger than both contestants.",
+  "models": [
+    "qwen2.5:3b",
+    "llama3.2:3b"
+  ],
+  "settings": {
+    "num_ctx": 8192,
+    "think": false,
+    "history_turns": 4,
+    "timeout": 1800,
+    "judge": {
+      "model": "llama3.1:8b",
+      "host": "http://192.168.1.236:11434",
+      "temperature": 0.2
+    }
+  },
+  "scenarios": [
+    "ai_consciousness_debate.json",
+    "ai_driven_crime_novel.json",
+    "ai_will_kill_us.json",
+    "ai_will_save_us_all.json",
+    "alien_food_critics.json",
+    "angry_customer_support.json",
+    "architecture_review.json",
+    "baseball_mvp_debate.json",
+    "builder_vs_breaker.json",
+    "code_golf_vs_maintainer.json",
+    "code_review_duel.json",
+    "devops_interview.json",
+    "duel-coder-vs-gemma.json",
+    "duel-coder-vs-gemma2.json",
+    "duel-example.json",
+    "factorial.json",
+    "first_contact.json",
+    "incident_response.json",
+    "legacy_refactor.json",
+    "murder_crime_novel_uncensored.json",
+    "product_owner_vs_developer.json",
+    "program_writing.json",
+    "program_writing_v2.json",
+    "roast_battle.json",
+    "roast_battle_v2.json",
+    "salary_negotiation.json",
+    "salesperson_vs_customer.json",
+    "scope_negotiation.json",
+    "slow_crime.json",
+    "slow_crime_v3.json",
+    "socratic_debugging.json",
+    "speed_race.json",
+    "sports_commentary_duel.json",
+    "tdd_pingpong.json",
+    "text_adventure_dungeon.json",
+    "tic_tac_toe_game.json",
+    "time_traveler_1988.json",
+    "trolley_problem_ethics.json",
+    "tube_vs_modeler.json",
+    "vim_vs_emacs.json"
+  ]
+}
