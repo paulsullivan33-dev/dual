@@ -347,13 +347,18 @@ def read_cpu_temp():
     return None
 
 
-def thermal_pause_if_hot(matrix, ntfy_url, max_temp, resume_temp):
+def thermal_pause_if_hot(matrix, ntfy_url, max_temp, resume_temp,
+                         notified=None):
     """Pause the duel while the CPU is hotter than max_temp.
 
     Sleeps in 60-second checks until the temp drops to resume_temp, then
-    returns. Sends one ntfy notice on pause and one on resume, each with
-    the temp. A None max_temp (guard disabled) or no readable sensor
-    returns immediately. Best-effort throughout: nothing here raises.
+    returns. Every pause prints to the log, but ntfy only buzzes for the
+    first pause of a duel: pass a per-duel `notified` dict (e.g. {}) and
+    later pauses stay log-only, so a hot box doesn't buzz the phone every
+    turn and trip ntfy's rate limiter. With notified=None every pause
+    notifies (the old behavior). A None max_temp (guard disabled) or no
+    readable sensor returns immediately. Best-effort throughout: nothing
+    here raises.
     """
     try:
         if max_temp is None:
@@ -363,13 +368,17 @@ def thermal_pause_if_hot(matrix, ntfy_url, max_temp, resume_temp):
             return
         host = socket.gethostname()
         start = time.monotonic()
+        first = notified is None or not notified.get("thermal")
+        if notified is not None:
+            notified["thermal"] = True
         # stdout, not stderr: the transcript log mirrors stdout, so the
         # pause is on the permanent record, not just the console.
         print(f"CPU at {temp:.1f}C (>= {max_temp:.0f}C); pausing duel to "
               f"cool down to {resume_temp:.0f}C.")
-        ntfy_post(ntfy_url, f"duel paused for cooling [{host}]",
-                  f"CPU at {temp:.1f}C (>= {max_temp:.0f}C); pausing until "
-                  f"it cools to {resume_temp:.0f}C.", tags="thermometer")
+        if first:
+            ntfy_post(ntfy_url, f"duel paused for cooling [{host}]",
+                      f"CPU at {temp:.1f}C (>= {max_temp:.0f}C); pausing until "
+                      f"it cools to {resume_temp:.0f}C.", tags="thermometer")
         _matrix(matrix, "show_text", "COOLING")
         while True:
             time.sleep(60)
@@ -379,9 +388,10 @@ def thermal_pause_if_hot(matrix, ntfy_url, max_temp, resume_temp):
         paused_s = time.monotonic() - start
         cooled = f"{temp:.1f}C" if temp is not None else "unknown"
         print(f"CPU cooled to {cooled}; resuming duel after {paused_s:.0f}s.")
-        ntfy_post(ntfy_url, f"duel resumed [{host}]",
-                  f"CPU cooled to {cooled} after {paused_s:.0f}s pause; "
-                  f"resuming.", tags="thermometer")
+        if first:
+            ntfy_post(ntfy_url, f"duel resumed [{host}]",
+                      f"CPU cooled to {cooled} after {paused_s:.0f}s pause; "
+                      f"resuming.", tags="thermometer")
     except Exception as e:  # noqa: BLE001 -- guard must never break a duel
         print(f"Warning: thermal guard failed ({e}); continuing.",
               file=sys.stderr)
@@ -508,6 +518,7 @@ def run_duel(host, topic, turns, participants, timeout, transcript, matrix=None,
     run_results = run_code.setdefault("results", []) if run_code is not None else []
     ctx_levels = [0, 0]  # per speaker: 0 = fine, 1 = nearly-full noted, 2 = full warned
     stop_note = None  # why the loop ended early, when it did
+    thermal_notified = {}  # per-duel "already buzzed about heat" flag
     try:
         for turn in range(turns):
             i = turn % 2
@@ -516,7 +527,8 @@ def run_duel(host, topic, turns, participants, timeout, transcript, matrix=None,
                                            run_reports)
 
             print("  (waiting for reply...)", file=sys.stderr, flush=True)
-            thermal_pause_if_hot(matrix, ntfy_url, max_temp, resume_temp)
+            thermal_pause_if_hot(matrix, ntfy_url, max_temp, resume_temp,
+                                 thermal_notified)
             # Bare turn number, static: "4/10" is 23 columns on a 13-column
             # display, so it would scroll off and leave the screen blank.
             matrix = _matrix(matrix, "show_text", str(turn + 1), scroll=False)

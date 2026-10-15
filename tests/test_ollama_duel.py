@@ -2192,6 +2192,25 @@ class ThermalGuardTest(unittest.TestCase):
              mock.patch("ollama_duel.time.sleep"):
             ollama_duel.thermal_pause_if_hot(None, "http://x", 80.0, 70.0)
 
+    def test_second_pause_in_duel_stays_log_only(self):
+        # A hot box pauses nearly every turn; only the first pause of a
+        # duel should buzz the phone, or ntfy rate-limits the duel's real
+        # notices. Later pauses still print to the log.
+        notified = {}
+        temps = [85.0, 69.0, 86.0, 68.0]  # two pause/resume cycles
+        with mock.patch("ollama_duel.read_cpu_temp", side_effect=temps), \
+             mock.patch("ollama_duel.time.sleep"), \
+             mock.patch("ollama_duel.ntfy_post") as post, \
+             mock.patch("sys.stdout", new=io.StringIO()) as out:
+            ollama_duel.thermal_pause_if_hot(None, "http://ntfy/x",
+                                             80.0, 70.0, notified)
+            ollama_duel.thermal_pause_if_hot(None, "http://ntfy/x",
+                                             80.0, 70.0, notified)
+            self.assertEqual(post.call_count, 2)  # first pause's pair only
+            log = out.getvalue()
+            self.assertEqual(log.count("pausing duel"), 2)
+            self.assertEqual(log.count("resuming duel"), 2)
+
     def test_pause_messages_go_to_stdout(self):
         # stdout is mirrored to the transcript log; the pause must be on
         # the permanent record, not just the console.

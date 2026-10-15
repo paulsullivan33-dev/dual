@@ -447,8 +447,9 @@ Before every turn the duel reads the CPU temperature from
 `--max-temp` (default 80°C) it pauses — one ntfy notice with the temp, and
 `COOLING` on the LED matrix if `--display` is on — then re-checks every 60
 seconds until the chip cools to `--resume-temp` (default 70°C) and resumes
-with a second notice. Machines with no readable sensor skip the guard
-silently.
+with a second notice. Only the first pause of a duel buzzes the phone;
+later pauses are log-only, so a hot box can't trip ntfy's rate limiter.
+Machines with no readable sensor skip the guard silently.
 
 ### Options
 
