@@ -1,0 +1,40 @@
+{
+  "description": "Laptop speed-run chunk 1 of 5 (20 scenarios, ai_consciousness_debate.json through dolphin3_vs_qwen_moderation.json, alphabetical). 3B models on both sides for fast turns on the iGPU, thinking off, an 8192-token context window, and only the last 4 replies sent each turn. Judged remotely by llama3.1:8b on the ProDesk.",
+  "models": [
+    "qwen2.5:3b",
+    "llama3.2:3b"
+  ],
+  "settings": {
+    "num_ctx": 8192,
+    "think": false,
+    "history_turns": 4,
+    "timeout": 1800,
+    "judge": {
+      "model": "llama3.1:8b",
+      "host": "http://192.168.1.236:11434",
+      "temperature": 0.2
+    }
+  },
+  "scenarios": [
+    "ai_consciousness_debate.json",
+    "ai_driven_crime_novel.json",
+    "ai_will_kill_us.json",
+    "ai_will_save_us_all.json",
+    "alien_food_critics.json",
+    "angry_customer_support.json",
+    "architecture_review.json",
+    "bard_vs_gen_z.json",
+    "baseball_mvp_debate.json",
+    "brutal_code_review.json",
+    "builder_vs_breaker.json",
+    "code_golf_vs_maintainer.json",
+    "code_review_duel.json",
+    "coder_vs_qwen_open_weights.json",
+    "courtroom_cross_examination.json",
+    "data_detective_vs_skeptic.json",
+    "defend_indefensible.json",
+    "devops_interview.json",
+    "do_pineapples_bite.json",
+    "dolphin3_vs_qwen_moderation.json"
+  ]
+}

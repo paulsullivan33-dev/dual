@@ -1,0 +1,40 @@
+{
+  "description": "Laptop speed-run chunk 4 of 5 (20 scenarios, small_ghost_roommates.json through text_adventure_dungeon.json, alphabetical). 3B models on both sides for fast turns on the iGPU, thinking off, an 8192-token context window, and only the last 4 replies sent each turn. Judged remotely by llama3.1:8b on the ProDesk.",
+  "models": [
+    "qwen2.5:3b",
+    "llama3.2:3b"
+  ],
+  "settings": {
+    "num_ctx": 8192,
+    "think": false,
+    "history_turns": 4,
+    "timeout": 1800,
+    "judge": {
+      "model": "llama3.1:8b",
+      "host": "http://192.168.1.236:11434",
+      "temperature": 0.2
+    }
+  },
+  "scenarios": [
+    "small_ghost_roommates.json",
+    "small_haiku_battle.json",
+    "small_invention_pitch.json",
+    "small_limerick_duel.json",
+    "small_movie_ending_rewrite.json",
+    "small_pet_debate.json",
+    "small_recipe_showdown.json",
+    "small_sidekick_interview.json",
+    "small_squirrel_interrogation.json",
+    "small_time_capsule.json",
+    "small_toaster_therapy.json",
+    "socratic_debugging.json",
+    "spanish_tutor.json",
+    "speed_race.json",
+    "sports_commentary_duel.json",
+    "steelman_swap_car_free_downtown.json",
+    "support_no_patience.json",
+    "tdd_pingpong.json",
+    "telephone_game.json",
+    "text_adventure_dungeon.json"
+  ]
+}

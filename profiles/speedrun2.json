@@ -1,0 +1,40 @@
+{
+  "description": "Laptop speed-run chunk 2 of 5 (20 scenarios, duel-coder-vs-gemma.json through pair_programming_game_of_life.json, alphabetical). 3B models on both sides for fast turns on the iGPU, thinking off, an 8192-token context window, and only the last 4 replies sent each turn. Judged remotely by llama3.1:8b on the ProDesk.",
+  "models": [
+    "qwen2.5:3b",
+    "llama3.2:3b"
+  ],
+  "settings": {
+    "num_ctx": 8192,
+    "think": false,
+    "history_turns": 4,
+    "timeout": 1800,
+    "judge": {
+      "model": "llama3.1:8b",
+      "host": "http://192.168.1.236:11434",
+      "temperature": 0.2
+    }
+  },
+  "scenarios": [
+    "duel-coder-vs-gemma.json",
+    "duel-coder-vs-gemma2.json",
+    "duel-example.json",
+    "exquisite_corpse_story.json",
+    "factorial.json",
+    "first_contact.json",
+    "frankenstein_book_club.json",
+    "glimmer_vs_qwen_open_weights.json",
+    "heist_planning_county_fair.json",
+    "hot_takes_interview.json",
+    "improv_yes_and.json",
+    "incident_response.json",
+    "legacy_refactor.json",
+    "mac_builder_vs_breaker.json",
+    "mac_defend_indefensible.json",
+    "mac_hot_takes.json",
+    "mac_pineapples_bite.json",
+    "mac_roast_battle.json",
+    "murder_crime_novel_uncensored.json",
+    "pair_programming_game_of_life.json"
+  ]
+}

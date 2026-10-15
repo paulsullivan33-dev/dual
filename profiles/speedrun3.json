@@ -1,0 +1,40 @@
+{
+  "description": "Laptop speed-run chunk 3 of 5 (20 scenarios, peer_review_reviewer_2.json through small_dragon_shark_tank.json, alphabetical). 3B models on both sides for fast turns on the iGPU, thinking off, an 8192-token context window, and only the last 4 replies sent each turn. Judged remotely by llama3.1:8b on the ProDesk.",
+  "models": [
+    "qwen2.5:3b",
+    "llama3.2:3b"
+  ],
+  "settings": {
+    "num_ctx": 8192,
+    "think": false,
+    "history_turns": 4,
+    "timeout": 1800,
+    "judge": {
+      "model": "llama3.1:8b",
+      "host": "http://192.168.1.236:11434",
+      "temperature": 0.2
+    }
+  },
+  "scenarios": [
+    "peer_review_reviewer_2.json",
+    "pen_pals_lighthouse_mars.json",
+    "performance_review.json",
+    "product_owner_vs_developer.json",
+    "program_writing.json",
+    "program_writing_v2.json",
+    "puzzle_maker_vs_solver.json",
+    "roast_battle.json",
+    "roast_battle_uncensored.json",
+    "roast_battle_v2.json",
+    "saboteur_vs_detective.json",
+    "salary_negotiation.json",
+    "salesperson_vs_customer.json",
+    "scope_negotiation.json",
+    "slow_crime.json",
+    "slow_crime_v3.json",
+    "small_alien_tour_guides.json",
+    "small_apology_duel.json",
+    "small_coffee_vs_tea.json",
+    "small_dragon_shark_tank.json"
+  ]
+}
