@@ -72,6 +72,35 @@ class BuildJudgeMessagesTests(unittest.TestCase):
             "pets", participants, [(0, "ha")])
         self.assertIn("Pick the funniest, Alice vs Bob.", msgs[1]["content"])
 
+    def test_run_reports_follow_each_turn(self):
+        participants = [{"name": "Alice", "model": "m1"},
+                        {"name": "Bob", "model": "m2"}]
+        transcript = [(0, "here is code"), (1, "here is more code")]
+        reports = {0: "[Automatic code run] Alice's program ran successfully.",
+                   1: "[Automatic code run] Bob's program FAILED."}
+        msgs = ollama_judge.build_judge_messages(
+            {"model": "j"}, "pets", participants, transcript, reports)
+        body = msgs[1]["content"]
+        alice_at = body.index("here is code")
+        report_at = body.index("Alice's program ran successfully")
+        bob_at = body.index("here is more code")
+        bob_report_at = body.index("Bob's program FAILED")
+        # Each report follows its own turn, before the next turn's text.
+        self.assertLess(alice_at, report_at)
+        self.assertLess(report_at, bob_at)
+        self.assertLess(bob_at, bob_report_at)
+        # The judge is told to weigh what the code actually did.
+        self.assertIn("what it did, not by what its author",
+                      body)
+
+    def test_no_run_reports_no_code_guidance(self):
+        participants = [{"name": "Alice", "model": "m1"},
+                        {"name": "Bob", "model": "m2"}]
+        msgs = ollama_judge.build_judge_messages(
+            {"model": "j"}, "pets", participants, [(0, "hi")])
+        self.assertNotIn("what it did, not by what its author",
+                         msgs[1]["content"])
+
 
 class ParseWinnerTests(unittest.TestCase):
     def test_extracts_name(self):
@@ -87,6 +116,15 @@ class ParseWinnerTests(unittest.TestCase):
 
     def test_empty_verdict_returns_none(self):
         self.assertIsNone(ollama_judge.parse_winner(""))
+
+    def test_markdown_bold_winner_parses(self):
+        self.assertEqual(
+            ollama_judge.parse_winner("Reasoning here.\n**WINNER:** Alice"),
+            "Alice")
+
+    def test_markdown_bold_name_parses(self):
+        self.assertEqual(
+            ollama_judge.parse_winner("WINNER: **Bob**"), "Bob")
 
 
 class RunJudgeTests(unittest.TestCase):
@@ -113,6 +151,23 @@ class RunJudgeTests(unittest.TestCase):
         self.assertEqual(seen["options"]["temperature"], 0.2)  # the default
         self.assertEqual(seen["options"]["num_ctx"], 8192)  # the default
         self.assertFalse(seen["think"])
+
+    def test_run_reports_reach_the_judge(self):
+        seen = {}
+
+        def fake_call_chat(host, model, messages, think, options,
+                           timeout=None):
+            seen["messages"] = messages
+            return "", "WINNER: draw", "stop", {}
+
+        ollama_judge.run_judge(
+            "http://x", {"model": "j"}, "topic",
+            [{"name": "A", "model": "m1"}, {"name": "B", "model": "m2"}],
+            [(0, "code here")], 30, fake_call_chat,
+            run_reports={0: "[Automatic code run] A's program FAILED."})
+        body = seen["messages"][1]["content"]
+        self.assertIn("A's program FAILED", body)
+        self.assertIn("what it did, not by what its author", body)
 
     def test_judge_options_honored(self):
         seen = {}

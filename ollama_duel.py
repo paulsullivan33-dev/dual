@@ -588,6 +588,10 @@ def run_duel(host, topic, turns, participants, timeout, transcript, matrix=None,
     if run_results:
         print(count_runs(run_results))
         print()
+    if run_code is not None:
+        # The per-turn code-run reports, so the judge can see what each
+        # reply's program actually did (same carrier as "results" above).
+        run_code["reports"] = run_reports
     return model_stats, matrix, stop_note
 
 
@@ -969,8 +973,11 @@ def main():
                   f"is scoring the duel ---")
             print()
             try:
+                run_reports = (run_code.get("reports")
+                               if run_code is not None else None)
                 verdict = run_judge(judge_host, judge, topic, participants,
-                                    transcript, timeout, call_chat)
+                                    transcript, timeout, call_chat,
+                                    run_reports=run_reports)
             except OllamaError as e:
                 print(f"--- JUDGE FAILED: {e} ---")
                 print()

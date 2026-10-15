@@ -1675,6 +1675,31 @@ class RunCodeTests(unittest.TestCase):
         roles = [m["role"] for m in sent[1]]          # turn 2, Two speaking
         self.assertEqual(roles[-2:], ["user", "user"])  # report, then the nudge
 
+    def test_reports_are_kept_in_run_code_for_the_judge(self):
+        transcript = []
+        run_code = {"timeout": 30, "args": []}
+        participants = [
+            {"name": "One", "model": "m1", "system": None, "think": False,
+             "options": {"num_predict": 50}, "turn_prompt": ""},
+            {"name": "Two", "model": "m2", "system": None, "think": False,
+             "options": {"num_predict": 50}, "turn_prompt": ""},
+        ]
+
+        def fake_call_chat(host, model, messages, think, options,
+                           timeout=None):
+            return "", self.PROGRAM_REPLY, "stop", {
+                "gen_tokens": 10, "gen_s": 1.0, "prompt_tokens": 20,
+                "prompt_s": 0.5}
+
+        out = io.StringIO()
+        with mock.patch.object(ollama_duel, "call_chat", fake_call_chat), \
+             mock.patch.object(sys, "stdout", out):
+            ollama_duel.run_duel("http://x", "topic", 2, participants, 60,
+                                 transcript, run_code=run_code)
+        self.assertEqual(set(run_code["reports"]), {0, 1})
+        self.assertIn("ran successfully", run_code["reports"][0])
+        self.assertIn("RAN-OK", run_code["reports"][1])
+
     def test_cli_turns_it_on_and_off(self):
         _, out = self._duel(minimal_config(turns=1), extra_args=["--run-code"])
         self.assertIn("--- CODE RUN ---", out)

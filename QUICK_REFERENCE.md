@@ -377,7 +377,10 @@ the scenario's `"host"`, then the duel host). A judge call that fails is
 noted but never fails the duel -- and never falls back to the duel host.
 
 After the last turn, the judge reads the whole transcript and writes a
-short verdict ending in `WINNER: <name>` (or `WINNER: draw`).
+short verdict ending in `WINNER: <name>` (or `WINNER: draw` -- markdown
+bold around it is tolerated). In code duels the judge also sees each
+reply's code-run result, and is told to judge the code by what it did,
+not by what its author claimed.
 
 ### Logs, summaries and transcripts
 

@@ -85,17 +85,31 @@ def normalize_judge(raw):
              f'got {raw!r}.')
 
 
-def build_judge_messages(judge, topic, participants, transcript):
+def build_judge_messages(judge, topic, participants, transcript,
+                         run_reports=None):
     """The messages the judge model sees: its instructions plus the full
-    transcript, each turn labeled with the speaker's name."""
+    transcript, each turn labeled with the speaker's name. When the duel
+    ran code (run_reports maps transcript indexes to code-run reports),
+    each reply is followed by what its program actually did -- a program
+    that crashed or printed wrong output should count against its author,
+    so the instructions say so."""
     a, b = participants
     prompt = judge.get("prompt") or DEFAULT_JUDGE_PROMPT
     instructions = prompt.replace("{a}", a["name"]).replace("{b}", b["name"])
     # Plain replace, not str.format, so braces elsewhere survive.
     instructions = instructions.replace("{topic}", topic)
-    lines = [f"--- {participants[i]['name']} ---" for i, _ in transcript]
-    body = "\n\n".join(
-        f"{label}\n{text}" for label, (_, text) in zip(lines, transcript))
+    if run_reports:
+        instructions += (
+            "\n\nEach reply above is followed by the result of running its "
+            "code. Judge the code by what it did, not by what its author "
+            "claimed: a program that crashed, timed out, or printed wrong "
+            "output counts heavily against its author.")
+    turns = []
+    for idx, ((i, text)) in enumerate(transcript):
+        turns.append(f"--- {participants[i]['name']} ---\n{text}")
+        if run_reports and idx in run_reports:
+            turns.append(run_reports[idx])
+    body = "\n\n".join(turns)
     return [
         {"role": "system",
          "content": "You are an impartial judge of debates and games."},
@@ -105,25 +119,28 @@ def build_judge_messages(judge, topic, participants, transcript):
 
 def parse_winner(verdict):
     """Pull the declared winner out of a verdict ("WINNER: <name>"), or
-    None when the judge didn't follow the format."""
+    None when the judge didn't follow the format. Tolerates markdown bold
+    ("**WINNER:** Alice"), which judges emit constantly."""
     if not verdict:
         return None
-    match = WINNER_RE.search(verdict)
+    match = WINNER_RE.search(verdict.replace("**", ""))
     return match.group(1).strip() if match else None
 
 
 def run_judge(host, judge, topic, participants, transcript, timeout,
-              call_chat):
+              call_chat, run_reports=None):
     """Ask the judge model to score the transcript. Returns the verdict
     text. `host` is the judge's Ollama endpoint -- normally another
     machine, bigger than the duel box. `call_chat` is passed in
-    (ollama_duel's) so tests can fake it.
+    (ollama_duel's) so tests can fake it. `run_reports` maps transcript
+    indexes to code-run reports; the judge sees them.
     Raises OllamaError when the judge call fails -- the caller decides
     whether that is fatal (it shouldn't be).
 
     Defaults: temperature 0.2 (a judge should be decisive, not creative)
     and num_ctx 8192 (the judge must see the whole transcript)."""
-    messages = build_judge_messages(judge, topic, participants, transcript)
+    messages = build_judge_messages(judge, topic, participants, transcript,
+                                    run_reports)
     options = {"num_predict": judge.get("max_tokens") or 500,
                "temperature": judge.get("temperature", 0.2),
                "num_ctx": judge.get("num_ctx") or 8192}
