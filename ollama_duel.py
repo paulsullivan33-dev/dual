@@ -7,6 +7,8 @@ Usage:
     python3 ollama_duel.py duel.json --turns 10 --topic "A different question"
     python3 ollama_duel.py duel.json --profile arduino_q
     python3 ollama_duel.py --profile arduino_q      (runs the profile's scenario list)
+    python3 ollama_duel.py duel.json --model-a qwen3:1.7b --model-b smollm2:1.7b
+    python3 ollama_duel.py duel.json --num-ctx 4096
 
 A machine profile (profiles/<name>.json) swaps both speakers' models by
 position and forces settings such as num_ctx and think, so one scenario
@@ -226,6 +228,28 @@ def load_config(path, profile=None):
         _validate_field(m, "history_turns", "int", label, minimum=1)
         _validate_field(m, "turn_prompt", "str", label)
         _validate_field(m, "first_turn_prompt", "str", label)
+    return cfg
+
+
+def apply_cli_model_overrides(cfg, model_a=None, model_b=None, num_ctx=None):
+    """Apply --model-a/--model-b/--num-ctx overrides to a loaded config.
+
+    Runs after any profile, so explicit CLI flags win over the profile.
+    A swapped model also takes over the speaker name when the name was only
+    ever the model identifier, so the transcript doesn't credit a model
+    that never ran. num_ctx is set at the top level and removed from both
+    model entries, so it holds for both participants.
+    """
+    for entry, model in zip(cfg["models"], (model_a, model_b)):
+        if model is None:
+            continue
+        if entry.get("name") == entry["model"]:
+            entry["name"] = model
+        entry["model"] = model
+    if num_ctx is not None:
+        cfg["num_ctx"] = num_ctx
+        for entry in cfg["models"]:
+            entry.pop("num_ctx", None)
     return cfg
 
 
@@ -593,14 +617,13 @@ def expand_configs(config_arg):
     it first. Anything else is returned as the single path, validated
     later by load_config exactly as before.
     """
-    import glob as globmod
     if os.path.isdir(config_arg):
-        paths = sorted(globmod.glob(os.path.join(config_arg, "*.json")))
+        paths = sorted(glob.glob(os.path.join(config_arg, "*.json")))
         if not paths:
             sys.exit(f"No .json scenario files in directory: {config_arg}")
         return paths
-    if globmod.has_magic(config_arg):
-        paths = sorted(globmod.glob(config_arg))
+    if glob.has_magic(config_arg):
+        paths = sorted(glob.glob(config_arg))
         if not paths:
             sys.exit(f"Glob matched no files: {config_arg}")
         return paths
@@ -684,6 +707,12 @@ def main():
     ap.add_argument("--max-tokens", type=int, default=None,
                     help="override the config max_tokens per turn")
     ap.add_argument("--host", default=None, help="override the config host")
+    ap.add_argument("--model-a", default=None,
+                    help="override the first participant's model")
+    ap.add_argument("--model-b", default=None,
+                    help="override the second participant's model")
+    ap.add_argument("--num-ctx", type=int, default=None,
+                    help="override num_ctx for both participants")
     ap.add_argument("--think", dest="think", action="store_true", default=None,
                     help="force thinking display on")
     ap.add_argument("--no-think", dest="think", action="store_false",
@@ -771,6 +800,10 @@ def main():
 
     config_path = configs[0]
     cfg = load_config(config_path, profile)
+    if args.num_ctx is not None and args.num_ctx < 1:
+        sys.exit(f'"--num-ctx" must be >= 1, got {args.num_ctx}.')
+    # CLI model overrides run after the profile, so explicit flags win.
+    apply_cli_model_overrides(cfg, args.model_a, args.model_b, args.num_ctx)
     host = first_not_none(args.host, cfg.get("host"), DEFAULT_HOST)
     topic = first_not_none(args.topic, cfg.get("topic"))
     if not topic:
