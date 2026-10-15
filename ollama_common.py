@@ -175,6 +175,15 @@ def call_chat(host, model, messages, think, options, timeout=DEFAULT_TIMEOUT):
         raise OllamaError(
             f"Cannot reach Ollama at {host}: {e.reason}\nIs `ollama serve` running?"
         ) from e
+    except OSError as e:
+        # e.g. ConnectionResetError when the server drops the connection
+        # mid-response (seen 2026-10-15: ProDesk reset the judge call).
+        # URLError subclasses OSError, so this must come after it.
+        raise OllamaError(
+            f"Lost connection to Ollama at {host} during the {model} call: "
+            f"{type(e).__name__}: {e}\nThe server may have restarted or "
+            f"dropped the request (try `ollama ps` on the host)."
+        ) from e
     msg = data["message"]
     return (msg.get("thinking", "").strip(),
             strip_think_tags(msg["content"]),

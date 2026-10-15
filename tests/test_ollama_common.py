@@ -155,6 +155,18 @@ class CallChatTests(unittest.TestCase):
                 oc.call_chat("http://x", "m", [], False, {}, timeout=5)
         self.assertIn("timed out after 5s", str(ctx.exception))
 
+    def test_connection_reset_raises_ollama_error(self):
+        # Regression 2026-10-15: the ProDesk forcibly closed the judge
+        # connection mid-response; the raw ConnectionResetError escaped
+        # call_chat and crashed the whole run instead of the judge
+        # failing best-effort. Any OSError must become OllamaError.
+        err = ConnectionResetError(10054, "forcibly closed by remote host")
+        with mock.patch("urllib.request.urlopen", side_effect=err):
+            with self.assertRaises(oc.OllamaError) as ctx:
+                oc.call_chat("http://x", "m", [], False, {})
+        self.assertIn("Lost connection", str(ctx.exception))
+        self.assertIn("ConnectionResetError", str(ctx.exception))
+
 
 class OutputPathTests(unittest.TestCase):
     """Generated files go under output/ so they never clutter the repo root."""
