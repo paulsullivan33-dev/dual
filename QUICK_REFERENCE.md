@@ -403,7 +403,14 @@ python ollama_duel.py scenarios/roast_battle.json --no-results-log
   `output/run_results.log` with date, scenario, the full path of that run's
   transcript log, models, turns completed,
   and either the speed table or the error that stopped it. Handy for
-  scanning an overnight batch.
+  scanning an overnight batch. `summarize_results.py` rolls the whole file
+  into a per-duel Markdown table plus aggregate stats (average speed per
+  model, code-run pass rate, judge win counts):
+
+```shell
+python summarize_results.py                # reads output/run_results.log
+python summarize_results.py path/to/run_results.log
+```
 - **Transcript JSON**: written when the duel ends, even after an early stop.
 
 ### Notifications (ntfy)
