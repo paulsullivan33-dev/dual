@@ -12,6 +12,7 @@ import os
 import sys
 
 from ollama_common import check_unknown_keys, validate_field
+from ollama_judge import normalize_judge
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -24,6 +25,9 @@ PROFILE_SETTING_KINDS = {
     "display": ("bool", None),
     "temp_guard": ("bool", None),
     "max_temp": ("number", 1), "resume_temp": ("number", 1),
+    # "judge" is a model name or dict; validated by normalize_judge below,
+    # not by the scalar loop.
+    "judge": (None, None),
 }
 
 
@@ -60,7 +64,14 @@ def load_profile(name):
         sys.exit(f'"settings" in {label} must be a JSON object.')
     check_unknown_keys(settings, set(PROFILE_SETTING_KINDS), f"{label} settings")
     for key, (kind, minimum) in PROFILE_SETTING_KINDS.items():
+        if kind is None:
+            continue  # "judge": validated by normalize_judge, below
         validate_field(settings, key, kind, f"{label} settings", minimum=minimum)
+    if "judge" in settings:
+        # Full judge validation now, so a bad judge block fails at profile
+        # load -- not halfway through a batch. Accepts the same string or
+        # dict form as a scenario's "judge".
+        settings["judge"] = normalize_judge(settings["judge"])
     scenarios = profile.get("scenarios")
     if scenarios is not None and (
             not isinstance(scenarios, list)

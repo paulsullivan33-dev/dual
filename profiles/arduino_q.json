@@ -12,7 +12,11 @@
     "temp_guard": true,
     "max_temp": 80,
     "resume_temp": 70,
-    "timeout": 3600
+    "judge": {
+      "model": "llama3.1:8b",
+      "host": "http://192.168.1.236:11434",
+      "temperature": 0.2
+    }
   },
   "scenarios": [
     "ai_consciousness_debate.json",

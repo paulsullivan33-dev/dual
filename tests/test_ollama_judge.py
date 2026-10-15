@@ -90,6 +90,10 @@ class ParseWinnerTests(unittest.TestCase):
 
 
 class RunJudgeTests(unittest.TestCase):
+    def test_judge_host_accepted(self):
+        raw = {"model": "j", "host": "http://judgebox:11434"}
+        self.assertEqual(ollama_judge.normalize_judge(raw), raw)
+
     def test_judge_call_uses_configured_model_and_defaults(self):
         seen = {}
 
@@ -106,6 +110,8 @@ class RunJudgeTests(unittest.TestCase):
         self.assertEqual(verdict, "Bob won.\nWINNER: Bob")
         self.assertEqual(seen["model"], "judge-model")
         self.assertEqual(seen["options"]["num_predict"], 500)  # the default
+        self.assertEqual(seen["options"]["temperature"], 0.2)  # the default
+        self.assertEqual(seen["options"]["num_ctx"], 8192)  # the default
         self.assertFalse(seen["think"])
 
     def test_judge_options_honored(self):

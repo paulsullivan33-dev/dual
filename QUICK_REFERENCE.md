@@ -41,7 +41,7 @@ of the RAG demo, see [RAG_DEMO.md](RAG_DEMO.md).
 | Run the whole Arduino set | `python ollama_duel.py --profile arduino_q` |
 | Run each reply's program to catch broken code | On already in the programming scenarios; elsewhere add `--run-code` |
 | Skip running code for one run | `python ollama_duel.py scenarios/factorial.json --no-run-code` |
-| Have a third model judge the duel | Set `"judge"` in the scenario; skip it once with `--no-judge` |
+| Have a third model judge the duel | Set `"judge"` in the scenario (optionally on another machine via its `"host"` or `--judge-host`); skip it once with `--no-judge` |
 | Save a duel's transcript as JSON | `python ollama_duel.py scenarios/roast_battle.json --save-json roast.json` |
 | Get a phone notification when a duel ends | `python ollama_duel.py scenarios/roast_battle.json --ntfy-url https://ntfy.sh/my-topic` |
 | Have a model write a small project | `python ollama_agent.py --task "a CLI that renames photos by date taken"` |
@@ -132,8 +132,7 @@ subcommand (`ollama_chat.py --think chat` is the same as
 | `--model` | `qwen3:4b` | Model to chat with (`chat` only) |
 | `--system` | none | System prompt: the persona or ground rules for the model (`chat` only) |
 | `--think` | off | Ask for and print the model's reasoning separately from its reply. Thinking uses the same token budget as the reply. Some models reject it (`qwen2.5-coder`, `smollm2`) |
-| `--no-think` | (default) | Explicitly disable the model's thinking so no tokens are spent on reasoning |
-| `--max-tokens` | 1024, or 2048 with `--think` | Most tokens one reply may use; replies stop when they hit it |
+| `--max-tokens` | 300, or 2048 with `--think` | Most tokens one reply may use; replies stop when they hit it |
 | `--temperature` | server default | Randomness: lower is more focused, higher is more varied (around 0.2–1.2 is typical) |
 | `--num-ctx` | server default | Context window in tokens: how much conversation the model can see at once |
 | `--timeout` | 1200 | Seconds to wait for one reply before giving up |
@@ -352,22 +351,32 @@ python ollama_duel.py scenarios/twenty_questions.json
 
 # Skip the judge for one run
 python ollama_duel.py scenarios/twenty_questions.json --no-judge
+
+# Judge on another machine (a bigger box than the duel host)
+python ollama_duel.py scenarios/twenty_questions.json --judge-host http://192.168.1.236:11434
 ```
 
 A scenario opts in with `"judge": "qwen3:8b"`, or a dict for more control:
 
 ```json
 "judge": {
-  "model": "qwen3:8b",
+  "model": "llama3.1:8b",
+  "host": "http://192.168.1.236:11434",
   "prompt": "Declare the winner based on code correctness only.",
   "temperature": 0.2,
   "max_tokens": 500
 }
 ```
 
+The judge should run on **another machine** than the duel: a bigger box
+that can hold a judge model larger than the contestants, so judging never
+steals RAM or CPU from the duel itself. Set its Ollama endpoint with the
+dict's `"host"`, or `--judge-host` for one run (`--judge-host` wins, then
+the scenario's `"host"`, then the duel host). A judge call that fails is
+noted but never fails the duel -- and never falls back to the duel host.
+
 After the last turn, the judge reads the whole transcript and writes a
-short verdict ending in `WINNER: <name>` (or `WINNER: draw`). A judge
-failure is noted but never fails the duel.
+short verdict ending in `WINNER: <name>` (or `WINNER: draw`).
 
 ### Logs, summaries and transcripts
 
@@ -448,9 +457,6 @@ silently.
 | `--max-tokens` | Replace every `max_tokens` in the scenario, for both speakers |
 | `--think` / `--no-think` | Force thinking on or off for both speakers |
 | `--host` | Ollama server address |
-| `--model-a` | Replace the first participant's model |
-| `--model-b` | Replace the second participant's model |
-| `--num-ctx` | Replace `num_ctx` for both participants |
 | `--timeout` | Seconds to wait for one reply (default 1200) |
 | `--log-file` | Transcript log path (timestamp added; relative paths under `output/`) |
 | `--save-json` | Write the transcript as JSON when the duel ends |
@@ -458,6 +464,7 @@ silently.
 | `--no-results-log` | Don't write a run summary |
 | `--ntfy-url` | Send a completion notice to this ntfy topic URL |
 | `--no-ntfy` | Never send a notice, even if one is configured |
+| `--judge-host` | Ollama endpoint of the judge's machine (default: the duel host) |
 | `--display` / `--no-display` | LED matrix on the Arduino Uno Q |
 | `--max-temp` | Pause the duel when the CPU reaches this °C (default 80) |
 | `--resume-temp` | Resume once the CPU cools to this °C (default 70) |

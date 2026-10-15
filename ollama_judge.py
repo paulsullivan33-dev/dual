@@ -7,12 +7,18 @@ A scenario opts in with a top-level "judge" key, either a model name::
 or a dict for more control::
 
     "judge": {
-        "model": "qwen3:8b",
+        "model": "llama3.1:8b",
+        "host": "http://192.168.1.236:11434",
         "prompt": "Declare the winner based on code correctness only.",
         "temperature": 0.2,
         "max_tokens": 500,
         "think": false
     }
+
+The judge should run on **another machine** than the duel -- a bigger box
+that can hold a judge model larger than the contestants, so judging never
+steals RAM or CPU from the duel itself. "host" is that machine's Ollama
+endpoint; it defaults to the duel host when unset.
 
 After the duel's turns complete, the judge reads the full transcript and
 writes a short verdict ending in a "WINNER: <name>" line (or "WINNER:
@@ -30,8 +36,8 @@ import sys
 from ollama_common import check_unknown_keys as _check_unknown_keys
 from ollama_common import validate_field as _validate_field
 
-JUDGE_KEYS = {"model", "prompt", "temperature", "max_tokens", "think",
-              "num_ctx"}
+JUDGE_KEYS = {"model", "host", "prompt", "temperature", "max_tokens",
+              "think", "num_ctx"}
 
 DEFAULT_JUDGE_PROMPT = (
     "You are an impartial judge. Below is the transcript of an exchange "
@@ -69,6 +75,7 @@ def normalize_judge(raw):
             sys.exit('"judge" needs a "model" name, e.g. "qwen3:8b", '
                      f'got {model!r}.')
         _validate_field(raw, "prompt", "str", '"judge"')
+        _validate_field(raw, "host", "str", '"judge"')
         _validate_field(raw, "temperature", "number", '"judge"', minimum=0)
         _validate_field(raw, "max_tokens", "int", '"judge"', minimum=1)
         _validate_field(raw, "num_ctx", "int", '"judge"', minimum=1)
@@ -108,15 +115,18 @@ def parse_winner(verdict):
 def run_judge(host, judge, topic, participants, transcript, timeout,
               call_chat):
     """Ask the judge model to score the transcript. Returns the verdict
-    text. `call_chat` is passed in (ollama_duel's) so tests can fake it.
+    text. `host` is the judge's Ollama endpoint -- normally another
+    machine, bigger than the duel box. `call_chat` is passed in
+    (ollama_duel's) so tests can fake it.
     Raises OllamaError when the judge call fails -- the caller decides
-    whether that is fatal (it shouldn't be)."""
+    whether that is fatal (it shouldn't be).
+
+    Defaults: temperature 0.2 (a judge should be decisive, not creative)
+    and num_ctx 8192 (the judge must see the whole transcript)."""
     messages = build_judge_messages(judge, topic, participants, transcript)
-    options = {"num_predict": judge.get("max_tokens") or 500}
-    if judge.get("num_ctx") is not None:
-        options["num_ctx"] = judge["num_ctx"]
-    if judge.get("temperature") is not None:
-        options["temperature"] = judge["temperature"]
+    options = {"num_predict": judge.get("max_tokens") or 500,
+               "temperature": judge.get("temperature", 0.2),
+               "num_ctx": judge.get("num_ctx") or 8192}
     _thinking, reply, _done_reason, _metrics = call_chat(
         host, judge["model"], messages, judge.get("think", False), options,
         timeout=timeout)
