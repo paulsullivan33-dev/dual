@@ -23,6 +23,7 @@ Everything is stdlib-only: documents + embeddings live in a SQLite file
 """
 
 import argparse
+import http.client
 import json
 import math
 import os
@@ -58,9 +59,37 @@ def ollama_post(host, path, payload, timeout=600):
         host + path, data=data, headers={"Content-Type": "application/json"})
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
-            return json.loads(resp.read())
+            body = json.loads(resp.read())
+    except (ValueError, UnicodeError, http.client.HTTPException) as exc:
+        sys.exit(f"Invalid Ollama response from {host}{path}: "
+                 f"incomplete response or invalid JSON/encoding ({exc}).")
     except urllib.error.URLError as exc:
         sys.exit(f"Can't reach Ollama at {host} -- is it running? ({exc})")
+    except OSError as exc:
+        sys.exit(f"Lost connection to Ollama at {host}{path}: {exc}")
+    if not isinstance(body, dict):
+        sys.exit(f"Invalid Ollama response from {host}{path}: expected a JSON object.")
+    if "error" in body:
+        sys.exit(f"Ollama at {host}{path} returned an error: {body['error']}")
+    if path == "/api/chat":
+        message = body.get("message")
+        if not isinstance(message, dict) or not isinstance(message.get("content"), str):
+            sys.exit(f"Invalid Ollama response from {host}{path}: "
+                     "expected message.content to be text.")
+    elif path == "/api/embeddings":
+        vector = body.get("embedding")
+        if not isinstance(vector, list) or not vector:
+            sys.exit(f"Invalid Ollama response from {host}{path}: "
+                     "expected a nonempty embedding list.")
+        try:
+            valid = all(not isinstance(v, bool) and isinstance(v, (int, float))
+                        and math.isfinite(v) for v in vector)
+        except OverflowError:
+            valid = False
+        if not valid:
+            sys.exit(f"Invalid Ollama response from {host}{path}: "
+                     "embedding values must be finite numbers.")
+    return body
 
 
 def embed_text(host, model, text):

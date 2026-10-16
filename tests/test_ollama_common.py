@@ -168,6 +168,39 @@ class CallChatTests(unittest.TestCase):
         self.assertIn("ConnectionResetError", str(ctx.exception))
 
 
+class MalformedResponseTests(unittest.TestCase):
+    def test_invalid_chat_shapes_and_metrics_are_clear_errors(self):
+        valid = {"message": {"content": "hello"}}
+        payloads = [None, [], {}, {"error": "model failed"},
+                    {"message": None}, {"message": {"content": 42}},
+                    {"message": {"content": "ok", "thinking": None}},
+                    dict(valid, done_reason=[])]
+        for field in ("eval_count", "prompt_eval_count", "eval_duration",
+                      "prompt_eval_duration", "total_duration", "load_duration"):
+            for value in (None, "10", True, -1, float("nan"), float("inf"), 10 ** 400):
+                payloads.append(dict(valid, **{field: value}))
+        for payload in payloads:
+            with self.subTest(payload=payload):
+                response = io.BytesIO(json.dumps(payload).encode())
+                with mock.patch("urllib.request.urlopen", return_value=response):
+                    with self.assertRaises(oc.OllamaError) as error:
+                        oc.call_chat("http://x", "m", [], False, {})
+                self.assertIn("http://x", str(error.exception))
+
+    def test_broken_json_encoding_and_incomplete_transfer(self):
+        import http.client
+        for body in (b'{"message":', b'<html>Bad Gateway</html>', b'\xff'):
+            with self.subTest(body=body):
+                with mock.patch("urllib.request.urlopen", return_value=io.BytesIO(body)):
+                    with self.assertRaisesRegex(oc.OllamaError, "invalid JSON/encoding"):
+                        oc.call_chat("http://x", "m", [], False, {})
+        response = mock.MagicMock()
+        response.__enter__.return_value.read.side_effect = http.client.IncompleteRead(b"partial")
+        with mock.patch("urllib.request.urlopen", return_value=response):
+            with self.assertRaisesRegex(oc.OllamaError, "incomplete response"):
+                oc.call_chat("http://x", "m", [], False, {})
+
+
 class OutputPathTests(unittest.TestCase):
     """Generated files go under output/ so they never clutter the repo root."""
 

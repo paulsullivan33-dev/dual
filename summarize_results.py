@@ -12,6 +12,7 @@ Usage:
     # defaults to output/run_results.log
 """
 
+import json
 import os
 import re
 import sys
@@ -57,6 +58,8 @@ def parse_block(block):
                 duel["turns_done"] = int(m.group(1))
                 duel["turns_planned"] = int(m.group(2))
                 duel["seconds"] = int(m.group(3))
+        elif line.startswith("Participant stats: "):
+            duel["participants"] = json.loads(line[len("Participant stats: "):])
         elif line.startswith("Code runs: "):
             m = CODE_RE.match(line)
             if m:
@@ -109,8 +112,13 @@ def fmt_speeds(duel):
     """'qwen3:1.7b (2.1) vs smollm2:1.7b (1.5)' from the perf table."""
     perf = duel.get("perf", {})
     bits = []
-    for model, _role in duel["models"]:
-        tps = perf.get(model, {}).get("gen_tps")
+    speakers = {s["index"]: s for s in duel.get("participants", [])}
+    for index, (model, role) in enumerate(duel["models"]):
+        speaker = speakers.get(index)
+        tps = ((speaker["gen_tokens"] / speaker["gen_s"] if speaker["gen_s"] else 0.0)
+               if speaker else perf.get(model, {}).get("gen_tps"))
+        if speaker:
+            model = f"{index + 1}: {role} [{model}]"
         bits.append(f"{model} ({tps:.1f})" if tps is not None else model)
     return " vs ".join(bits) if bits else "?"
 
@@ -142,7 +150,7 @@ def print_aggregates(duels):
     speeds = {}
     for d in duels:
         for model, tps in ((m, d.get("perf", {}).get(m, {}).get("gen_tps"))
-                           for m, _ in d["models"]):
+                           for m in dict.fromkeys(m for m, _ in d["models"])):
             if tps is not None:
                 speeds.setdefault(model, []).append(tps)
     for model in sorted(speeds):

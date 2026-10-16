@@ -394,6 +394,14 @@ and estimated budget are printed before the judge call.
 
 ### Logs, summaries and transcripts
 
+Performance output keeps model totals and separate numbered participant
+rows. Tokens and timings include discarded duplicate replies; accepted
+turns, completed calls, retry attempts, and discarded generation tokens
+are tracked separately. Reported total/load seconds come from Ollama;
+failed requests have no measured cost to include. New run summaries and
+notifications distinguish speakers even when they use the same model.
+The results summarizer still accepts older logs.
+
 ```shell
 # Log to a file of your choice (becomes output/logs/<timestamp>-negotiation.log)
 python ollama_duel.py scenarios/salesperson_vs_customer.json --log-file logs/negotiation.log
@@ -786,7 +794,30 @@ same suite on every push.
 
 ---
 
+## Optional live checks — `integration_checks.py`
+
+```shell
+python integration_checks.py --ollama --model qwen3:4b
+python integration_checks.py --ollama --host http://192.168.1.236:11434 --model llama3.1:8b --timeout 300
+python integration_checks.py --display
+```
+
+| Option | Default | Purpose |
+| --- | --- | --- |
+| `--ollama` | off | Send one real chat request using an installed model |
+| `--display` | off | On the Uno Q, show OK and a progress bar, then clear through Router Bridge |
+| `--host` | `http://localhost:11434` | Ollama server to test |
+| `--model` | `qwen3:4b` | Installed model for the chat check |
+| `--timeout` | 120 | Positive finite Ollama request timeout in seconds |
+
+Choose either check or both. These checks are never run implicitly by the
+unit suite or CI. The display check requires the flashed companion sketch,
+router service, and bridge package. A transport pass still needs visual
+confirmation. Exit codes: 0 all selected checks passed, 1 a check failed,
+2 invalid arguments. See the README for setup and effects on live hardware.
+
 ## Troubleshooting
+
 
 | Symptom | Fix |
 | --- | --- |

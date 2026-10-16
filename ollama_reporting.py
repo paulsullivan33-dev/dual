@@ -12,6 +12,13 @@ import sys
 from datetime import datetime
 
 
+def participant_stats(model_stats):
+    """Ordered speaker records; position distinguishes even identical names."""
+    return sorted((speaker for model in model_stats.values()
+                   for speaker in model.get("participants", {}).values()),
+                  key=lambda speaker: speaker["index"])
+
+
 def format_duel_stats(model_stats):
     """Build a per-model performance table from the stats dict accumulated
     during a duel. Each entry holds turns, token counts, phase durations in
@@ -46,6 +53,24 @@ def format_duel_stats(model_stats):
              "  ".join(header for header, _ in cols)]
     for i in range(len(rows)):
         lines.append("  ".join(cells[i] for _, cells in cols))
+    speakers = participant_stats(model_stats)
+    if speakers:
+        lines.extend(["", "=== Participant performance ===",
+                      "Participant | Model | Turns | Calls | Retries | Gen tok/s | "
+                      "Prompt tok/s | Tokens | Discarded tok | Truncated | Total s | Load s"])
+        for speaker in speakers:
+            gen = speaker["gen_tokens"] / speaker["gen_s"] if speaker["gen_s"] else 0.0
+            prompt = (speaker["prompt_tokens"] / speaker["prompt_s"]
+                      if speaker["prompt_s"] else 0.0)
+            label = f"{speaker['index'] + 1}: {speaker['name']}"
+            lines.append(f"{label} | {speaker['model']} | {speaker['turns']} | "
+                         f"{speaker['calls']} | {speaker['retries']} | {gen:.1f} | "
+                         f"{prompt:.1f} | {speaker['gen_tokens']} | "
+                         f"{speaker['discarded_tokens']} | {speaker['truncated']} | "
+                         f"{speaker['total_s']:.1f} | {speaker['load_s']:.1f}")
+        lines.append("Tokens and timings include discarded replies; turns count accepted replies. "
+                     "Calls count completed requests; retries count attempts. "
+                     "Truncated counts requests, including discarded replies.")
     return "\n".join(lines)
 
 
@@ -79,6 +104,9 @@ def format_run_summary(run_started, config_path, participants, turns,
     ]
     if code_runs:
         lines.append(code_runs)
+    speakers = participant_stats(model_stats)
+    if speakers:
+        lines.append("Participant stats: " + json.dumps(speakers, ensure_ascii=False))
     if verdict:
         lines.append("Verdict:")
         lines.extend(verdict.splitlines())
@@ -138,9 +166,14 @@ def format_token_stats_line(model_stats):
     if not model_stats:
         return ""
     parts = []
-    for model, s in model_stats.items():
+    speakers = participant_stats(model_stats)
+    entries = ((f"{s['index'] + 1}: {s['name']} ({s['model']})", s)
+               for s in speakers) if speakers else model_stats.items()
+    for model, s in entries:
         gen_tps = s["gen_tokens"] / s["gen_s"] if s["gen_s"] > 0 else 0.0
-        parts.append(f"{model} {s['gen_tokens']} tok @ {gen_tps:.1f} tok/s")
+        extra = (f", {s['retries']} retries, {s['discarded_tokens']} discarded tok"
+                 if s.get("retries") else "")
+        parts.append(f"{model} {s['gen_tokens']} tok @ {gen_tps:.1f} tok/s{extra}")
     return "tokens: " + ", ".join(parts)
 
 

@@ -487,6 +487,25 @@ def context_usage_note(name, used, num_ctx, level):
     return None, level
 
 
+def record_call(model_stats, participant, index, metrics, done_reason):
+    """Account for every completed request, including discarded replies."""
+    def empty():
+        return {"turns": 0, "gen_tokens": 0, "gen_s": 0.0,
+                "prompt_tokens": 0, "prompt_s": 0.0, "truncated": 0,
+                "calls": 0, "retries": 0, "discarded_tokens": 0,
+                "total_s": 0.0, "load_s": 0.0}
+    model = model_stats.setdefault(participant["model"], empty())
+    speaker = model.setdefault("participants", {}).setdefault(index, empty())
+    speaker.update(name=participant["name"], model=participant["model"], index=index)
+    for stats in (model, speaker):
+        stats["calls"] += 1
+        for key in ("gen_tokens", "gen_s", "prompt_tokens", "prompt_s", "total_s", "load_s"):
+            stats[key] += metrics.get(key, 0)
+        if done_reason == "length":
+            stats["truncated"] += 1
+    return model, speaker
+
+
 def run_duel(host, topic, turns, participants, timeout, transcript, matrix=None,
              dedup_guard=True, run_code=None, ntfy_url=None,
              max_temp=None, resume_temp=None):
@@ -535,8 +554,12 @@ def run_duel(host, topic, turns, participants, timeout, transcript, matrix=None,
             thinking, reply, done_reason, metrics = call_chat(host, me["model"], messages,
                                                              me["think"], me["options"],
                                                              timeout=timeout)
+            model, speaker = record_call(model_stats, me, i, metrics, done_reason)
             norm = normalize_reply(reply)
             if dedup_guard and norm and norm == prev_replies.get(i):
+                for stats in (model, speaker):
+                    stats["retries"] += 1
+                    stats["discarded_tokens"] += metrics["gen_tokens"]
                 retry_options = dict(me["options"])
                 base_temp = retry_options.get("temperature",
                                               ASSUMED_DEFAULT_TEMPERATURE)
@@ -553,6 +576,7 @@ def run_duel(host, topic, turns, participants, timeout, transcript, matrix=None,
                 thinking, reply, done_reason, metrics = call_chat(
                     host, me["model"], retry_messages, me["think"], retry_options,
                     timeout=timeout)
+                record_call(model_stats, me, i, metrics, done_reason)
                 norm = normalize_reply(reply)
                 if norm and norm == prev_replies.get(i):
                     print(f"--- DEDUP GUARD: {me['name']} repeated again; "
@@ -564,16 +588,8 @@ def run_duel(host, topic, turns, participants, timeout, transcript, matrix=None,
                 matrix = _matrix(matrix, "show_text",
                                  f"{metrics['gen_tps']:.1f}T/S")
             transcript.append((i, reply))
-            stats = model_stats.setdefault(me["model"], {
-                "turns": 0, "gen_tokens": 0, "gen_s": 0.0,
-                "prompt_tokens": 0, "prompt_s": 0.0, "truncated": 0})
-            stats["turns"] += 1
-            stats["gen_tokens"] += metrics["gen_tokens"]
-            stats["gen_s"] += metrics["gen_s"]
-            stats["prompt_tokens"] += metrics["prompt_tokens"]
-            stats["prompt_s"] += metrics["prompt_s"]
-            if done_reason == "length":
-                stats["truncated"] += 1
+            model["turns"] += 1
+            speaker["turns"] += 1
             print_turn(f"[{me['model']} as {me['name']}]", turn + 1,
                        thinking, reply, show_thinking=me["think"])
             if done_reason == "length":
@@ -880,7 +896,10 @@ def main():
             sys.exit(f"Cannot open log file {log_path}: {e}")
         print(f"Logging to {log_path}", file=sys.stderr)
         start_stamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        log_fh.write(f"\n--- session started {start_stamp} ---\n")
+        log_fh.write("\n" + "=" * 72 + "\n")
+        log_fh.write(f"DUEL START | {config_path}\n")
+        log_fh.write(f"--- session started {start_stamp} ---\n")
+        log_fh.write("=" * 72 + "\n\n")
         sys.stdout = Tee(sys.stdout, log_fh)
 
     # Optional LED matrix display (Arduino Uno Q's built-in 8x13 matrix).
@@ -1025,6 +1044,11 @@ def main():
             stamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             log_fh.write(f"--- session started {start_stamp} ---\n")
             log_fh.write(f"--- session ended {stamp} ({len(transcript)} replies) ---\n")
+            outcome = ("STOPPED EARLY" if stop_note else
+                       "CRASHED" if sys.exc_info()[0] is not None else "OK")
+            log_fh.write("=" * 72 + "\n")
+            log_fh.write(f"DUEL END | {config_path} | {outcome}\n")
+            log_fh.write("=" * 72 + "\n\n")
             log_fh.close()
         save_transcript_json_safe(save_json_path, build_duel_json(transcript, participants))
         if results_log_path:

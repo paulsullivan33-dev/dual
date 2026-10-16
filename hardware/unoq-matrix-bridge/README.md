@@ -47,6 +47,12 @@ sketch is flashed and running. A connection failure instead points to the
 ## Use it with Dual
 
 Display support is already integrated through `unoq_matrix.create_matrix()`.
+For a live check of Dual's text and progress rendering, run
+`python3 integration_checks.py --display` from the repository root. It shows
+`OK`, then a half-width bar, and clears the matrix. Confirm the result by
+looking at the LEDs; a transport pass only confirms accepted RPC commands.
+This check requires the bridge and does not use the legacy I2C fallback.
+
 After the smoke test succeeds, run from the repository root on the Q:
 
 ```bash

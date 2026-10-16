@@ -28,6 +28,8 @@ from ollama_common import (
     DEFAULT_HOST,
     DEFAULT_TIMEOUT,
     compute_metrics,
+    OllamaError,
+    read_ollama_response,
     setup_utf8_stdout,
 )
 
@@ -62,7 +64,9 @@ def call_generate(host, model, prompt, options, timeout):
     )
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
-            return json.load(resp)
+            return read_ollama_response(resp, host, model, kind="generate")
+    except OllamaError as e:
+        raise BenchError(str(e)) from e
     except urllib.error.HTTPError as e:
         body = e.read().decode(errors="replace")
         raise BenchError(

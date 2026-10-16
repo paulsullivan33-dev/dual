@@ -16,12 +16,14 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
 import ollama_agent
+import integration_checks
 import ollama_bench
 import ollama_chat
 import ollama_duel
 import rag_demo
 
 SCRIPTS = {
+    "integration_checks.py": integration_checks,
     "ollama_agent.py": ollama_agent,
     "ollama_bench.py": ollama_bench,
     "ollama_chat.py": ollama_chat,

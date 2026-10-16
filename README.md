@@ -353,6 +353,20 @@ each side:
 
 ## Conversation behavior and logs
 
+Performance reports include separate participant rows identified by position
+and name, even when both speakers use the same model or name. The model
+table remains an aggregate across participants using that model. Token
+counts, generation/prompt speeds, and reported total/load times include
+discarded duplicate replies as well as the retained retry. `Turns` counts
+accepted replies, `Calls` counts completed requests, `Retries` counts retry
+attempts, and `Discarded tok` shows generation tokens from discarded
+replies. `Truncated` counts completed requests that hit the token ceiling,
+including discarded ones. A failed request has no response metrics, so its
+unknown token/time cost is not included. Run summaries retain participant
+details even after an early stop, and notifications distinguish speakers.
+`summarize_results.py` uses participant speeds for new summaries and still
+reads older model-only logs; model averages count each model once per duel.
+
 Each request includes the participant's system prompt and all previous generated replies, unless `history_turns` limits the history to the most recent replies. The participant's own replies are represented as assistant messages; the other participant's replies are represented as user messages. The topic opens every request, so both participants see it on every turn. A configurable first-turn or later-turn prompt keeps the speaker in character and responding to the exchange.
 
 Requests are sequential and non-streaming: a complete reply appears after the server finishes generating it. Each request has a configurable timeout, defaulting to 1200 seconds. Press Ctrl+C to stop a duel early.
@@ -458,6 +472,7 @@ See [RAG_DEMO.md](RAG_DEMO.md) for interactive questions and indexing options. T
 ## Troubleshooting
 
 - **Cannot reach Ollama:** check that the server is running and `--host` points to it.
+- **Invalid Ollama response:** incomplete or invalid JSON, missing reply fields, and invalid timing fields produce a clear error rather than a traceback. A duel keeps its completed replies and saves the partial transcript when configured; a failed judge leaves the duel result intact. Check the Ollama server or any proxy, then retry. The benchmark and RAG tools also report malformed responses clearly.
 - **HTTP error or missing model:** check the error text and ensure the model is available on the selected server; use `ollama pull MODEL` for an available model identifier.
 - **Empty or truncated replies:** increase the generation budget, especially when thinking is enabled. For JSON scenarios, check for per-model `max_tokens` overrides.
 - **Long waits:** the novel and debate scenarios allow up to 16,384 tokens per reply. Lower the applicable `max_tokens` values for shorter experiments.
@@ -482,3 +497,33 @@ python -m unittest discover -s tests
 ```
 
 On every push and pull request, GitHub Actions runs these tests on Ubuntu and Windows with Python 3.8, 3.9, 3.10, and 3.14 (`.github/workflows/tests.yml`). A separate push-only workflow runs Pylint 4.1.2 over all tracked Python files on Python 3.14 (`.github/workflows/pylint.yml`). The Pylint version is pinned so results don't change unexpectedly; bump it deliberately. Mocked tests do not verify a live Ollama server, model quality, or physical display hardware.
+
+### Optional live integration checks
+
+Run `integration_checks.py` explicitly to test the real connections. These
+checks are separate from normal test discovery and CI; the orchestration's
+unit tests use mocks. Select either check or both:
+
+```shell
+python integration_checks.py --ollama --model qwen3:4b
+python integration_checks.py --ollama --host http://192.168.1.236:11434 --model llama3.1:8b --timeout 300
+python integration_checks.py --display
+```
+
+The Ollama check sends one short chat request through the production client,
+using a 2048-token context window and a 64-token reply budget. It requires
+the chosen model to be installed, may load it into memory, and fails for an
+empty reply. It does not download models or assess answer quality.
+
+Run the display check on the Uno Q after completing the
+[bridge setup](hardware/unoq-matrix-bridge/README.md). It uses `BridgeMatrix`
+directly, displays `OK` and a half-width progress bar for one second each,
+then attempts to clear and disconnect even after a display failure. A
+transport pass means the commands were accepted; visually confirm the LEDs
+showed the expected patterns and cleared. It does not fall back to I2C or
+silently pass when hardware is missing. Avoid running it during a duel that
+is using the same display.
+
+No check runs without explicit selection. When both are selected, a failure
+in one still allows the other to run. Exit status is 0 when all selected
+checks pass, 1 for a failed check, and 2 for invalid arguments.

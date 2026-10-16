@@ -4,7 +4,9 @@ Not a public API; just the bits that would otherwise be copy-pasted between
 the two scripts.
 """
 
+import http.client
 import json
+import math
 import os
 import re
 import sys
@@ -129,6 +131,42 @@ def compute_metrics(data):
     }
 
 
+def read_ollama_response(resp, host, model, kind="chat"):
+    """Decode and validate a non-streaming chat/generate response."""
+    prefix = f"Invalid Ollama response from {host} for {model}"
+    try:
+        data = json.load(resp)
+    except (ValueError, UnicodeError, http.client.HTTPException) as exc:
+        raise OllamaError(f"{prefix}: incomplete response or invalid JSON/encoding.") from exc
+    if not isinstance(data, dict):
+        raise OllamaError(f"{prefix}: expected a JSON object.")
+    if "error" in data:
+        raise OllamaError(f"Ollama at {host} returned an error for {model}: {data['error']}")
+    if kind == "chat":
+        message = data.get("message")
+        if not isinstance(message, dict) or not isinstance(message.get("content"), str):
+            raise OllamaError(f"{prefix}: expected message.content to be text.")
+        if "thinking" in message and not isinstance(message["thinking"], str):
+            raise OllamaError(f"{prefix}: expected message.thinking to be text.")
+    elif not isinstance(data.get("response"), str):
+        raise OllamaError(f"{prefix}: expected response to be text.")
+    if "done_reason" in data and not isinstance(data["done_reason"], str):
+        raise OllamaError(f"{prefix}: expected done_reason to be text.")
+    for key in ("prompt_eval_count", "eval_count", "prompt_eval_duration",
+                "eval_duration", "total_duration", "load_duration"):
+        value = data.get(key, 0)
+        if (isinstance(value, bool) or not isinstance(value, (int, float))
+                or value < 0):
+            raise OllamaError(f"{prefix}: expected {key} to be a nonnegative number.")
+        try:
+            finite = math.isfinite(value)
+        except OverflowError:
+            finite = False
+        if not finite:
+            raise OllamaError(f"{prefix}: expected {key} to be a finite number.")
+    return data
+
+
 def call_chat(host, model, messages, think, options, timeout=DEFAULT_TIMEOUT):
     """Single non-streaming /api/chat call.
 
@@ -158,7 +196,7 @@ def call_chat(host, model, messages, think, options, timeout=DEFAULT_TIMEOUT):
     )
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
-            data = json.load(resp)
+            data = read_ollama_response(resp, host, model)
     except urllib.error.HTTPError as e:
         body = e.read().decode(errors="replace")
         raise OllamaError(

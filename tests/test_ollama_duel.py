@@ -647,6 +647,65 @@ class LogDirectoryTests(unittest.TestCase):
             self.assertTrue(logs[0].endswith("-duel.log"))
 
 
+class ParticipantAccountingTests(unittest.TestCase):
+    def _run(self, fail_retry=False):
+        participants = [dict(name="Same name", model="shared", system=None,
+                             think=False, options={"num_predict": 50}, turn_prompt="")
+                        for _ in range(2)]
+        metrics = {"gen_tokens": 10, "gen_s": 2.0, "prompt_tokens": 20,
+                   "prompt_s": 1.0, "total_s": 4.0, "load_s": 0.5}
+        responses = [("", text, "length" if text == "a" else "stop", metrics)
+                     for text in ("a", "b", "a", "c")]
+        responses[1] = ("", "b", "stop", dict(metrics, gen_s=1.0))
+        if fail_retry:
+            responses[-1] = ollama_duel.OllamaError("retry failed")
+        transcript = []
+        with mock.patch.object(ollama_duel, "call_chat", side_effect=responses):
+            stats, _, stop = ollama_duel.run_duel(
+                "http://x", "topic", 3, participants, 30, transcript)
+        return stats, stop, transcript, participants
+
+    def test_same_model_and_name_stay_separate_and_retry_cost_is_counted(self):
+        from ollama_reporting import format_run_summary, format_token_stats_line
+        from datetime import datetime
+        import summarize_results
+        stats, stop, transcript, participants = self._run()
+        self.assertIsNone(stop)
+        model = stats["shared"]
+        self.assertEqual((model["turns"], model["calls"], model["gen_tokens"]), (3, 4, 40))
+        a, b = model["participants"][0], model["participants"][1]
+        self.assertEqual((a["turns"], a["calls"], a["retries"], a["discarded_tokens"]),
+                         (2, 3, 1, 10))
+        self.assertEqual((a["gen_s"], a["prompt_s"], a["total_s"], a["load_s"]),
+                         (6.0, 3.0, 12.0, 1.5))
+        self.assertEqual(a["truncated"], 2)
+        self.assertEqual((b["turns"], b["calls"], b["gen_tokens"]), (1, 1, 10))
+        table = ollama_duel.format_duel_stats(stats)
+        self.assertIn("1: Same name", table)
+        self.assertIn("2: Same name", table)
+        self.assertIn("1 retries, 10 discarded tok", format_token_stats_line(stats))
+        summary = format_run_summary(datetime.now(), "test.json", participants, 3,
+                                     transcript, stats, None)
+        parsed = summarize_results.parse_block(summary)
+        self.assertEqual(len(parsed["participants"]), 2)
+        self.assertEqual(parsed["perf"]["shared"]["tokens"], 40)
+        self.assertIn("1: Same name [shared] (5.0)", summarize_results.fmt_speeds(parsed))
+        self.assertIn("2: Same name [shared] (10.0)", summarize_results.fmt_speeds(parsed))
+        output = io.StringIO()
+        with mock.patch.object(sys, "stdout", output):
+            summarize_results.print_aggregates([parsed])
+        self.assertIn("(1 duels)", output.getvalue())
+
+    def test_failed_retry_keeps_discarded_cost_without_counting_a_turn(self):
+        stats, stop, transcript, _ = self._run(fail_retry=True)
+        self.assertEqual(stop, "retry failed")
+        self.assertEqual(len(transcript), 2)
+        a = stats["shared"]["participants"][0]
+        self.assertEqual((a["turns"], a["calls"], a["gen_tokens"], a["retries"]),
+                         (1, 2, 20, 1))
+        self.assertEqual(a["discarded_tokens"], 10)
+
+
 class FormatDuelStatsTests(unittest.TestCase):
     def _stats(self):
         return {
@@ -745,6 +804,23 @@ class StopNoteTests(unittest.TestCase):
         self.assertIn("(0 replies)", contents)
         self.assertIn("--- stopped early ---", contents)
         self.assertIn("Cannot reach Ollama at http://x", contents)
+
+    def test_malformed_second_response_preserves_first_reply_and_json(self):
+        from ollama_common import call_chat
+        responses = [io.BytesIO(b'{"message":{"content":"first reply"}}'),
+                     io.BytesIO(b'{"message":')]
+        with tempfile.TemporaryDirectory() as d, tempfile.TemporaryDirectory() as saved:
+            transcript_path = os.path.join(saved, "transcript.json")
+            with mock.patch("urllib.request.urlopen", side_effect=responses):
+                contents = self._logged_run(
+                    d, call_chat, turns=3, save_json=transcript_path)
+            with open(transcript_path, encoding="utf-8") as stream:
+                transcript = json.load(stream)
+        self.assertEqual(len(transcript), 1)
+        self.assertEqual(transcript[0]["text"], "first reply")
+        self.assertIn("--- stopped early ---", contents)
+        self.assertIn("invalid JSON/encoding", contents)
+        self.assertIn("(1 replies)", contents)
 
     def test_keyboard_interrupt_reason_reaches_log_file(self):
         def intr(*args, **kwargs):

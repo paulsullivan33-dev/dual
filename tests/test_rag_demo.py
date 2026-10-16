@@ -16,6 +16,23 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import rag_demo
 
 
+class MalformedResponseTests(unittest.TestCase):
+    def test_invalid_http_responses_exit_clearly(self):
+        cases = [("/api/chat", b'{'), ("/api/chat", b'[]'),
+                 ("/api/chat", b'{"error":"failed"}'),
+                 ("/api/chat", b'{"message":{"content":null}}'),
+                 ("/api/embeddings", b'{}'),
+                 ("/api/embeddings", b'{"embedding":[]}'),
+                 ("/api/embeddings", b'{"embedding":[true]}'),
+                 ("/api/embeddings", b'{"embedding":[NaN]}')]
+        for path, body in cases:
+            with self.subTest(path=path, body=body):
+                with mock.patch("urllib.request.urlopen", return_value=io.BytesIO(body)):
+                    with self.assertRaises(SystemExit) as error:
+                        rag_demo.ollama_post("http://x", path, {})
+                self.assertIn("http://x", str(error.exception))
+
+
 class OutputPathTests(unittest.TestCase):
     def test_default_db_lives_under_output(self):
         self.assertEqual(rag_demo.DEFAULT_DB, os.path.join("output", "rag_demo.db"))

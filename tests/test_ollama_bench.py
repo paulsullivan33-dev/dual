@@ -90,6 +90,14 @@ class SummarizeTests(unittest.TestCase):
 
 
 class CallGenerateTests(unittest.TestCase):
+    def test_malformed_responses_raise_bench_error(self):
+        for body in (b'{', b'[]', b'{"error":"failed"}', b'{}',
+                     b'{"response":"ok","eval_count":null}'):
+            with self.subTest(body=body):
+                with mock.patch("urllib.request.urlopen", return_value=io.BytesIO(body)):
+                    with self.assertRaises(BenchError):
+                        call_generate("http://x", "m", "hi", {}, 30)
+
     def _call_with_urlopen(self, side_effect, timeout=30):
         with mock.patch.object(ollama_bench.urllib.request, "urlopen",
                                side_effect=side_effect):
