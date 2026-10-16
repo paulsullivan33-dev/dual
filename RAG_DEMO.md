@@ -50,6 +50,22 @@ It keeps the existing chunks and only (re-)embeds the files in
 picking up new notes. It refuses to mix embedding models, since their
 vectors aren't comparable.
 
+Documents are matched by canonical absolute file path, including resolved
+symbolic links and Windows path case normalization. Two folders can each
+contain `notes.txt` without replacing each other's chunks. Re-indexing the
+same file from a parent or child input folder updates that document rather
+than duplicating it. Retrieved source labels include the full path so the
+two documents can be distinguished. A file that cannot be read keeps its
+previously indexed chunks.
+
+Moving a document changes its identity. Append mode retains old entries
+for moved or deleted documents; rebuild the index to remove those entries.
+Indexes created before full source paths were recorded still support
+questions, but appending stops with a rebuild instruction. Their original
+folders cannot be recovered reliably. Rebuild from all desired documents
+without `--append`, or select a new `--db` before `index` to preserve the old
+database. No existing database is rebuilt automatically.
+
 **3. Ask questions.**
 
 ```bash

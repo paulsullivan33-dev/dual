@@ -2,6 +2,7 @@
 import os
 import sys
 import unittest
+from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -125,6 +126,51 @@ class ParseWinnerTests(unittest.TestCase):
     def test_markdown_bold_name_parses(self):
         self.assertEqual(
             ollama_judge.parse_winner("WINNER: **Bob**"), "Bob")
+
+
+class JudgeContextTests(unittest.TestCase):
+    def test_automatic_window_boundaries(self):
+        # For one message: 6400 input tokens + 1280 margin + 512 output.
+        judge = {"max_tokens": 512}
+        messages = [{"content": "x" * ((6400 - 16) * 4)}]
+        self.assertEqual(ollama_judge.judge_context_window(judge, messages),
+                         (8192, 8192))
+        messages[0]["content"] += "x"
+        self.assertEqual(ollama_judge.judge_context_window(judge, messages)[0], 16384)
+        judge["max_tokens"] = 1024
+        messages[0]["content"] = "x" * ((12800 - 16) * 4)
+        self.assertEqual(ollama_judge.judge_context_window(judge, messages),
+                         (16384, 16384))
+        messages[0]["content"] += "x"
+        with self.assertRaises(ollama_judge.JudgeContextExceeded):
+            ollama_judge.judge_context_window(judge, messages)
+
+    def test_explicit_window_is_fixed_and_can_override_cap(self):
+        messages = [{"content": "x" * 60000}]
+        with self.assertRaises(ollama_judge.JudgeContextExceeded):
+            ollama_judge.judge_context_window({"num_ctx": 8192}, messages)
+        self.assertEqual(ollama_judge.judge_context_window(
+            {"num_ctx": 32768}, messages)[0], 32768)
+
+    def test_long_transcript_grows_window_without_changing_reply_budget(self):
+        call = mock.Mock(return_value=("", "WINNER: draw", "stop", {}))
+        ollama_judge.run_judge(
+            "http://x", {"model": "j"}, "topic",
+            [{"name": "A"}, {"name": "B"}], [(0, "x" * 30000)], 30, call)
+        self.assertEqual(call.call_args.args[4]["num_ctx"], 16384)
+        self.assertEqual(call.call_args.args[4]["num_predict"], 500)
+
+    def test_instructions_and_code_reports_count_and_skip_before_request(self):
+        call = mock.Mock()
+        participants = [{"name": "A"}, {"name": "B"}]
+        for judge, reports in [({"model": "j", "prompt": "x" * 60000}, None),
+                               ({"model": "j"}, {0: "x" * 60000})]:
+            with self.subTest(judge=judge["model"], reports=reports is not None):
+                with self.assertRaises(ollama_judge.JudgeContextExceeded):
+                    ollama_judge.run_judge(
+                        "http://x", judge, "topic", participants, [(0, "hi")],
+                        30, call, run_reports=reports)
+        call.assert_not_called()
 
 
 class RunJudgeTests(unittest.TestCase):

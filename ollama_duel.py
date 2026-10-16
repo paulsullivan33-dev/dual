@@ -67,7 +67,7 @@ from ollama_reporting import (append_run_summary, format_duel_stats, format_run_
                               load_default_ntfy_url, notify_duel_done, ntfy_post)
 from ollama_coderun import (DEFAULT_RUN_TIMEOUT, count_runs, describe_run,
                             extract_program, run_program)
-from ollama_judge import normalize_judge, run_judge
+from ollama_judge import JudgeContextExceeded, normalize_judge, run_judge
 from ollama_profiles import apply_profile, load_profile, profile_scenarios
 
 
@@ -751,7 +751,8 @@ def main():
                     help="override the config timeout, in seconds")
     ap.add_argument("--display", dest="display", action="store_true", default=None,
                     help="show live duel stats on the Arduino Uno Q's built-in "
-                         "8x13 LED matrix (needs python3-smbus on the Uno Q)")
+                         "8x13 LED matrix (needs arduino-router-bridge, the "
+                         "router service, and the matrix-bridge sketch on the Uno Q)")
     ap.add_argument("--no-display", dest="display", action="store_false",
                     help="force the LED matrix display off")
     ap.add_argument("--max-temp", type=float, default=None,
@@ -990,6 +991,9 @@ def main():
                 verdict = run_judge(judge_host, judge, topic, participants,
                                     transcript, timeout, call_chat,
                                     run_reports=run_reports)
+            except JudgeContextExceeded as e:
+                print(f"--- JUDGE SKIPPED: {e} ---")
+                print()
             except OllamaError as e:
                 print(f"--- JUDGE FAILED: {e} ---")
                 print()

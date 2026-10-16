@@ -382,6 +382,16 @@ bold around it is tolerated). In code duels the judge also sees each
 reply's code-run result, and is told to judge the code by what it did,
 not by what its author claimed.
 
+Before the request, Dual estimates the full judging input at about four
+characters per token plus message overhead, adds a 20% input margin, and
+reserves `max_tokens` (default 500) for the verdict. It chooses an 8192-token
+window, growing to 16384 only when needed. If the estimate exceeds that cap,
+it prints `JUDGE SKIPPED` and the duel completes without a verdict. An
+explicit judge `num_ctx` is a fixed window, including values above 16384;
+oversized requests are skipped rather than silently increasing it. The
+estimate is approximate, so a fit is not guaranteed. The selected window
+and estimated budget are printed before the judge call.
+
 ### Logs, summaries and transcripts
 
 ```shell
@@ -439,8 +449,12 @@ python ollama_duel.py scenarios/roast_battle.json --no-display
 ```
 
 `--display` shows progress and tokens per second on the Uno Q's built-in
-8×13 LED matrix (needs `python3-smbus` on the board). On any other machine
-it prints a warning and carries on without the display.
+8×13 LED matrix. On the board, install `arduino-router-bridge`, run the
+`arduino-router` service, and flash the companion `matrix-bridge` sketch.
+See the [hardware setup guide](hardware/unoq-matrix-bridge/README.md).
+The driver tries Router Bridge first, then the legacy I2C transport;
+`python3-smbus` alone does not provide the working bridge connection.
+If the display is unavailable, it prints a warning and carries on.
 
 ### Thermal guard
 
@@ -676,6 +690,12 @@ python rag_demo.py --host http://192.168.1.10:11434 ask
 **`--host`, `--db` and `--embed-model` must come before `index` or `ask`.**
 Placed after, they're rejected as unrecognized. If you index with one
 embedding model, ask with the same one; the script warns if they differ.
+
+Append matches documents by canonical absolute path, so matching filenames
+in different folders remain distinct. Moving or deleting a file leaves its
+old entries until a rebuild. Older indexes without full source paths can
+still be queried, but require rebuilding before append; use a new `--db`
+to preserve the old index. See [RAG_DEMO.md](RAG_DEMO.md).
 
 ### Options
 

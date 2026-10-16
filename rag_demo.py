@@ -253,7 +253,21 @@ def open_db(path):
         os.makedirs(parent, exist_ok=True)
     conn = sqlite3.connect(path)
     conn.executescript(SCHEMA)
+    # Older indexes only recorded relative labels, which cannot identify
+    # the original folder reliably. Preserve them for querying, but require
+    # a rebuild before appending to an index containing unidentified rows.
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(chunks)")}
+    if "source_path" not in columns:
+        conn.execute("ALTER TABLE chunks ADD COLUMN source_path TEXT")
+    conn.execute("CREATE INDEX IF NOT EXISTS chunks_source_path "
+                 "ON chunks(source_path)")
+    conn.commit()
     return conn
+
+
+def document_identity(path):
+    """Canonical file location, independent of the chosen input root."""
+    return os.path.normcase(os.path.realpath(os.path.abspath(path)))
 
 
 def cosine(a, b):
@@ -300,9 +314,14 @@ def cmd_index(args):
             print(f"Note: existing chunks use {meta['chunk_words']}/"
                   f"{meta['overlap_words']} (chunk/overlap words); new files "
                   f"will use {args.chunk_words}/{args.overlap_words}.")
-        conn.executemany("DELETE FROM chunks WHERE source = ?",
-                         [(os.path.relpath(p, docs),) for p in files])
-        conn.commit()
+        if conn.execute(
+                "SELECT 1 FROM chunks WHERE source_path IS NULL LIMIT 1").fetchone():
+            conn.close()
+            sys.exit(
+                "This index uses legacy relative document names. Its original "
+                "folders are unknown, so appending could replace unrelated "
+                "documents. Re-index without --append to rebuild it, or use "
+                "a different --db to preserve the old index.")
         meta_insert = "INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)"
         print(f"Appending {len(files)} files to the existing index "
               f"({args.db}); old chunks kept.")
@@ -319,14 +338,18 @@ def cmd_index(args):
             continue
         chunks = chunk_text(text, args.chunk_words, args.overlap_words)
         rows = []
+        identity = document_identity(path)
         for i, c in enumerate(chunks):
             emb = embed_text(args.host, args.embed_model, c)
-            rows.append((rel, i, c, json.dumps(emb)))
+            rows.append((rel, i, c, json.dumps(emb), identity))
             total_chunks += 1
-        conn.executemany(
-            "INSERT INTO chunks (source, idx, text, embedding) VALUES (?,?,?,?)",
-            rows)
-        conn.commit()
+        # Replace only this physical path, after reading and embedding
+        # succeed. An unreadable document must not erase its old chunks.
+        with conn:
+            conn.execute("DELETE FROM chunks WHERE source_path = ?", (identity,))
+            conn.executemany(
+                "INSERT INTO chunks (source, idx, text, embedding, source_path) "
+                "VALUES (?,?,?,?,?)", rows)
         if n % 5 == 0 or n == len(files):
             print(f"  {n}/{len(files)} files, {total_chunks} chunks so far")
     conn.executemany(meta_insert, [
@@ -342,7 +365,8 @@ def cmd_index(args):
 # ---------------------------------------------------------------- ask
 
 def load_chunks(conn):
-    cur = conn.execute("SELECT source, idx, text, embedding FROM chunks")
+    cur = conn.execute(
+        "SELECT COALESCE(source_path, source), idx, text, embedding FROM chunks")
     return [(src, i, txt, json.loads(emb)) for src, i, txt, emb in cur]
 
 

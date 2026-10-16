@@ -2024,6 +2024,15 @@ class TagsTests(unittest.TestCase):
 class JudgeWiringTests(unittest.TestCase):
     """A configured judge scores the finished duel; --no-judge skips it."""
 
+    def test_oversized_judge_request_skips_without_failing_duel(self):
+        calls, out = run_duel_capturing(
+            minimal_config(turns=1, judge={"model": "judge-model",
+                                           "prompt": "x" * 60000}))
+        self.assertEqual(len(calls), 1)
+        self.assertIn("JUDGE SKIPPED", out)
+        self.assertIn("automatic cap", out)
+        self.assertNotIn("=== Verdict ===", out)
+
     def test_judge_scores_completed_duel(self):
         calls, out = run_duel_capturing(
             minimal_config(turns=2, judge="judge-model"),

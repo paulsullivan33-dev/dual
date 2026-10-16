@@ -328,6 +328,75 @@ class IndexAppendTests(unittest.TestCase):
                     self.assertRaises(SystemExit):
                 self._run_index(db, docs, "--append")
 
+    def test_same_relative_name_in_different_folders_keeps_both_documents(self):
+        with tempfile.TemporaryDirectory() as d:
+            docs, db = self._setup(d)
+            other = os.path.join(d, "other")
+            os.mkdir(other)
+            self._write(docs, "notes.txt", "first folder")
+            self._write(other, "notes.txt", "second folder")
+            self._run_index(db, docs)
+            self._run_index(db, other, "--append")
+            self._write(other, "notes.txt", "second folder revised")
+            self._run_index(db, other, "--append")
+            conn = rag_demo.open_db(db)
+            try:
+                chunks = rag_demo.load_chunks(conn)
+            finally:
+                conn.close()
+            self.assertEqual({row[0]: row[2] for row in chunks}, {
+                rag_demo.document_identity(os.path.join(docs, "notes.txt")): "first folder",
+                rag_demo.document_identity(os.path.join(other, "notes.txt")):
+                    "second folder revised",
+            })
+            self.assertEqual(len(chunks), 2)
+
+    def test_indexing_same_file_from_parent_root_does_not_duplicate(self):
+        with tempfile.TemporaryDirectory() as d:
+            docs, db = self._setup(d)
+            self._write(docs, "notes.txt", "one document")
+            self._run_index(db, docs)
+            self._run_index(db, d, "--append")
+            conn = rag_demo.open_db(db)
+            try:
+                self.assertEqual(len(rag_demo.load_chunks(conn)), 1)
+            finally:
+                conn.close()
+
+    def test_unreadable_file_keeps_previously_indexed_chunks(self):
+        with tempfile.TemporaryDirectory() as d:
+            docs, db = self._setup(d)
+            self._write(docs, "notes.txt", "keep this")
+            self._run_index(db, docs)
+            with mock.patch.object(rag_demo, "read_document", side_effect=OSError("unreadable")):
+                self._run_index(db, docs, "--append")
+            self.assertEqual(self._chunks_for(db, "notes.txt"), ["keep this"])
+
+    def test_legacy_index_remains_queryable_but_append_requires_rebuild(self):
+        import sqlite3
+        with tempfile.TemporaryDirectory() as d:
+            docs, db = self._setup(d)
+            self._write(docs, "notes.txt", "new document")
+            conn = sqlite3.connect(db)
+            conn.executescript(rag_demo.SCHEMA)
+            conn.execute(
+                "INSERT INTO chunks (source, idx, text, embedding) VALUES (?,?,?,?)",
+                ("notes.txt", 0, "legacy document", "[1.0, 0.0]"))
+            conn.commit()
+            conn.close()
+            with self.assertRaisesRegex(SystemExit, "legacy relative document names"):
+                self._run_index(db, docs, "--append")
+            self.assertEqual(self._chunks_for(db, "notes.txt"), ["legacy document"])
+            conn = rag_demo.open_db(db)
+            try:
+                self.assertEqual(rag_demo.load_chunks(conn)[0][:3],
+                                 ("notes.txt", 0, "legacy document"))
+            finally:
+                conn.close()
+            self._run_index(db, docs)
+            self._run_index(db, docs, "--append")
+            self.assertEqual(self._chunks_for(db, "notes.txt"), ["new document"])
+
     def test_plain_index_still_rebuilds_from_scratch(self):
         with tempfile.TemporaryDirectory() as d:
             docs, db = self._setup(d)

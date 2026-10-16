@@ -1,18 +1,16 @@
 """unoq_matrix.py -- driver for the Arduino Uno Q's built-in 8x13 LED matrix.
 
 The Uno Q carries a monochrome blue 8x13 LED matrix (104 pixels) driven by
-the onboard STM32U585 MCU. From the Linux (MPU) side it is reachable over
-I2C at address 0x70: writing 13 column bytes (LSB = top pixel) sets the
-frame. This follows the community-documented protocol; it has not yet been
-verified against real hardware.
+the onboard STM32U585 MCU. The working Linux transport uses the
+Arduino Router Bridge and the companion matrix-bridge sketch to send
+104 row-major brightness bytes to the MCU's draw RPC.
 
 The driver is fully optional by design:
 
-* ``smbus`` is imported lazily, inside the constructor, so importing this
-  module is always safe -- even on machines with no I2C hardware at all.
-* Every failure mode (missing smbus, missing bus, missing device, failed
-  write) raises DisplayUnavailable. Callers should catch it, warn, and run
-  headless.
+* Transport dependencies are imported lazily inside their constructors, so
+  importing this module does not require the bridge package or I2C hardware.
+* Unavailable dependencies, connections, and failed writes are reported as
+  DisplayUnavailable. Callers should catch it, warn, and run headless.
 
 Note: the matrix shows the boot logo for ~20-30 seconds during Linux
 startup; only touch it after the board has finished booting.

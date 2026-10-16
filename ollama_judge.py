@@ -54,6 +54,32 @@ DEFAULT_JUDGE_PROMPT = (
 WINNER_RE = re.compile(r"^WINNER:\s*(.+?)\s*$", re.MULTILINE)
 
 
+class JudgeContextExceeded(Exception):
+    """The complete judging request exceeds the permitted context window."""
+
+
+def judge_context_window(judge, messages):
+    """Budget ~4 characters/token, message overhead, 20% input margin,
+    and the full configured output allowance. Explicit num_ctx stays fixed.
+    This estimate is a safeguard, not an exact model tokenizer.
+    """
+    chars = sum(len(message["content"]) for message in messages)
+    estimated_input = (chars + 3) // 4 + 16 * len(messages)
+    required = estimated_input + (estimated_input + 4) // 5
+    required += judge.get("max_tokens") or 500
+    explicit = judge.get("num_ctx")
+    windows = (explicit,) if explicit else (8192, 16384)
+    for window in windows:
+        if required <= window:
+            return window, required
+    raise JudgeContextExceeded(
+        f"estimated budget {required} tokens (including reply allowance and "
+        f"20% input margin) exceeds the {windows[-1]}-token "
+        f"{'configured window' if explicit else 'automatic cap'}. "
+        "Use a shorter conversation or explicitly set judge.num_ctx to a "
+        "larger window supported by the judge model and host.")
+
+
 def normalize_judge(raw):
     """Turn the "judge" config value into a dict, or None when unset.
 
@@ -137,13 +163,19 @@ def run_judge(host, judge, topic, participants, transcript, timeout,
     Raises OllamaError when the judge call fails -- the caller decides
     whether that is fatal (it shouldn't be).
 
-    Defaults: temperature 0.2 (a judge should be decisive, not creative)
-    and num_ctx 8192 (the judge must see the whole transcript)."""
+    Defaults: temperature 0.2; automatically choose 8192 or 16384 context
+    tokens. An explicit num_ctx is honored as a fixed window. Raises
+    JudgeContextExceeded before any request if the estimated budget cannot
+    fit. The caller reports the skipped judge without failing the duel.
+    """
     messages = build_judge_messages(judge, topic, participants, transcript,
                                     run_reports)
+    num_ctx, required = judge_context_window(judge, messages)
+    print(f"Judge context: {num_ctx} tokens; estimated budget {required} "
+          "including reply allowance and safety margin.")
     options = {"num_predict": judge.get("max_tokens") or 500,
                "temperature": judge.get("temperature", 0.2),
-               "num_ctx": judge.get("num_ctx") or 8192}
+               "num_ctx": num_ctx}
     _thinking, reply, _done_reason, _metrics = call_chat(
         host, judge["model"], messages, judge.get("think", False), options,
         timeout=timeout)

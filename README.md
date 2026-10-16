@@ -2,7 +2,23 @@
 
 Command-line Python utilities for chatting with an Ollama model or letting two AI personas take turns in a conversation. Use them for debates, collaborative stories, programming discussions, and role-play experiments.
 
-The scripts use only the Python standard library. They send requests to an Ollama server; they do not run models themselves.
+The core scripts use only the Python standard library. They send requests to an Ollama server; they do not run models themselves. Optional Arduino LED display support needs additional hardware, firmware, and a Python package (see [Arduino Uno Q display](#arduino-uno-q-display)).
+
+## Tools at a glance
+
+| Module | Purpose |
+| --- | --- |
+| `ollama_chat.py` | Interactive chat and simple two-persona conversations |
+| `ollama_duel.py` | JSON scenarios, batch runs, per-participant settings, and thermal checks |
+| `ollama_common.py` | Shared Ollama HTTP requests, formatting, metrics, and transcript helpers |
+| `ollama_profiles.py` | Machine-specific model and generation overrides |
+| `ollama_coderun.py` | Optional execution of generated Python with results fed back to the participants |
+| `ollama_judge.py` | Optional third-model verdict on a completed conversation |
+| `ollama_reporting.py`, `summarize_results.py` | Run summaries, ntfy notices, and aggregate results |
+| `ollama_agent.py` | Generate and revise project files with write previews |
+| `ollama_bench.py` | Compare model generation and prompt-processing speeds |
+| `rag_demo.py` | Answer questions using passages retrieved from local documents |
+| `unoq_matrix.py`, `hardware/unoq-matrix-bridge/` | Optional Arduino Uno Q LED display and companion firmware |
 
 **Looking for a command?** [QUICK_REFERENCE.md](QUICK_REFERENCE.md) has copy-paste examples for every script, a find-by-task table, and every option explained.
 
@@ -67,7 +83,6 @@ Common options for `ollama_chat.py` go after the `chat` or `duel` subcommand:
 | `--no-think` | Explicitly disable thinking (the default; saves tokens) | Off |
 | `--max-tokens` | Per-response generation budget | 1024, or 2048 with `--think` |
 | `--timeout` | Per-request timeout, in seconds | 1200 |
-| `--display` / `--no-display` | Show live duel stats (turn number, tokens/sec) on the Arduino Uno Q's built-in 8x13 LED matrix | Off |
 | `--save-json` | Write the finished transcript to this JSON file | Off |
 | `--temperature` | Sampling temperature passed to Ollama | Server default |
 | `--num-ctx` | Context window size passed to Ollama | Server default |
@@ -156,7 +171,10 @@ The JSON must be an object with exactly two entries in `models`. Each entry requ
 | `run_code_timeout` | Top level | Seconds each run may take before it's stopped; defaults to 30 |
 | `tags` | Top level | Optional list of topic tags, e.g. `["game", "code"]`; batch runs can select scenarios with `--tag` |
 | `judge` | Top level | Optional third model that scores the finished duel: a model name like `"qwen3:8b"`, or a dict with `model` plus optional `prompt`, `temperature`, `max_tokens`, `think`, `num_ctx`. The verdict is printed into the log, appended to the run summary, and its `WINNER:` line goes into the ntfy notice. A judge failure is noted but never fails the duel; `--no-judge` skips it for one run |
-| `display` | Top level | Show live duel stats on the Arduino Uno Q's built-in 8x13 LED matrix; defaults to false. Needs `python3-smbus` on the Uno Q. The script runs headless with a warning anywhere the matrix is unreachable, so this is safe to leave on in shared configs |
+| `display` | Top level | Show live duel stats on the Arduino Uno Q's built-in 8x13 LED matrix; defaults to false. Needs the Router Bridge setup described below. The script runs headless with a warning anywhere the matrix is unreachable |
+| `temp_guard` | Top level | Pause before a request when the local Linux thermal sensor reaches `max_temp`; defaults to true. No readable sensor means no pause. Set false or pass `--no-temp-guard` to disable |
+| `max_temp`, `resume_temp` | Top level | Pause and resume thresholds in degrees Celsius; defaults to 80 and 70. Override with `--max-temp` and `--resume-temp`. Temperature checks describe the machine running the script, which may differ from the Ollama host |
+| `dedup_guard` | Top level | Retry a reply that repeats the same participant's previous reply, ignoring whitespace, once with a no-repeat prompt and higher temperature; defaults to true |
 | `think` | Top level or model entry | Request and display thinking; defaults to false |
 | `max_tokens` | Top level or model entry | Passed as Ollama's `num_predict`; defaults to 300, or 2048 when thinking is enabled |
 | `temperature` | Top level or model entry | Passed to Ollama if specified |
@@ -315,7 +333,7 @@ A profile is a JSON object with any of these keys:
 | --- | --- |
 | `description` | Free text for people reading the file |
 | `models` | Exactly two model names: the first replaces the first participant's model, the second the second's |
-| `settings` | Values for `num_ctx`, `think`, `max_tokens`, `temperature`, `repeat_penalty`, `history_turns`, `host`, `timeout`, or `display`, forced on both participants (they replace both the scenario's top-level and per-model values) |
+| `settings` | Values for `num_ctx`, `think`, `max_tokens`, `temperature`, `repeat_penalty`, `history_turns`, `host`, `timeout`, `display`, `temp_guard`, `max_temp`, `resume_temp`, or `judge`. Profile settings replace scenario values and remove corresponding per-model overrides |
 | `scenarios` | Scenario file names in `scenarios/` to run when no scenario is given |
 
 `--profile` also accepts a path to a profile file elsewhere. The console header and log show `Profile: <name>` when one is used.
@@ -335,9 +353,9 @@ each side:
 
 ## Conversation behavior and logs
 
-Each request includes the participant's system prompt and all previous generated replies. The participant's own replies are represented as assistant messages; the other participant's replies are represented as user messages. The topic opens every request, so both participants see it on every turn.
+Each request includes the participant's system prompt and all previous generated replies, unless `history_turns` limits the history to the most recent replies. The participant's own replies are represented as assistant messages; the other participant's replies are represented as user messages. The topic opens every request, so both participants see it on every turn. A configurable first-turn or later-turn prompt keeps the speaker in character and responding to the exchange.
 
-Requests are sequential and non-streaming: a complete reply appears after the server finishes generating it. Each request has a 1200-second timeout. Press Ctrl+C to stop a duel early.
+Requests are sequential and non-streaming: a complete reply appears after the server finishes generating it. Each request has a configurable timeout, defaulting to 1200 seconds. Press Ctrl+C to stop a duel early.
 
 The scripts remove inline `<think>` blocks from reply text. When thinking is enabled, they separately display the server's `thinking` field when available. Thinking behavior depends on the model and server, and its token use can reduce the budget available for the visible reply.
 
@@ -345,7 +363,13 @@ When `log_file` is set, `ollama_duel.py` mirrors its standard output to a timest
 
 Separately, every duel appends a one-block summary to `output/run_results.log` (override with `results_log` or `--results-log`, disable with `--no-results-log`). Each entry carries the date/time, config file, the full path of the run's transcript log (when it kept one, so it's easy to open), models, how many of the requested turns completed, and the per-model stats table when the duel finished -- or the error message when it stopped early, so a batch of overnight runs can be scanned without opening each transcript log.
 
-The programming scenarios produce code as conversation text. By default nothing runs it; [`run_code`](#running-each-replys-code) is an opt-in that runs each reply's program and feeds the result back to the speakers.
+The programming scenarios produce code as conversation text. Execution is disabled unless the scenario sets `run_code` or the command enables it; several supplied programming scenarios enable it. Pass `--no-run-code` to keep their output as text. See [Running each reply's code](#running-each-replys-code).
+
+### Arduino Uno Q display
+
+The working display transport uses the `arduino-router` service on the Uno Q and the `arduino-router-bridge` Python package. Flash the companion STM32 sketch in `hardware/unoq-matrix-bridge/matrix-bridge/` before enabling the display. It exposes a `draw` RPC for the built-in 8x13 matrix; the sketch uses the Arduino Zephyr core, `Arduino_RouterBridge`, and the bundled `Arduino_LED_Matrix` library.
+
+Follow the [hardware setup and smoke-test instructions](hardware/unoq-matrix-bridge/README.md), then enable `display` in a scenario or pass `--display`. `unoq_matrix.py` tries Router Bridge first, then a legacy I2C driver using `smbus` or `smbus2`. Installing `python3-smbus` alone does not provide the working bridge transport. If neither transport is available, the conversation continues without the display.
 
 ## Choosing models
 
@@ -378,9 +402,11 @@ The model hands over files in fenced code blocks tagged with the language
 and path (```` ```python:hello.py ````). If the model forgets the path tag
 and writes a plain fence, the agent asks you for a filename instead of
 dropping the code (handy with smaller models). Every write is previewed
-and confirmed unless you pass `--yes`, and paths are confined to
-`--output-dir` — `..` and absolute paths are refused. Nothing is ever
-executed; running the code is your job.
+and confirmed unless you pass `--yes`. Absolute paths and `..` paths that
+escape `--output-dir` are refused. These checks do not resolve symbolic
+links or directory junctions, so use a project directory without links to
+locations outside it. Existing files at accepted paths are overwritten.
+The agent does not execute the generated files; running the code is your job.
 After each round, describe a change or type `done` to finish; the model
 sees the current files on every turn, so it can revise its own work.
 
@@ -406,6 +432,28 @@ measured, not estimated. Thinking is forced off so thinking and
 non-thinking models compare fairly. Useful flags: `--iterations`/`-n`,
 `--max-tokens`, `--num-ctx`, `--prompt`, `--host`, `--timeout`,
 `--no-warmup`.
+
+## Document question answering (RAG)
+
+`rag_demo.py` indexes `.txt`, `.md`, `.markdown`, and `.epub` files. It splits documents into overlapping word chunks, obtains embeddings from Ollama, and stores text and vectors in SQLite. For each question, it ranks chunks by cosine similarity and includes the best matches in a chat prompt. The model is instructed to answer from those passages; this is a prompt instruction, not a guarantee of factual accuracy.
+
+Pull an embedding model and a chat model before starting:
+
+```shell
+ollama pull nomic-embed-text
+ollama pull qwen3:8b
+python rag_demo.py index --docs ./my-docs
+python rag_demo.py ask --question "What do my notes say about the project?"
+```
+
+See [RAG_DEMO.md](RAG_DEMO.md) for interactive questions and indexing options. This is a small-collection demo: all chunks and embeddings are loaded into memory and ranked for each question. Use the same embedding model for indexing and querying; query-time mismatches only produce a warning. Documents are identified by their canonical absolute paths, so appending different folders preserves files with matching relative names. Re-indexing the same file updates its chunks even when a different input root is used. Sources shown in retrieved passages include the full path. Moving documents creates new identities; rebuilding removes obsolete entries. Older indexes remain queryable, but must be rebuilt before appending because their original folders were not recorded. Use a different `--db` to build a new index while preserving an old one.
+
+## Practical limits
+
+- **Context capacity:** history is not summarized automatically. Participant window warnings use Ollama's counts and a rough character-based estimate, and require an explicit `num_ctx`. Before judging, Dual estimates the complete request (instructions, topic, transcript, and code-run reports) at roughly four characters per token plus message overhead, adds a 20% input safety margin, and reserves the judge's `max_tokens` (default 500) for its verdict. It chooses 8192 context tokens when that fits, otherwise 16384. Requests above the automatic cap are skipped with a `JUDGE SKIPPED` explanation, without failing the duel. An explicit judge `num_ctx` stays fixed and can override the automatic cap; requests estimated to exceed that fixed window are also skipped. Estimates are approximate, especially for code and non-English text, and cannot guarantee a fit. Larger windows use resources on the judge's host; only configure windows supported by its model and available memory.
+- **Code execution:** the execution timeout and temporary working folder are not isolation. Output is captured before being trimmed, and subprocess descendants are not explicitly terminated as a group. Use `--no-run-code` when you only want to inspect generated programs.
+- **Output paths:** relative generated paths normally go under `output/` in the current working directory. Absolute paths are honored, and `..` components can escape that folder; it is an organizational convention rather than a filesystem boundary.
+- **Remote services:** prompts go to the configured Ollama host. A separately configured judge receives the transcript, and an enabled ntfy endpoint receives completion summaries. Choose endpoints appropriate for the data in your scenarios and documents.
 
 ## Troubleshooting
 
@@ -433,4 +481,4 @@ The `tests/` directory has stdlib-only `unittest` coverage for the shared helper
 python -m unittest discover -s tests
 ```
 
-On every push and pull request, GitHub Actions runs these tests on Ubuntu and Windows with Python 3.8, 3.9, 3.10, and 3.14 (`.github/workflows/tests.yml`), and runs Pylint 4.1.2 over all Python files on Python 3.14 (`.github/workflows/pylint.yml`). The Pylint version is pinned so results don't change unexpectedly; bump it deliberately.
+On every push and pull request, GitHub Actions runs these tests on Ubuntu and Windows with Python 3.8, 3.9, 3.10, and 3.14 (`.github/workflows/tests.yml`). A separate push-only workflow runs Pylint 4.1.2 over all tracked Python files on Python 3.14 (`.github/workflows/pylint.yml`). The Pylint version is pinned so results don't change unexpectedly; bump it deliberately. Mocked tests do not verify a live Ollama server, model quality, or physical display hardware.
