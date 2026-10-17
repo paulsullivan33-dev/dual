@@ -816,16 +816,16 @@ def main():
     setup_utf8_stdout()
 
     profile = load_profile(args.profile) if args.profile else None
-    if args.config is None:
-        if profile is None and (args.list_scenarios or args.list_tags):
-            configs = expand_configs(os.path.join(os.path.dirname(__file__), "scenarios"))
-        elif profile is None:
-            ap.error("a scenario (file, directory or glob) or a --profile "
-                     "that lists scenarios is required")
-        else:
-            configs = profile_scenarios(profile, args.profile)
-    else:
+    if args.config is not None:
         configs = expand_configs(args.config)
+    elif profile is not None:
+        configs = profile_scenarios(profile, args.profile)
+    elif args.list_scenarios or args.list_tags:
+        configs = expand_configs(os.path.join(os.path.dirname(__file__), "scenarios"))
+    else:
+        ap.error("a scenario (file, directory or glob) or a --profile "
+                 "that lists scenarios is required")
+        configs = []  # unreachable: ap.error() exits; keeps flow analysis honest
     if args.list_tags:
         # Discovery aid: what tags exist in these scenarios, and how many
         # carry each. Runs before any filtering or dueling.
