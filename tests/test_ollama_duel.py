@@ -649,8 +649,8 @@ class LogDirectoryTests(unittest.TestCase):
 
 class ParticipantAccountingTests(unittest.TestCase):
     def _run(self, fail_retry=False):
-        participants = [dict(name="Same name", model="shared", system=None,
-                             think=False, options={"num_predict": 50}, turn_prompt="")
+        participants = [{"name": "Same name", "model": "shared", "system": None,
+                         "think": False, "options": {"num_predict": 50}, "turn_prompt": ""}
                         for _ in range(2)]
         metrics = {"gen_tokens": 10, "gen_s": 2.0, "prompt_tokens": 20,
                    "prompt_s": 1.0, "total_s": 4.0, "load_s": 0.5}
