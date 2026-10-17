@@ -104,6 +104,41 @@ python ollama_duel.py scenarios/duel-example.json --topic "Should a small team a
 
 ## Run a batch of scenarios
 
+Browse scenarios without contacting Ollama or creating output files:
+
+```shell
+python ollama_duel.py --list-scenarios
+python ollama_duel.py scenarios/ --list-scenarios --tag roleplay
+python ollama_duel.py --profile arduino_q --list-scenarios
+```
+
+Each entry shows a short description from its topic, tags, total turns,
+effective models, and whether code execution is enabled. Profiles and
+command-line overrides apply to the displayed settings. With no path or
+profile, listing uses the bundled scenarios folder.
+
+Before a batch of multiple scenarios starts, Dual validates the selected
+configurations and checks the participant and judge models through each
+server's `/api/tags` endpoint. It applies profile settings, model/host
+overrides, and `--no-judge`, queries each distinct server once with a
+10-second timeout, and reports all missing models and unavailable servers
+together. A failed check stops the whole batch before any scenario starts.
+Models without an explicit tag are checked as `:latest`.
+
+```shell
+python ollama_duel.py scenarios/ --profile arduino_q --preflight
+python ollama_duel.py scenarios/ --profile arduino_q --no-preflight
+```
+
+`--preflight` checks and exits without running, including for a single
+scenario. `--no-preflight` bypasses the automatic batch check. Single runs
+otherwise keep their existing behavior. Listing and `--dry-run` do not
+contact servers, unless an explicit `--preflight` is requested with a dry
+run. Preflight does not download or load models, test generation quality,
+or guarantee enough memory; runtime failures can still occur. Available
+judge models are checked even though a judge failure during a duel is
+normally nonfatal. Use `--no-judge` to exclude them from a batch.
+
 Pass a directory to run every `*.json` scenario inside it, or a glob pattern
 to run the matches (quote the pattern so your shell doesn't expand it first).
 Each scenario runs as its own process — its own log file, its own completion
@@ -228,6 +263,7 @@ These live in the `scenarios/` folder.
 | `socratic_debugging.json` | Two programmers take turns proposing and stress-testing bug hypotheses |
 | `first_contact.json` | A human diplomat and an alien envoy negotiate first contact |
 | `scope_negotiation.json` | A product manager and engineer negotiate scope against a tight deadline |
+| `cooperative_event_planning.json` | An organizer and logistics checker produce one workshop plan under fixed budget, accessibility, dietary, timing and staffing constraints; a judge scores the final plan and collaboration |
 | `incident_response.json` | An on-call engineer and SRE lead triage a live production outage |
 | `architecture_review.json` | Two engineers argue microservices vs. a monolith for a new system |
 | `trolley_problem_ethics.json` | A utilitarian and a deontologist debate a self-driving-car dilemma |

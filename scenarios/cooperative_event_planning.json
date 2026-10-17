@@ -1,0 +1,33 @@
+{
+  "host": "http://localhost:11434",
+  "log_file": "logs/cooperative_event_planning.log",
+  "max_tokens": 800,
+  "num_ctx": 8192,
+  "think": false,
+  "temperature": 0.5,
+  "turns": 8,
+  "tags": ["roleplay"],
+  "run_code": false,
+  "topic": "Together produce one feasible plan for a community workshop for exactly 40 people, Saturday 14:00-17:00, with a hard $500 budget including a 10% contingency on the subtotal. Use only these fixed prices and facts; invent no discounts, donations, or extra resources. Venue: library room $120, capacity 40, tables/chairs included, available 13:30-17:30; park shelter $80, capacity 60, available all day but no indoor rain backup. Food: standard snack pack $4/person or inclusive snack pack $5/person, both include a drink; exactly 10 people require the inclusive pack, and everyone needs exactly one pack. Materials: basic kit $2/person or deluxe kit $4/person, exactly one kit for everyone. Two volunteers are available 13:30-17:30; one task per volunteer at a time. Setup takes both volunteers 13:30-14:00, and cleanup takes both 17:00-17:30. The public programme must include a 20-minute welcome, a 60-minute guided activity requiring both volunteers, a 20-minute break requiring one volunteer on refreshments, and a 40-minute discussion requiring one facilitator. Use the remaining 40 minutes explicitly. Accessibility: step-free access is confirmed at the library and unknown at the park; the final choice must have confirmed step-free access and a weather-safe venue. Each reply must revise a single shared plan, not create competing alternatives. Deliverable: venue and quantities, itemized subtotal, contingency and total, a complete timed agenda including setup/cleanup and volunteer assignments, and a pass/fail checklist for capacity, access/weather, dietary needs, materials, time, staffing and budget. The final reply is the authoritative consolidated plan; unresolved constraints must be marked FAIL rather than assumed away.",
+  "models": [
+    {
+      "model": "qwen3:4b",
+      "name": "Organizer",
+      "system": "You are a practical community event organizer collaborating with a logistics checker. Propose and revise one shared plan using only the supplied facts. Check arithmetic and staffing. Accept useful corrections. Every reply must include the current complete plan and compliance checklist in compact tables. Never claim the other participant agreed when they did not.",
+      "first_turn_prompt": "Create the first complete feasible plan. Show quantities, arithmetic, timing, assignments and a constraint checklist. Write only your own contribution.",
+      "turn_prompt": "Incorporate {other}'s corrections and publish the updated complete shared plan. Keep every constraint checkable and all costs explicit."
+    },
+    {
+      "model": "qwen3:4b",
+      "name": "Logistics Checker",
+      "system": "You are a constructive logistics checker helping an organizer complete one shared plan. Independently verify every total, interval, quantity and volunteer assignment against the supplied facts. Correct mistakes directly instead of merely criticizing. Each reply must publish a complete consolidated plan with itemized costs, timed agenda, staffing and a pass/fail checklist. The last reply must stand alone as the final deliverable. Do not invent resources or relax requirements.",
+      "turn_prompt": "Audit {other}'s plan, explain any correction briefly, then publish the complete corrected plan and pass/fail checklist. Treat this as the authoritative plan if the conversation ends here."
+    }
+  ],
+  "judge": {
+    "model": "qwen3:4b",
+    "prompt": "Evaluate the final consolidated plan against the exact requirements in this topic: {topic}. Check arithmetic independently: a feasible baseline uses the library ($120), 30 standard and 10 inclusive snack packs ($170), and 40 basic kits ($80), subtotal $370, 10% contingency $37, total $407. Other solutions are acceptable only if they satisfy every original constraint. Check that the public agenda totals 180 minutes, including all four required segments and 40 additional minutes, and setup/cleanup have both volunteers with no overlapping assignments. Score overall plan feasibility 0-10 and collaboration 0-10. Name every failed or unverified constraint; do not reward confident unsupported claims. Evaluate the shared outcome rather than inventing individual winners. End with exactly WINNER: draw.",
+    "max_tokens": 600,
+    "temperature": 0.2
+  }
+}

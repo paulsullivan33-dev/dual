@@ -69,6 +69,7 @@ from ollama_coderun import (DEFAULT_RUN_TIMEOUT, count_runs, describe_run,
                             extract_program, run_program)
 from ollama_judge import JudgeContextExceeded, normalize_judge, run_judge
 from ollama_profiles import apply_profile, load_profile, profile_scenarios
+from ollama_discovery import inspect_scenarios, preflight
 
 
 TOP_LEVEL_KEYS = {
@@ -668,7 +669,8 @@ def read_scenario_tags(path):
     batch, it just skips what it can't read."""
     try:
         with open(path, encoding="utf-8") as f:
-            tags = json.load(f).get("tags")
+            data = json.load(f)
+            tags = data.get("tags") if isinstance(data, dict) else None
     except (OSError, ValueError):
         return []
     if isinstance(tags, list):
@@ -792,6 +794,13 @@ def main():
                          "scenarios tagged with TAG; repeatable, matches any")
     ap.add_argument("--list-tags", action="store_true",
                     help="list the tags used by the given scenarios and exit")
+    ap.add_argument("--list-scenarios", action="store_true",
+                    help="list scenario topics, tags, turns, models and code execution, then exit")
+    checks = ap.add_mutually_exclusive_group()
+    checks.add_argument("--preflight", action="store_true",
+                        help="check configured servers and installed models, then exit without running")
+    checks.add_argument("--no-preflight", action="store_true",
+                        help="skip the automatic model availability check before a batch")
     ap.add_argument("--no-judge", dest="judge", action="store_false",
                     help="skip the scenario's judge, if it has one")
     ap.add_argument("--judge-host", dest="judge_host", default=None,
@@ -808,10 +817,13 @@ def main():
 
     profile = load_profile(args.profile) if args.profile else None
     if args.config is None:
-        if profile is None:
+        if profile is None and (args.list_scenarios or args.list_tags):
+            configs = expand_configs(os.path.join(os.path.dirname(__file__), "scenarios"))
+        elif profile is None:
             ap.error("a scenario (file, directory or glob) or a --profile "
                      "that lists scenarios is required")
-        configs = profile_scenarios(profile, args.profile)
+        else:
+            configs = profile_scenarios(profile, args.profile)
     else:
         configs = expand_configs(args.config)
     if args.list_tags:
@@ -828,6 +840,10 @@ def main():
     configs = configs_matching_tags(configs, args.tags)
     if not configs:
         sys.exit(f"No scenarios match tag(s): {', '.join(args.tags or [])}.")
+    if args.list_scenarios or args.preflight or (len(configs) > 1 and not args.no_preflight and not args.dry_run):
+        inspect_scenarios(configs, args, profile, load_config, apply_cli_model_overrides, preflight)
+        if args.list_scenarios or args.preflight:
+            return
     if len(configs) > 1:
         sys.exit(run_batch(configs, args.config))
 

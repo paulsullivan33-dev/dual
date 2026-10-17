@@ -1630,12 +1630,14 @@ class ProfileTests(unittest.TestCase):
 
         profile = {"scenarios": ["factorial.json", "vim_vs_emacs.json"]}
         with mock.patch.object(ollama_duel, "load_profile", return_value=profile), \
+             mock.patch.object(ollama_duel, "preflight") as check_models, \
              mock.patch.object(subprocess, "run", fake_run), \
              mock.patch.object(sys, "argv", ["ollama_duel.py", "--profile", "box"]), \
              mock.patch("sys.stderr", new_callable=io.StringIO):
             with self.assertRaises(SystemExit) as ctx:
                 ollama_duel.main()
         self.assertEqual(ctx.exception.code, 0)
+        check_models.assert_called_once()
         self.assertEqual([os.path.basename(c[2]) for c in ran],
                          ["factorial.json", "vim_vs_emacs.json"])
         # Each child run gets the profile too.
@@ -2089,12 +2091,14 @@ class TagsTests(unittest.TestCase):
             argv = ["ollama_duel.py", d, "--tag", "code",
                     "--no-ntfy", "--no-results-log"]
             with mock.patch.object(sys, "argv", argv), \
+                 mock.patch.object(ollama_duel, "preflight") as check_models, \
                  mock.patch.object(subprocess, "run", fake_run), \
                  mock.patch("sys.stderr", new_callable=io.StringIO):
                 with self.assertRaises(SystemExit) as ctx:
                     ollama_duel.main()
         self.assertEqual(ctx.exception.code, 0)  # batch ran clean
         self.assertEqual(ran, [b, c])  # only the code-tagged ones ran
+        self.assertEqual([path for path, _ in check_models.call_args.args[0]], [b, c])
 
 
 class JudgeWiringTests(unittest.TestCase):

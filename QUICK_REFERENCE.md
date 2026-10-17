@@ -236,6 +236,31 @@ anything else happens.
 
 ### Run many scenarios (batch mode)
 
+Browse without contacting servers:
+
+```shell
+python ollama_duel.py --list-scenarios
+python ollama_duel.py scenarios/ --list-scenarios --tag roleplay
+```
+
+The catalog shows topics, tags, turns, effective models, and code-execution
+settings after profile and CLI overrides. Multiple-scenario batches now
+check installed participant and judge models before starting, reporting
+missing models and unreachable servers together.
+
+```shell
+python ollama_duel.py scenarios/ --profile arduino_q --preflight
+python ollama_duel.py scenarios/ --profile arduino_q --no-preflight
+python ollama_duel.py scenarios/cooperative_event_planning.json
+```
+
+`--preflight` checks and exits without generation; `--no-preflight` bypasses
+the automatic batch check. `--no-judge` excludes judge requirements.
+Listing and dry runs normally stay offline. Preflight queries inventories
+without loading or downloading models; it does not verify available RAM.
+The cooperative planning scenario asks for a shared workshop budget,
+agenda, staffing plan, and constraint checklist, with code execution off.
+
 ```shell
 # Every scenario in a folder
 python ollama_duel.py scenarios/
