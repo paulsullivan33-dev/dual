@@ -14,8 +14,10 @@ import rejudge
 
 SCENARIO = {
     "topic": "A test topic.",
-    "models": [{"name": "Alice", "model": "m1"},
-               {"name": "Bob", "model": "m2"}],
+    "models": [{"name": "Alice", "model": "m1",
+                "system": "You are Alice. Argue for the motion."},
+               {"name": "Bob", "model": "m2",
+                "system": "You are Bob. Argue against the motion."}],
     "judge": {"model": "orig:8b",
               "prompt": "Judge {a} vs {b} on {topic}. "
                         "End with WINNER: <name>"},
@@ -146,6 +148,10 @@ class RejudgeOneTests(unittest.TestCase):
         self.assertIn("Judge Alice vs Bob on A test topic.", user)
         self.assertIn("Alice argues first.", user)
         self.assertIn("printed: 42", user)  # run report reached the judge
+        # The scenario's assigned briefs reach the judge too.
+        self.assertIn("Assigned briefs:", user)
+        self.assertIn("Argue for the motion.", user)
+        self.assertIn("Argue against the motion.", user)
         out_path = rejudge.rejudge_output_path(self.transcript_path,
                                                "big:14b")
         self.assertTrue(os.path.exists(out_path))

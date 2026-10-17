@@ -114,7 +114,11 @@ def normalize_judge(raw):
 def build_judge_messages(judge, topic, participants, transcript,
                          run_reports=None):
     """The messages the judge model sees: its instructions plus the full
-    transcript, each turn labeled with the speaker's name. When the duel
+    transcript, each turn labeled with the speaker's name. When the
+    participants carry assigned briefs (their scenario system prompts),
+    the briefs are shown ahead of the transcript with a fidelity
+    instruction -- without them the judge has no way to know what each
+    side was supposed to argue. When the duel
     ran code (run_reports maps transcript indexes to code-run reports),
     each reply is followed by what its program actually did -- a program
     that crashed or printed wrong output should count against its author,
@@ -130,16 +134,38 @@ def build_judge_messages(judge, topic, participants, transcript,
             "code. Judge the code by what it did, not by what its author "
             "claimed: a program that crashed, timed out, or printed wrong "
             "output counts heavily against its author.")
+    # The assigned briefs (the participants' system prompts), when the
+    # scenario gave any. Without them the judge cannot tell a held
+    # position from an abandoned one -- a duelist arguing the other
+    # side's brief reads as merely "consistent". Judges scored exactly
+    # that as a win before this section existed.
+    briefs = []
+    for participant in participants:
+        system = participant.get("system")
+        if isinstance(system, str) and system.strip():
+            briefs.append(f"--- {participant['name']}'s assigned brief "
+                          f"---\n{system.strip()}")
+    if briefs:
+        instructions += (
+            "\n\nEach participant was assigned the brief shown below, "
+            "before the transcript. Judge fidelity to that brief as part "
+            "of consistency: a participant who ends up arguing the other "
+            "side's assigned position has abandoned their brief, however "
+            "well they argue it.")
     turns = []
     for idx, ((i, text)) in enumerate(transcript):
         turns.append(f"--- {participants[i]['name']} ---\n{text}")
         if run_reports and idx in run_reports:
             turns.append(run_reports[idx])
     body = "\n\n".join(turns)
+    content = instructions
+    if briefs:
+        content += "\n\nAssigned briefs:\n" + "\n\n".join(briefs)
+    content += "\n\nTranscript:\n" + body
     return [
         {"role": "system",
          "content": "You are an impartial judge of debates and games."},
-        {"role": "user", "content": instructions + "\n\nTranscript:\n" + body},
+        {"role": "user", "content": content},
     ]
 
 

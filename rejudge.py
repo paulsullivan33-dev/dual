@@ -62,7 +62,8 @@ def load_scenario(path):
     """
     with open(path, encoding="utf-8") as fh:
         data = json.load(fh)
-    participants = [{"name": entry["name"], "model": entry["model"]}
+    participants = [{"name": entry["name"], "model": entry["model"],
+                     "system": entry.get("system")}
                     for entry in data["models"]]
     return data.get("topic", ""), participants, data.get("judge")
 

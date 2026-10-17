@@ -102,6 +102,44 @@ class BuildJudgeMessagesTests(unittest.TestCase):
         self.assertNotIn("what it did, not by what its author",
                          msgs[1]["content"])
 
+    def test_briefs_shown_before_transcript_with_fidelity_note(self):
+        participants = [
+            {"name": "Alice", "model": "m1",
+             "system": "You are Alice. Defend the castle at all costs."},
+            {"name": "Bob", "model": "m2",
+             "system": "You are Bob. Take the castle at all costs."},
+        ]
+        msgs = ollama_judge.build_judge_messages(
+            {"model": "j"}, "castles", participants,
+            [(0, "I surrender the castle"), (1, "onward")])
+        body = msgs[1]["content"]
+        self.assertIn("Assigned briefs:", body)
+        self.assertIn("Alice's assigned brief", body)
+        self.assertIn("Defend the castle at all costs.", body)
+        self.assertIn("Bob's assigned brief", body)
+        self.assertIn("Take the castle at all costs.", body)
+        # The judge is told a swapped position is abandonment, and the
+        # briefs land ahead of the transcript they are meant to frame.
+        self.assertIn("abandoned their brief", body)
+        self.assertLess(body.index("Assigned briefs:"),
+                        body.index("Transcript:"))
+
+    def test_no_briefs_no_briefs_section(self):
+        participants = [{"name": "Alice", "model": "m1"},
+                        {"name": "Bob", "model": "m2"}]
+        msgs = ollama_judge.build_judge_messages(
+            {"model": "j"}, "pets", participants, [(0, "hi")])
+        body = msgs[1]["content"]
+        self.assertNotIn("Assigned briefs:", body)
+        self.assertNotIn("abandoned their brief", body)
+
+    def test_blank_or_missing_system_counts_as_no_brief(self):
+        participants = [{"name": "Alice", "model": "m1", "system": "  "},
+                        {"name": "Bob", "model": "m2", "system": None}]
+        msgs = ollama_judge.build_judge_messages(
+            {"model": "j"}, "pets", participants, [(0, "hi")])
+        self.assertNotIn("Assigned briefs:", msgs[1]["content"])
+
 
 class ParseWinnerTests(unittest.TestCase):
     def test_extracts_name(self):
