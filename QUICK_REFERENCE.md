@@ -816,6 +816,25 @@ router service, and bridge package. A transport pass still needs visual
 confirmation. Exit codes: 0 all selected checks passed, 1 a check failed,
 2 invalid arguments. See the README for setup and effects on live hardware.
 
+## Auditing judge context — `judge_context_audit.py`
+
+```shell
+python judge_context_audit.py path/to/transcript.json [more.json ...]
+python judge_context_audit.py --results path/to/run_results.log
+python judge_context_audit.py --demo
+```
+
+Read-only: no duel runs, no network, nothing is written. For each saved
+transcript (the `--save-json` format) it rebuilds the judge messages with
+the duel's own `build_judge_messages` and asks `judge_context_window`
+which window a default judge would get — 8192, 16384, or SKIP — and flags
+transcripts whose judge input alone would have overflowed the old fixed
+8192 window (the old judge graded those truncated, silently). `--results`
+estimates the same verdicts from a `run_results.log` when no transcripts
+were saved, rebuilding sizes from the recorded token counts at 4.0 and at
+a code-heavy 3.2 chars/token; code duels are floors there, because run
+reports add judge input the log doesn't keep.
+
 ## Troubleshooting
 
 
