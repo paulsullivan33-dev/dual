@@ -2238,7 +2238,7 @@ class ShippedScenariosTagTests(unittest.TestCase):
     vocabulary, so --tag filtering and --list-tags stay useful."""
 
     KNOWN = {"debate", "code", "game", "interview", "creative", "roleplay",
-             "small"}
+             "small", "ethics"}
 
     def test_all_scenarios_tagged_with_known_tags(self):
         root = os.path.join(
