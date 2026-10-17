@@ -11,6 +11,8 @@ import os
 import sys
 from datetime import datetime
 
+from ollama_common import wrap_text
+
 
 def participant_stats(model_stats):
     """Ordered speaker records; position distinguishes even identical names."""
@@ -116,7 +118,7 @@ def format_run_summary(run_started, config_path, participants, turns,
         lines.append(f"Judge: {judge_note}")
     if verdict:
         lines.append("Verdict:")
-        lines.extend(verdict.splitlines())
+        lines.extend(wrap_text(verdict).splitlines())
     if crashed:
         lines.append("Result: CRASHED")
         lines.append(stop_note.strip())

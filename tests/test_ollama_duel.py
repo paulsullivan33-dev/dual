@@ -1920,6 +1920,20 @@ class RunCodeTests(unittest.TestCase):
             1, [(0, "hi")], {}, None)
         self.assertNotIn("Judge:", entry)
 
+    def test_verdict_wrapped_in_summary_and_winner_still_parses(self):
+        import summarize_results
+        long_line = ("Alice argued the stronger case throughout the duel "
+                     "because her reasoning stayed careful and complete.")
+        entry = ollama_duel.format_run_summary(
+            __import__("datetime").datetime.now(), "cfg.json",
+            [{"model": "m1", "name": "A"}, {"model": "m2", "name": "B"}],
+            1, [(0, "hi")], {}, None,
+            verdict=long_line + "\nWINNER: A")
+        verdict_lines = entry.split("Verdict:\n", 1)[1].splitlines()
+        self.assertTrue(all(len(line) <= 75 for line in verdict_lines
+                            if not line.startswith("Result:")))
+        self.assertEqual(summarize_results.parse_block(entry)["winner"], "A")
+
     def test_no_tally_when_code_running_is_off(self):
         with tempfile.TemporaryDirectory() as d:
             summary = os.path.join(d, "results.log")
@@ -2167,6 +2181,15 @@ class JudgeWiringTests(unittest.TestCase):
         self.assertEqual(len(calls), 3)
         self.assertEqual(calls[-1]["model"], "judge-model")
         self.assertIn("=== Verdict ===", out)
+        self.assertIn("WINNER: Alice", out)
+
+    def test_verdict_wrapped_like_duel_replies(self):
+        sentence = ("This verdict explains at great length and in careful "
+                    "detail exactly why the first speaker argued better.")
+        _calls, out = run_duel_capturing(
+            minimal_config(turns=2, judge="judge-model"),
+            reply=sentence + "\nWINNER: Alice")
+        self.assertNotIn(sentence, out)  # wrapped, not one long line
         self.assertIn("WINNER: Alice", out)
 
     def test_no_judge_by_default(self):

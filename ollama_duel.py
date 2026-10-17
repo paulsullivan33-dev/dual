@@ -1041,7 +1041,7 @@ def main():
                 print()
             else:
                 print("=== Verdict ===")
-                print(verdict)
+                print(wrap_text(verdict))
                 print()
         print(f"Done: {len(transcript)} replies.", file=sys.stderr)
         if log_fh is not None:
