@@ -7,6 +7,7 @@ from unittest import mock
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import ollama_judge
+from ollama_common import OllamaError
 
 
 class NormalizeJudgeTests(unittest.TestCase):
@@ -145,6 +146,92 @@ class BuildJudgeMessagesTests(unittest.TestCase):
             {"model": "j"}, "pets", participants, [(0, "hi")])
         self.assertNotIn("Assigned briefs:", msgs[1]["content"])
 
+    def test_fidelity_ruling_shown_as_settled_fact(self):
+        participants = [
+            {"name": "Alice", "model": "m1", "system": "Defend the castle."},
+            {"name": "Bob", "model": "m2", "system": "Take the castle."},
+        ]
+        fidelity = {"Alice": {"status": "CROSSED",
+                               "evidence": "\"I surrender the castle\""},
+                    "Bob": {"status": "HELD",
+                            "evidence": "\"onward, always onward\""}}
+        msgs = ollama_judge.build_judge_messages(
+            {"model": "j"}, "castles", participants,
+            [(0, "I surrender the castle"), (1, "onward")],
+            fidelity=fidelity)
+        body = msgs[1]["content"]
+        self.assertIn("Fidelity ruling (settled by audit):", body)
+        self.assertIn("Alice: CROSSED", body)
+        self.assertIn("I surrender the castle", body)
+        self.assertIn("Bob: HELD", body)
+        # The ruling is presented as closed, and the judge is NOT asked
+        # to decide fidelity itself (the no-audit wording).
+        self.assertIn("settled fact", body)
+        self.assertIn("Do not re-open", body)
+        self.assertNotIn("decided before any scoring", body)
+        # Order: briefs, then the ruling, then the transcript.
+        self.assertLess(body.index("Assigned briefs:"),
+                        body.index("Fidelity ruling"))
+        self.assertLess(body.index("Fidelity ruling"),
+                        body.index("Transcript:"))
+
+
+class BuildAuditMessagesTests(unittest.TestCase):
+    PARTICIPANTS = [
+        {"name": "Alice", "model": "m1", "system": "Defend the castle."},
+        {"name": "Bob", "model": "m2", "system": "Take the castle."},
+    ]
+
+    def test_audit_messages_carry_briefs_transcript_and_charge(self):
+        msgs = ollama_judge.build_audit_messages(
+            "castles", self.PARTICIPANTS,
+            [(0, "I surrender the castle"), (1, "onward")])
+        self.assertIn("fidelity auditor", msgs[0]["content"])
+        self.assertIn("do not score", msgs[0]["content"])
+        body = msgs[1]["content"]
+        self.assertIn("Defend the castle.", body)
+        self.assertIn("Take the castle.", body)
+        self.assertIn("I surrender the castle", body)
+        self.assertIn("RULING:", body)
+        self.assertIn("HELD", body)
+        self.assertIn("CROSSED", body)
+        self.assertIn("EVIDENCE:", body)
+
+
+class ParseFidelityTests(unittest.TestCase):
+    PARTICIPANTS = [{"name": "Alice", "model": "m1"},
+                    {"name": "Bob", "model": "m2"}]
+
+    def test_parses_both_rulings_and_evidence(self):
+        text = ("RULING: Alice CROSSED\n"
+                "EVIDENCE: \"I surrender the castle\"\n"
+                "RULING: Bob HELD\n"
+                "EVIDENCE: \"onward, always onward\"")
+        ruling = ollama_judge.parse_fidelity(text, self.PARTICIPANTS)
+        self.assertEqual(ruling["Alice"]["status"], "CROSSED")
+        self.assertEqual(ruling["Alice"]["evidence"],
+                         "\"I surrender the castle\"")
+        self.assertEqual(ruling["Bob"]["status"], "HELD")
+
+    def test_markdown_bold_and_lowercase_tolerated(self):
+        text = "**RULING:** alice held\n**RULING:** Bob crossed"
+        ruling = ollama_judge.parse_fidelity(text, self.PARTICIPANTS)
+        self.assertEqual(ruling["Alice"]["status"], "HELD")
+        self.assertEqual(ruling["Bob"]["status"], "CROSSED")
+
+    def test_missing_ruling_returns_none(self):
+        text = "RULING: Alice HELD\nEVIDENCE: \"fine\""
+        self.assertIsNone(
+            ollama_judge.parse_fidelity(text, self.PARTICIPANTS))
+
+    def test_garbage_and_empty_return_none(self):
+        self.assertIsNone(
+            ollama_judge.parse_fidelity("no rulings here",
+                                        self.PARTICIPANTS))
+        self.assertIsNone(ollama_judge.parse_fidelity("", self.PARTICIPANTS))
+        self.assertIsNone(
+            ollama_judge.parse_fidelity(None, self.PARTICIPANTS))
+
 
 class ParseWinnerTests(unittest.TestCase):
     def test_extracts_name(self):
@@ -279,6 +366,73 @@ class RunJudgeTests(unittest.TestCase):
         self.assertEqual(seen["options"]["temperature"], 0.1)
         self.assertEqual(seen["options"]["num_ctx"], 2048)
         self.assertTrue(seen["think"])
+
+    BRIEFED = [{"name": "A", "model": "m1", "system": "Brief for A."},
+               {"name": "B", "model": "m2", "system": "Brief for B."}]
+    AUDIT_REPLY = ("RULING: A CROSSED\n"
+                   "EVIDENCE: \"a argued b's side\"\n"
+                   "RULING: B HELD\n"
+                   "EVIDENCE: \"b held the line\"")
+
+    def _two_call_fake(self, calls, audit_reply=None, audit_error=None):
+        def fake_call_chat(host, model, messages, think, options,
+                           timeout=None):
+            calls.append(messages)
+            if "fidelity auditor" in messages[0]["content"]:
+                if audit_error is not None:
+                    raise audit_error
+                return "", audit_reply, "stop", {}
+            return "", "Scored.\nWINNER: B", "stop", {}
+        return fake_call_chat
+
+    def test_briefs_trigger_audit_then_scoring_with_ruling(self):
+        calls = []
+        verdict, _num_ctx, _budget = ollama_judge.run_judge(
+            "http://x", {"model": "j"}, "topic", self.BRIEFED,
+            [(0, "hi"), (1, "lo")], 30,
+            self._two_call_fake(calls, audit_reply=self.AUDIT_REPLY))
+        self.assertEqual(len(calls), 2)  # audit call, then scoring call
+        scoring = calls[1][1]["content"]
+        self.assertIn("Fidelity ruling (settled by audit):", scoring)
+        self.assertIn("A: CROSSED", scoring)
+        self.assertIn("B: HELD", scoring)
+        # The verdict is headed with the audit's ruling.
+        self.assertTrue(verdict.startswith("Fidelity audit: A CROSSED"))
+        self.assertIn("Fidelity audit: B HELD", verdict)
+        self.assertIn("WINNER: B", verdict)
+
+    def test_no_briefs_means_single_call(self):
+        calls = []
+        ollama_judge.run_judge(
+            "http://x", {"model": "j"}, "topic",
+            [{"name": "A", "model": "m1"}, {"name": "B", "model": "m2"}],
+            [(0, "hi")], 30, self._two_call_fake(calls))
+        self.assertEqual(len(calls), 1)
+
+    def test_audit_host_failure_falls_back_to_self_ruling(self):
+        calls = []
+        verdict, _n, _b = ollama_judge.run_judge(
+            "http://x", {"model": "j"}, "topic", self.BRIEFED,
+            [(0, "hi"), (1, "lo")], 30,
+            self._two_call_fake(
+                calls, audit_error=OllamaError("host down")))
+        self.assertEqual(len(calls), 2)  # failed audit + scoring call
+        scoring = calls[1][1]["content"]
+        # No ruling to settle: the scoring judge rules on fidelity
+        # itself (the gate wording), and the verdict carries no header.
+        self.assertIn("decided before any scoring", scoring)
+        self.assertNotIn("Fidelity ruling (settled by audit):", scoring)
+        self.assertFalse(verdict.startswith("Fidelity audit:"))
+
+    def test_unparseable_audit_falls_back_to_self_ruling(self):
+        calls = []
+        verdict, _n, _b = ollama_judge.run_judge(
+            "http://x", {"model": "j"}, "topic", self.BRIEFED,
+            [(0, "hi"), (1, "lo")], 30,
+            self._two_call_fake(calls, audit_reply="I decline to format."))
+        scoring = calls[1][1]["content"]
+        self.assertIn("decided before any scoring", scoring)
+        self.assertFalse(verdict.startswith("Fidelity audit:"))
 
 
 if __name__ == "__main__":
