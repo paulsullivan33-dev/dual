@@ -90,6 +90,34 @@ class ParseBlockTests(unittest.TestCase):
                                    "**WINNER:** Maintainer")
         self.assertEqual(sr.parse_block(block)["winner"], "Maintainer")
 
+    def test_judge_line_parsed(self):
+        block = FULL_BLOCK.replace(
+            "Verdict:",
+            "Judge: qwen3:8b @ http://localhost:11434, context 16384, "
+            "est. budget 15636\nVerdict:")
+        d = sr.parse_block(block)
+        self.assertEqual(d["judge"],
+                         "qwen3:8b @ http://localhost:11434, context 16384, "
+                         "est. budget 15636")
+        self.assertEqual(d["winner"], "Maintainer")
+
+    def test_judge_skipped_line_parsed(self):
+        block = PLAIN_BLOCK.replace(
+            "Result: OK",
+            "Judge: SKIPPED (j @ http://x): too big\nResult: OK")
+        self.assertTrue(sr.parse_block(block)["judge"].startswith("SKIPPED"))
+
+    def test_aggregates_count_unscored_judges(self):
+        skipped = sr.parse_block(PLAIN_BLOCK.replace(
+            "Result: OK", "Judge: SKIPPED (j @ http://x): big\nResult: OK"))
+        failed = sr.parse_block(PLAIN_BLOCK.replace(
+            "Result: OK", "Judge: FAILED (j @ http://x): down\nResult: OK"))
+        out = io.StringIO()
+        with mock.patch.object(sys, "stdout", out):
+            sr.print_aggregates([skipped, failed])
+        self.assertIn("Judge not scored: 1 skipped, 1 failed",
+                      out.getvalue())
+
     def test_non_duel_block_returns_none(self):
         self.assertIsNone(sr.parse_block("\nSome random text\n"))
 

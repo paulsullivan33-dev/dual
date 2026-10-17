@@ -76,7 +76,8 @@ def format_duel_stats(model_stats):
 
 def format_run_summary(run_started, config_path, participants, turns,
                        transcript, model_stats, stop_note, crashed=False,
-                       code_runs=None, log_path=None, verdict=None):
+                       code_runs=None, log_path=None, verdict=None,
+                       judge_note=None):
     """Build the one-block summary appended to run_results.log after a duel.
 
     Always carries the date/time, config, models, and how many of the
@@ -88,6 +89,10 @@ def format_run_summary(run_started, config_path, participants, turns,
     `code_runs` is the run_code tally line, when code running was on, and
     `log_path` the full path of this run's transcript log, when one was kept.
     `verdict` is the judge's verdict text, when a judge scored the duel.
+    `judge_note` is the one-line judge outcome (model/host/window on a
+    scored duel, SKIPPED or FAILED with the reason otherwise); it is
+    recorded whenever a judge was configured, so a missing verdict in
+    the log is never ambiguous.
     """
     bar = "-" * 72
     stamp = run_started.strftime("%Y-%m-%d %H:%M:%S")
@@ -107,6 +112,8 @@ def format_run_summary(run_started, config_path, participants, turns,
     speakers = participant_stats(model_stats)
     if speakers:
         lines.append("Participant stats: " + json.dumps(speakers, ensure_ascii=False))
+    if judge_note:
+        lines.append(f"Judge: {judge_note}")
     if verdict:
         lines.append("Verdict:")
         lines.extend(verdict.splitlines())

@@ -34,7 +34,7 @@ def parse_block(block):
     blocks that carry no duel (e.g. leading blank text)."""
     duel = {"scenario": "?", "stamp": "?", "models": [], "turns_done": 0,
             "turns_planned": 0, "seconds": 0, "code": None, "verdict": None,
-            "winner": None, "result": "?"}
+            "winner": None, "result": "?", "judge": None}
     lines = block.splitlines()
     if not any(line.startswith("Run: ") for line in lines):
         return None
@@ -67,6 +67,8 @@ def parse_block(block):
                                 "failed": int(m.group(2)),
                                 "timeout": int(m.group(3)),
                                 "no_code": int(m.group(4))}
+        elif line.startswith("Judge: "):
+            duel["judge"] = line[len("Judge: "):]
         elif line == "Verdict:":
             verdict_lines = []
             i += 1
@@ -172,6 +174,12 @@ def print_aggregates(duels):
             f"{name} {n}" for name, n in sorted(wins.items())))
     else:
         print("Judge wins: no judged duels in this log")
+    skipped = sum(1 for d in duels
+                  if (d["judge"] or "").startswith("SKIPPED"))
+    failed = sum(1 for d in duels
+                 if (d["judge"] or "").startswith("FAILED"))
+    if skipped or failed:
+        print(f"Judge not scored: {skipped} skipped, {failed} failed")
 
 
 def main(argv):

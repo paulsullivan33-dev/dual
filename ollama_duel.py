@@ -1000,6 +1000,7 @@ def main():
     stop_note = None  # why the duel ended early, when it did
     model_stats = {}  # per-model stats; stays empty if the loop never starts
     verdict = None  # the judge's verdict text, when a judge scores the duel
+    judge_note = None  # one-line judge outcome for the run summary
     run_started = datetime.now()
     try:
         model_stats, matrix, stop_note = run_duel(host, topic, turns, participants, timeout,
@@ -1023,13 +1024,19 @@ def main():
             try:
                 run_reports = (run_code.get("reports")
                                if run_code is not None else None)
-                verdict = run_judge(judge_host, judge, topic, participants,
-                                    transcript, timeout, call_chat,
-                                    run_reports=run_reports)
+                verdict, judge_ctx, judge_budget = run_judge(
+                    judge_host, judge, topic, participants,
+                    transcript, timeout, call_chat,
+                    run_reports=run_reports)
+                judge_note = (f"{judge['model']} @ {judge_host}, "
+                              f"context {judge_ctx}, "
+                              f"est. budget {judge_budget}")
             except JudgeContextExceeded as e:
+                judge_note = f"SKIPPED ({judge['model']} @ {judge_host}): {e}"
                 print(f"--- JUDGE SKIPPED: {e} ---")
                 print()
             except OllamaError as e:
+                judge_note = f"FAILED ({judge['model']} @ {judge_host}): {e}"
                 print(f"--- JUDGE FAILED: {e} ---")
                 print()
             else:
@@ -1082,7 +1089,8 @@ def main():
                                        turns, transcript, model_stats,
                                        crash_note or stop_note,
                                        crashed=crashed, code_runs=code_runs,
-                                       log_path=written_log, verdict=verdict)
+                                       log_path=written_log, verdict=verdict,
+                                       judge_note=judge_note)
             append_run_summary(results_log_path, entry)
         if ntfy_url:
             # Completion notice: OK, stopped early, or crashed. Best-effort

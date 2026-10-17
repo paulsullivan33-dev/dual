@@ -155,8 +155,11 @@ def parse_winner(verdict):
 
 def run_judge(host, judge, topic, participants, transcript, timeout,
               call_chat, run_reports=None):
-    """Ask the judge model to score the transcript. Returns the verdict
-    text. `host` is the judge's Ollama endpoint -- normally another
+    """Ask the judge model to score the transcript. Returns
+    (verdict text, num_ctx used, estimated budget) -- the sizing pair
+    lets the caller record which window judged the duel (or, on
+    JudgeContextExceeded, why none did) in the run summary.
+    `host` is the judge's Ollama endpoint -- normally another
     machine, bigger than the duel box. `call_chat` is passed in
     (ollama_duel's) so tests can fake it. `run_reports` maps transcript
     indexes to code-run reports; the judge sees them.
@@ -179,4 +182,4 @@ def run_judge(host, judge, topic, participants, transcript, timeout,
     _thinking, reply, _done_reason, _metrics = call_chat(
         host, judge["model"], messages, judge.get("think", False), options,
         timeout=timeout)
-    return reply.strip()
+    return reply.strip(), num_ctx, required

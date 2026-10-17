@@ -1904,6 +1904,22 @@ class RunCodeTests(unittest.TestCase):
             1, [(0, "hi")], {}, None)
         self.assertNotIn("Log:", entry)
 
+    def test_judge_note_recorded_before_verdict(self):
+        entry = ollama_duel.format_run_summary(
+            __import__("datetime").datetime.now(), "cfg.json",
+            [{"model": "m1", "name": "A"}, {"model": "m2", "name": "B"}],
+            1, [(0, "hi")], {}, None, verdict="WINNER: A",
+            judge_note="qwen3:8b @ http://x, context 16384, est. budget 15636")
+        self.assertIn("Judge: qwen3:8b @ http://x, context 16384, "
+                      "est. budget 15636\nVerdict:", entry)
+
+    def test_no_judge_line_without_a_note(self):
+        entry = ollama_duel.format_run_summary(
+            __import__("datetime").datetime.now(), "cfg.json",
+            [{"model": "m1", "name": "A"}, {"model": "m2", "name": "B"}],
+            1, [(0, "hi")], {}, None)
+        self.assertNotIn("Judge:", entry)
+
     def test_no_tally_when_code_running_is_off(self):
         with tempfile.TemporaryDirectory() as d:
             summary = os.path.join(d, "results.log")
@@ -2112,6 +2128,36 @@ class JudgeWiringTests(unittest.TestCase):
         self.assertIn("JUDGE SKIPPED", out)
         self.assertIn("automatic cap", out)
         self.assertNotIn("=== Verdict ===", out)
+
+    def _run_with_results_log(self, cfg):
+        with tempfile.TemporaryDirectory() as d:
+            summary = os.path.join(d, "results.log")
+            path = write_json(d, "cfg.json",
+                              dict(cfg, results_log=summary))
+            with mock.patch.object(
+                    sys, "argv", ["ollama_duel.py", path, "--no-ntfy"]), \
+                 mock.patch.object(
+                     ollama_duel, "call_chat",
+                     lambda *a, **k: ("", "hi", "stop", {
+                         "gen_tokens": 1, "gen_s": 1.0,
+                         "prompt_tokens": 1, "prompt_s": 1.0})), \
+                 mock.patch.object(sys, "stdout", io.StringIO()):
+                ollama_duel.main()
+            with open(summary, encoding="utf-8") as f:
+                return f.read()
+
+    def test_skipped_judge_is_noted_in_results_log(self):
+        entry = self._run_with_results_log(minimal_config(
+            turns=1, judge={"model": "judge-model", "prompt": "x" * 60000}))
+        self.assertIn("Judge: SKIPPED (judge-model @ ", entry)
+        self.assertNotIn("Verdict:", entry)
+
+    def test_scored_judge_is_noted_in_results_log(self):
+        entry = self._run_with_results_log(
+            minimal_config(turns=1, judge="judge-model"))
+        self.assertIn("Judge: judge-model @ http://localhost:11434, "
+                      "context 8192, est. budget ", entry)
+        self.assertIn("Verdict:", entry)
 
     def test_judge_scores_completed_duel(self):
         calls, out = run_duel_capturing(

@@ -187,11 +187,13 @@ class RunJudgeTests(unittest.TestCase):
                         options=options)
             return "", "Bob won.\nWINNER: Bob", "stop", {}
 
-        verdict = ollama_judge.run_judge(
+        verdict, num_ctx, budget = ollama_judge.run_judge(
             "http://x", {"model": "judge-model"}, "topic",
             [{"name": "A", "model": "m1"}, {"name": "B", "model": "m2"}],
             [(0, "hi")], 30, fake_call_chat)
         self.assertEqual(verdict, "Bob won.\nWINNER: Bob")
+        self.assertEqual(num_ctx, 8192)  # the auto-sized window, reported
+        self.assertGreater(budget, 500)  # input estimate + reply allowance
         self.assertEqual(seen["model"], "judge-model")
         self.assertEqual(seen["options"]["num_predict"], 500)  # the default
         self.assertEqual(seen["options"]["temperature"], 0.2)  # the default
