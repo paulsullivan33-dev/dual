@@ -1,5 +1,5 @@
 {
-  "description": "iGPU laptop (Intel Arc): 3B models on both sides (Qwen vs Llama) for fast turns, thinking off, an 8192-token context window, and only the last 4 replies sent each turn. Judged remotely by llama3.1:8b on the ProDesk, bigger than both contestants.",
+  "description": "iGPU laptop (Intel Arc): 3B models on both sides (Qwen vs Llama) for fast turns, thinking off, an 8192-token context window, and only the last 4 replies sent each turn. Judged locally by qwen3:8b on the laptop itself, bigger than both contestants and vetted on code duels for grading the run record.",
   "models": [
     "qwen2.5:3b",
     "llama3.2:3b"
@@ -10,9 +10,9 @@
     "history_turns": 4,
     "timeout": 1800,
     "judge": {
-      "model": "llama3.1:8b",
-      "host": "http://192.168.1.236:11434",
-      "temperature": 0.2
+      "model": "qwen3:8b",
+      "temperature": 0.2,
+      "think": false
     }
   },
   "scenarios": [
