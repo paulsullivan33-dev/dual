@@ -118,9 +118,14 @@ class BuildJudgeMessagesTests(unittest.TestCase):
         self.assertIn("Defend the castle at all costs.", body)
         self.assertIn("Bob's assigned brief", body)
         self.assertIn("Take the castle at all costs.", body)
-        # The judge is told a swapped position is abandonment, and the
-        # briefs land ahead of the transcript they are meant to frame.
+        # The judge is told fidelity is a gate: crossing to the other
+        # brief forfeits the win, and the briefs land ahead of the
+        # transcript they are meant to frame.
         self.assertIn("abandoned their brief", body)
+        self.assertIn("is a gate", body)
+        self.assertIn("cannot win", body)
+        self.assertIn("must be scored higher", body)
+        self.assertIn("When both crossed, the verdict is a draw", body)
         self.assertLess(body.index("Assigned briefs:"),
                         body.index("Transcript:"))
 

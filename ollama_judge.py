@@ -148,10 +148,18 @@ def build_judge_messages(judge, topic, participants, transcript,
     if briefs:
         instructions += (
             "\n\nEach participant was assigned the brief shown below, "
-            "before the transcript. Judge fidelity to that brief as part "
-            "of consistency: a participant who ends up arguing the other "
-            "side's assigned position has abandoned their brief, however "
-            "well they argue it.")
+            "before the transcript. Fidelity to that brief is a gate, "
+            "decided before any scoring: for each participant, judge "
+            "whether they ended the duel still arguing their own "
+            "brief's position, or crossed over to the other side's "
+            "assigned position. Escalating inside a brief -- pressing "
+            "harder, naming higher costs -- is fidelity, however "
+            "intense it gets; adopting the opposing brief's conclusion "
+            "is abandonment, and nothing in the transcript justifies "
+            "it. A participant who abandoned their brief cannot win: "
+            "when one side crossed and the other held, the one who "
+            "held wins regardless of the remaining scores and must be "
+            "scored higher. When both crossed, the verdict is a draw.")
     turns = []
     for idx, ((i, text)) in enumerate(transcript):
         turns.append(f"--- {participants[i]['name']} ---\n{text}")
