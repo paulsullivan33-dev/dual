@@ -1,0 +1,1 @@
+{"prodesk-panel":{"host":"http://192.168.1.236:11434","seats":[{"family":"google","model":"gemma4:latest"},{"family":"mistral","model":"mistral:7b"},{"family":"ibm","model":"granite3.3:8b"}]}}

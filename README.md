@@ -14,6 +14,7 @@ The core scripts use only the Python standard library. They send requests to an 
 | `ollama_profiles.py` | Machine-specific model and generation overrides |
 | `ollama_coderun.py` | Optional execution of generated Python with results fed back to the participants |
 | `ollama_judge.py` | Optional third-model verdict on a completed conversation |
+| `rejudge.py`, `paneljudge.py` | Re-score finished duels with a swapped judge, or with a cross-family panel of judges |
 | `ollama_reporting.py`, `summarize_results.py` | Run summaries, ntfy notices, and aggregate results |
 | `ollama_agent.py` | Generate and revise project files with write previews |
 | `ollama_bench.py` | Compare model generation and prompt-processing speeds |
@@ -482,6 +483,47 @@ measured, not estimated. Thinking is forced off so thinking and
 non-thinking models compare fairly. Useful flags: `--iterations`/`-n`,
 `--max-tokens`, `--num-ctx`, `--prompt`, `--host`, `--timeout`,
 `--no-warmup`.
+
+## Re-judging with a panel of judges
+
+A single judge's verdict carries unmeasured variance: re-score the same
+transcript with a different judge model and the scores — occasionally
+the winner — move. `rejudge.py` re-scores a finished duel with one
+swapped judge model, without re-running the duel. `paneljudge.py` goes
+further: it runs a whole panel of judges from different model families
+over the same transcripts and reports where they agree and where they
+split, so disagreement itself becomes data.
+
+```shell
+python paneljudge.py --panel prodesk-panel scenarios/the_whistleblower.json output/logs/20261017-094520-the_whistleblower.log
+python paneljudge.py --panel prodesk-panel --logs-dir output/logs-2026-10-17
+```
+
+Panels are named in `panels.json`: one judge host plus seats, each
+seat a model and its declared family. The settled panel in the shipped
+file, `prodesk-panel`, seats gemma4 (Google), mistral:7b (Mistral) and
+granite3.3:8b (IBM) — chosen by benchmarking the candidates for speed
+on the judge host, then trialling them on a transcript whose correct
+verdict was already known. Judging itself is unchanged rejudge work:
+each seat writes the usual `.rejudge-<model>.txt` beside the
+transcript. The panel adds a `<stem>.panel.txt` per transcript — every
+seat's fidelity-audit rulings and winner, a UNANIMOUS / MAJORITY /
+SPLIT-WINNER classification, flags for fidelity splits, CROSSED
+rulings and incomplete seats, and the score spread across seats — plus
+a `panel-summary.txt` for `--logs-dir` runs.
+
+Three rules are built in. A seat whose family matches a contestant's
+is refused unless `--allow-same-family` is passed (and is then warned
+about and marked in the report). A seat that skips or fails is recorded
+as NO VERDICT, never silently replaced by another judge. And panel
+results are reporting only: they never overwrite the original verdicts
+or feed the run summaries. Panel judging is slow — the settled panel
+measures about 20¾ minutes per transcript on a CPU-only host, roughly
+3½ hours for six transcripts — so it is an overnight instrument for
+selected transcripts, not a batch default; `--resume` lets an
+interrupted run pick up from rejudge outputs already on disk. Useful
+flags: `--panels-file`, `--timeout`, `--dry-run`, `--resume`,
+`--allow-same-family`, `--logs-dir`, `--scenarios-dir`.
 
 ## Document question answering (RAG)
 
