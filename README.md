@@ -514,7 +514,11 @@ a `panel-summary.txt` for `--logs-dir` runs.
 
 Three rules are built in. A seat whose family matches a contestant's
 is refused unless `--allow-same-family` is passed (and is then warned
-about and marked in the report). A seat that skips or fails is recorded
+about and marked in the report); the contestants checked are the
+scenario's models unioned with the models recorded in the transcript
+itself, since a profile run can leave placeholder models in the
+scenario while the transcript's turn headers record what actually
+ran. A seat that skips or fails is recorded
 as NO VERDICT, never silently replaced by another judge. And panel
 results are reporting only: they never overwrite the original verdicts
 or feed the run summaries. Panel judging is slow — the settled panel

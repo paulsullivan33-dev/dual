@@ -320,16 +320,15 @@ class PanelLoadingTests(unittest.TestCase):
 
     def test_seat_conflicts(self):
         seat = {"model": "gemma4:latest", "family": "google"}
-        self.assertEqual(paneljudge.seat_conflicts(seat, PARTICIPANTS),
-                         [])
-        gemma_contestant = [{"name": "X", "model": "gemma3:4b"}]
+        models = [p["model"] for p in PARTICIPANTS]
+        self.assertEqual(paneljudge.seat_conflicts(seat, models), [])
         # "google" catches a gemma via the seat model's own prefix.
         self.assertEqual(
-            paneljudge.seat_conflicts(seat, gemma_contestant),
+            paneljudge.seat_conflicts(seat, ["gemma3:4b"]),
             ["gemma3:4b"])
         label_seat = {"model": "other:8b", "family": "qwen3"}
         self.assertEqual(
-            paneljudge.seat_conflicts(label_seat, PARTICIPANTS),
+            paneljudge.seat_conflicts(label_seat, models),
             ["qwen3:8b"])
 
     def test_get_panel_errors(self):
@@ -570,6 +569,189 @@ class CliTests(unittest.TestCase):
         self.assertIn("Transcripts: 2", text)
         self.assertIn("duel_a: UNANIMOUS", text)
         self.assertIn("Totals: UNANIMOUS 2", text)
+
+
+QWEN_ONLY_SCENARIO = {
+    "topic": "Should the auditor blow the whistle?",
+    "models": [{"name": "Loyalty", "model": "qwen3:8b",
+                "system": "Fix it from inside."},
+               {"name": "Disclosure", "model": "qwen3:8b",
+                "system": "Force it into the light."}],
+    "judge": {"model": "qwen3:8b", "prompt": "Judge {a} vs {b}."},
+}
+
+LOG_WITH_LLAMA = """\
+[qwen3:8b as Loyalty] (turn 1)
+--- REPLY ---
+We fix this from inside.
+
+[llama3.1:8b as Disclosure] (turn 2)
+--- REPLY ---
+Patients deserve daylight.
+"""
+
+JSON_WITH_LLAMA = json.dumps([
+    {"speaker": "Loyalty", "model": "qwen3:8b",
+     "text": "We fix this from inside."},
+    {"speaker": "Disclosure", "model": "llama3.1:8b",
+     "text": "Patients deserve daylight."},
+])
+
+
+class TranscriptModelsTests(unittest.TestCase):
+    def _write(self, name, text):
+        fh = tempfile.NamedTemporaryFile(
+            "w", suffix=os.path.splitext(name)[1] or ".log",
+            delete=False)
+        fh.write(text)
+        fh.close()
+        self.addCleanup(os.unlink, fh.name)
+        return fh.name
+
+    def test_log_turn_headers(self):
+        path = self._write("duel.log", LOG_WITH_LLAMA)
+        self.assertEqual(paneljudge.transcript_models(path),
+                         {"qwen3:8b", "llama3.1:8b"})
+
+    def test_log_without_headers_yields_nothing(self):
+        path = self._write("duel.log", "duel transcript\n")
+        self.assertEqual(paneljudge.transcript_models(path), set())
+
+    def test_json_model_fields(self):
+        path = self._write("duel.json", JSON_WITH_LLAMA)
+        self.assertEqual(paneljudge.transcript_models(path),
+                         {"qwen3:8b", "llama3.1:8b"})
+
+    def test_json_entries_without_models_ignored(self):
+        path = self._write(
+            "duel.json",
+            '[{"speaker": "Loyalty", "text": "no model here"}, 42]')
+        self.assertEqual(paneljudge.transcript_models(path), set())
+
+    def test_malformed_json_yields_nothing(self):
+        path = self._write("duel.json", "{not json")
+        self.assertEqual(paneljudge.transcript_models(path), set())
+
+    def test_missing_file_yields_nothing(self):
+        self.assertEqual(
+            paneljudge.transcript_models("/nonexistent/duel.log"),
+            set())
+
+    def test_contestant_models_union(self):
+        path = self._write("duel.log", LOG_WITH_LLAMA)
+        participants = [{"name": "Loyalty", "model": "qwen3:8b"},
+                        {"name": "Disclosure", "model": "qwen3:8b"}]
+        self.assertEqual(
+            paneljudge.contestant_models(participants, path),
+            ["qwen3:8b", "llama3.1:8b"])
+
+    def test_contestant_models_unreadable_transcript(self):
+        self.assertEqual(
+            paneljudge.contestant_models(PARTICIPANTS,
+                                         "/nonexistent/duel.log"),
+            ["qwen3:8b", "llama3.1:8b"])
+
+
+class TranscriptFamilyCheckTests(unittest.TestCase):
+    """The family check must see the models that actually ran,
+    which live in the transcript: profile-run scenarios can declare
+    placeholder models for both sides (the whistleblower case:
+    qwen3:8b twice in the scenario, qwen3 vs llama3.1 in the run)."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        root = self.tmp.name
+        self.scenario = os.path.join(root, "qwen_scenario.json")
+        with open(self.scenario, "w", encoding="utf-8") as fh:
+            json.dump(QWEN_ONLY_SCENARIO, fh)
+        self.log = os.path.join(root, "duel.log")
+        with open(self.log, "w", encoding="utf-8") as fh:
+            fh.write(LOG_WITH_LLAMA)
+        self.saved_json = os.path.join(root, "duel.json")
+        with open(self.saved_json, "w", encoding="utf-8") as fh:
+            fh.write(JSON_WITH_LLAMA)
+        self.plain = os.path.join(root, "plain.log")
+        with open(self.plain, "w", encoding="utf-8") as fh:
+            fh.write("duel transcript\n")
+        self.panels_file = os.path.join(root, "panels.json")
+        panels = {"test-panel": {
+            "host": "http://example:11434",
+            "seats": [{"model": "llama3.1:8b", "family": "meta"},
+                      {"model": "gemma4:latest", "family": "google"}]}}
+        with open(self.panels_file, "w", encoding="utf-8") as fh:
+            json.dump(panels, fh)
+
+    def _main(self, extra, fake):
+        argv = ["--panel", "test-panel", "--panels-file",
+                self.panels_file] + extra
+        out = io.StringIO()
+        with mock.patch.object(rejudge, "rejudge_one", fake), \
+                contextlib.redirect_stdout(out):
+            status = paneljudge.main(argv)
+        return status, out.getvalue()
+
+    def test_log_transcript_collision_refused(self):
+        fake = FakeRejudge()
+        status, out = self._main([self.scenario, self.log], fake)
+        self.assertEqual(status, 1)
+        self.assertIn("REFUSED", out)
+        self.assertNotIn("llama3.1:8b", fake.models())
+        self.assertIn("gemma4:latest", fake.models())
+        report = paneljudge.panel_report_path(self.log)
+        with open(report, encoding="utf-8") as fh:
+            text = fh.read()
+        self.assertIn("REFUSED (same family as contestant "
+                      "llama3.1:8b)", text)
+
+    def test_json_transcript_collision_refused(self):
+        fake = FakeRejudge()
+        status, out = self._main([self.scenario, self.saved_json],
+                                  fake)
+        self.assertEqual(status, 1)
+        self.assertIn("REFUSED", out)
+        self.assertNotIn("llama3.1:8b", fake.models())
+        self.assertIn("gemma4:latest", fake.models())
+
+    def test_scenario_collision_refused_with_clean_transcript(self):
+        scenario = os.path.join(self.tmp.name, "scenario.json")
+        with open(scenario, "w", encoding="utf-8") as fh:
+            json.dump(SCENARIO, fh)
+        fake = FakeRejudge()
+        status, out = self._main([scenario, self.plain], fake)
+        self.assertEqual(status, 1)
+        self.assertIn("REFUSED", out)
+        self.assertNotIn("llama3.1:8b", fake.models())
+
+    def test_transcript_collision_allowed_with_flag(self):
+        fake = FakeRejudge()
+        status, out = self._main(
+            ["--allow-same-family", self.scenario, self.log], fake)
+        self.assertEqual(status, 0)
+        self.assertIn("WARNING", out)
+        self.assertIn("llama3.1:8b", fake.models())
+        report = paneljudge.panel_report_path(self.log)
+        with open(report, encoding="utf-8") as fh:
+            text = fh.read()
+        self.assertIn("SAME-FAMILY SEAT: llama3.1:8b vs contestant "
+                      "llama3.1:8b", text)
+
+    def test_transcript_collision_refused_in_dry_run(self):
+        fake = FakeRejudge()
+        status, out = self._main(
+            ["--dry-run", self.scenario, self.log], fake)
+        self.assertEqual(status, 1)
+        self.assertIn("would REFUSE (same family as contestant "
+                      "llama3.1:8b)", out)
+        self.assertNotIn("llama3.1:8b", fake.models())
+
+    def test_missing_transcript_does_not_crash_the_check(self):
+        missing = os.path.join(self.tmp.name, "gone.log")
+        fake = FakeRejudge()
+        status, _out = self._main([self.scenario, missing], fake)
+        self.assertEqual(status, 0)
+        self.assertIn("llama3.1:8b", fake.models())
+        self.assertIn("gemma4:latest", fake.models())
 
 
 if __name__ == "__main__":

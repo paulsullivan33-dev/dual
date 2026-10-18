@@ -28,12 +28,16 @@ A seat's family is declared, never inferred from its model name. A
 seat whose family matches a contestant's is REFUSED for that
 transcript unless --allow-same-family is given -- cross-family
 judging is the standing rule, and a loud logged refusal is not a
-silent fallback. Families are compared by model-string prefix (the
-part before ':' or '/') with generation digits stripped, so a
-gemma4 seat also matches a gemma3 contestant; a seat matches through
-its declared family or through its own model's prefix. A seat that
-skips or fails is recorded in the report as NO VERDICT with its
-status; nothing is dropped quietly.
+silent fallback. The contestant models checked are the scenario's,
+unioned with the models recorded in the transcript itself: a duel
+log's turn headers (or a saved JSON transcript's model fields) say
+what actually ran, which matters because profile-run scenarios can
+declare placeholder models. Families are compared by model-string
+prefix (the part before ':' or '/') with generation digits stripped,
+so a gemma4 seat also matches a gemma3 contestant; a seat matches
+through its declared family or through its own model's prefix. A
+seat that skips or fails is recorded in the report as NO VERDICT
+with its status; nothing is dropped quietly.
 
 Execution is seat-major (seat 1 judges every transcript, then seat 2,
 ...): the judge host loads one model at a time, so this pays that load
@@ -89,19 +93,69 @@ def _family_keys(text):
     return {text, text.rstrip("0123456789.")}
 
 
-def seat_conflicts(seat, participants):
-    """Contestant model strings whose family collides with the seat's.
+def seat_conflicts(seat, models):
+    """The contestant model strings (from `models`) whose family
+    collides with the seat's.
 
-    A contestant collides when its family keys (from the prefix of
-    its model string) intersect the seat's keys, which come from both
+    A model collides when its family keys (from the prefix of its
+    model string) intersect the seat's keys, which come from both
     the seat's declared family and its own model's prefix -- so
     family "google" still catches a gemma contestant, through the
     seat's gemma4 model.
     """
     seat_keys = _family_keys(seat["family"]) | \
         _family_keys(model_family(seat["model"]))
-    return [p["model"] for p in participants
-            if _family_keys(model_family(p["model"])) & seat_keys]
+    return [model for model in models
+            if _family_keys(model_family(model)) & seat_keys]
+
+
+def transcript_models(path):
+    """The models recorded in a transcript itself, as a set.
+
+    A --save-json (.json) transcript carries a "model" field per
+    entry; a duel log names the model in each turn header (rejudge's
+    TURN_HEADER_RE). Fail-soft: an unreadable transcript, or one
+    that yields no models, contributes an empty set -- the scan
+    never crashes a run; the judging step reports its own failures.
+    """
+    try:
+        with open(path, encoding="utf-8") as fh:
+            text = fh.read()
+    except OSError:
+        return set()
+    if path.endswith(".json"):
+        try:
+            entries = json.loads(text)
+        except ValueError:
+            return set()
+        if not isinstance(entries, list):
+            return set()
+        return {entry["model"] for entry in entries
+                if isinstance(entry, dict) and entry.get("model")}
+    models = set()
+    for line in text.splitlines():
+        match = rejudge.TURN_HEADER_RE.match(line)
+        if match:
+            models.add(match.group("model"))
+    return models
+
+
+def contestant_models(participants, transcript_path):
+    """The model strings the family check runs against: the
+    scenario's participant models, unioned with the models recorded
+    in the transcript (see transcript_models). Scenario models come
+    first, in participant order; transcript-only models follow,
+    sorted, so refusal messages are deterministic. Duplicates
+    collapse: both participants can declare the same model."""
+    models = []
+    known = set()
+    ordered = [p["model"] for p in participants] + \
+        sorted(transcript_models(transcript_path))
+    for model in ordered:
+        if model not in known:
+            known.add(model)
+            models.append(model)
+    return models
 
 
 class SeatResult:
@@ -511,7 +565,9 @@ def _dry_run(args, seats, jobs, host, participants_for):
     for seat in seats:
         print(f"Seat: {seat['model']} (family {seat['family']})")
         for scenario, transcript in jobs:
-            conflicts = seat_conflicts(seat, participants_for(scenario))
+            models = contestant_models(participants_for(scenario),
+                                       transcript)
+            conflicts = seat_conflicts(seat, models)
             if conflicts and not args.allow_same_family:
                 print(f"{transcript}: {seat['model']}: would REFUSE "
                       f"(same family as contestant {conflicts[0]})")
@@ -535,7 +591,8 @@ def _run_panel(args, seats, jobs, host, participants_for):
     for seat in seats:
         for index, (scenario, transcript) in enumerate(jobs):
             participants = participants_for(scenario)
-            conflicts = seat_conflicts(seat, participants)
+            models = contestant_models(participants, transcript)
+            conflicts = seat_conflicts(seat, models)
             if conflicts and not args.allow_same_family:
                 results[index][seat["model"]] = refused_result(
                     seat, conflicts[0], transcript)
