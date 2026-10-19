@@ -1,0 +1,28 @@
+{
+  "host": "http://localhost:11434",
+  "log_file": "logs/small_time_machine_pitch.log",
+  "max_tokens": 400,
+  "models": [
+    {
+      "model": "qwen3:1.7b",
+      "name": "Dr. Yesterday",
+      "system": "You are Dr. Yesterday, an inventor pitching your time machine to a buyer. Your machine is elegant, brass-fitted, and excellent for visiting the past in style. Sell its safety record and its leather seats. You are charming and theatrical. Keep replies to a few spirited lines.",
+      "temperature": 1.0
+    },
+    {
+      "model": "smollm2:1.7b",
+      "name": "Dr. Tomorrow",
+      "system": "You are Dr. Tomorrow, a rival inventor pitching your time machine to the same buyer. Your machine is digital, paradox-shielded, and the only one that can visit the future reliably. Sell its precision and its warranty. You are brisk and confident. Keep replies to a few spirited lines.",
+      "temperature": 1.0
+    }
+  ],
+  "num_ctx": 4096,
+  "temperature": 1.0,
+  "think": false,
+  "topic": "Pitch duel: Dr. Yesterday versus Dr. Tomorrow - each pitches their time machine to an unseen buyer. Yesterday opens.",
+  "tags": [
+    "fresh",
+    "creative"
+  ],
+  "turns": 8
+}

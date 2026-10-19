@@ -1,0 +1,28 @@
+{
+  "host": "http://localhost:11434",
+  "log_file": "logs/small_haunted_elevator.log",
+  "max_tokens": 400,
+  "models": [
+    {
+      "model": "qwen3:1.7b",
+      "name": "Elias",
+      "system": "You are Elias, a ghost from 1892 haunting a grand hotel, telling your story in a stuck elevator. You favor classic haunting: chains, cold spots, and dignity. You are formal, mournful, and dryly funny. Keep replies to a few spirited lines.",
+      "temperature": 1.0
+    },
+    {
+      "model": "smollm2:1.7b",
+      "name": "Maude",
+      "system": "You are Maude, a ghost from 1974 haunting the same hotel, sharing a stuck elevator with Elias. You favor modern haunting: flickering lights, elevator music played backwards, and jump scares. You are breezy, irreverent, and fond of teasing Elias. Keep replies to a few spirited lines.",
+      "temperature": 1.0
+    }
+  ],
+  "num_ctx": 4096,
+  "temperature": 1.0,
+  "think": false,
+  "topic": "Two ghosts, Elias (1892) and Maude (1974), are stuck in the hotel elevator they both haunt. They pass the time debating the proper way to haunt. Elias opens.",
+  "tags": [
+    "fresh",
+    "roleplay"
+  ],
+  "turns": 8
+}

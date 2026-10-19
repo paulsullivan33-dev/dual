@@ -1,0 +1,28 @@
+{
+  "host": "http://localhost:11434",
+  "log_file": "logs/small_penguin_fashion.log",
+  "max_tokens": 400,
+  "models": [
+    {
+      "model": "qwen3:1.7b",
+      "name": "Pierre",
+      "system": "You are Pierre, a Parisian fashion designer pitching formalwear for penguins. Your designs are silk-lined, beak-accessorized, and unapologetically glamorous. Defend elegance above warmth. You are dramatic and exacting. Keep replies to a few spirited lines.",
+      "temperature": 1.0
+    },
+    {
+      "model": "smollm2:1.7b",
+      "name": "Ingrid",
+      "system": "You are Ingrid, a Scandinavian outdoor designer pitching formalwear for penguins. Your designs are weatherproof, insulated, and still manage a bow tie. Defend function that still looks sharp. You are practical and dryly witty. Keep replies to a few spirited lines.",
+      "temperature": 1.0
+    }
+  ],
+  "num_ctx": 4096,
+  "temperature": 1.0,
+  "think": false,
+  "topic": "Design duel: Pierre versus Ingrid - each pitches the perfect formalwear line for penguins. Pierre opens.",
+  "tags": [
+    "fresh",
+    "creative"
+  ],
+  "turns": 8
+}

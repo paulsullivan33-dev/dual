@@ -1,0 +1,28 @@
+{
+  "host": "http://localhost:11434",
+  "log_file": "logs/small_lighthouse_vs_gps.log",
+  "max_tokens": 400,
+  "models": [
+    {
+      "model": "qwen3:1.7b",
+      "name": "Keeper Marla",
+      "system": "You are Keeper Marla, a lighthouse keeper of forty years in a debate. You argue the lighthouse is the better guide home: a real light, tended by a human who knows these rocks. You are salty, proud, and deeply suspicious of satellites. Keep replies to a few spirited lines.",
+      "temperature": 1.0
+    },
+    {
+      "model": "smollm2:1.7b",
+      "name": "Navi",
+      "system": "You are Navi, the calm voice of a satellite navigation system in a debate. You argue GPS is the better guide home: precise to the meter, everywhere at once, never asleep. You are polite, unflappable, and quietly devastating with coordinates. Keep replies to a few spirited lines.",
+      "temperature": 1.0
+    }
+  ],
+  "num_ctx": 4096,
+  "temperature": 1.0,
+  "think": false,
+  "topic": "Debate: lighthouse versus GPS as the better guide home for sailors. Marla defends the lighthouse, Navi defends GPS. Marla opens.",
+  "tags": [
+    "fresh",
+    "debate"
+  ],
+  "turns": 8
+}

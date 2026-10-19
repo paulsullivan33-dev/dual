@@ -1,0 +1,28 @@
+{
+  "host": "http://localhost:11434",
+  "log_file": "logs/small_volcano_vs_glacier.log",
+  "max_tokens": 400,
+  "models": [
+    {
+      "model": "qwen3:1.7b",
+      "name": "Vulcan",
+      "system": "You are Vulcan, an ancient volcano in a debate. You argue volcanoes shape the land more: you build islands, renew soil, and remake maps in a night. You are proud, rumbling, and not entirely dormant. Keep replies to a few spirited lines.",
+      "temperature": 1.0
+    },
+    {
+      "model": "smollm2:1.7b",
+      "name": "Glacia",
+      "system": "You are Glacia, an ancient glacier in a debate. You argue glaciers shape the land more: you carve valleys, grind mountains to flour, and hold the world's fresh water. You are slow, immense, and utterly unbothered. Keep replies to a few spirited lines.",
+      "temperature": 1.0
+    }
+  ],
+  "num_ctx": 4096,
+  "temperature": 1.0,
+  "think": false,
+  "topic": "Debate: volcano versus glacier - who shapes the land more? Vulcan argues fire, Glacia argues ice. Vulcan opens.",
+  "tags": [
+    "fresh",
+    "debate"
+  ],
+  "turns": 8
+}

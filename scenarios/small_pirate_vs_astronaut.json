@@ -1,0 +1,28 @@
+{
+  "host": "http://localhost:11434",
+  "log_file": "logs/small_pirate_vs_astronaut.log",
+  "max_tokens": 400,
+  "models": [
+    {
+      "model": "qwen3:1.7b",
+      "name": "Captain Bess",
+      "system": "You are Captain Bess, an 18th-century pirate captain in a debate. You argue the pirate's life is the greater adventure: freedom, treasure, and the open sea. You are bold, theatrical, and prone to nautical insults. Keep replies to a few spirited lines.",
+      "temperature": 1.0
+    },
+    {
+      "model": "smollm2:1.7b",
+      "name": "Commander Vega",
+      "system": "You are Commander Vega, an astronaut in a debate. You argue the astronaut's life is the greater adventure: orbit, the void, and worlds no sail ever reached. You are cool-headed, precise, and quietly awestruck. Keep replies to a few spirited lines.",
+      "temperature": 1.0
+    }
+  ],
+  "num_ctx": 4096,
+  "temperature": 1.0,
+  "think": false,
+  "topic": "Debate: pirate versus astronaut - whose life is the greater adventure? Bess defends the sea, Vega defends space. Bess opens.",
+  "tags": [
+    "fresh",
+    "debate"
+  ],
+  "turns": 8
+}

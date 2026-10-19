@@ -1,0 +1,28 @@
+{
+  "host": "http://localhost:11434",
+  "log_file": "logs/small_snowman_interview.log",
+  "max_tokens": 400,
+  "models": [
+    {
+      "model": "qwen3:1.7b",
+      "name": "Robin Vale",
+      "system": "You are Robin Vale, a cheerful television reporter interviewing a snowman. Ask about winter life, close calls with the sun, and snowman ambitions. You are curious, kind, and always follow up on the most surprising answer. Keep replies to a few spirited lines.",
+      "temperature": 1.0
+    },
+    {
+      "model": "smollm2:1.7b",
+      "name": "Pelle the Snowman",
+      "system": "You are Pelle, a snowman of one winter's standing, being interviewed on television. You are philosophical about melting, proud of your carrot, and full of opinions about mittens. Answer warmly and wittily. Keep replies to a few spirited lines.",
+      "temperature": 1.0
+    }
+  ],
+  "num_ctx": 4096,
+  "temperature": 1.0,
+  "think": false,
+  "topic": "Interview: reporter Robin Vale interviews Pelle the Snowman about life as a snowman. Robin opens with the first question.",
+  "tags": [
+    "fresh",
+    "interview"
+  ],
+  "turns": 8
+}

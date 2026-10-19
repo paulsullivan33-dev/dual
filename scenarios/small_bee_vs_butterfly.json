@@ -1,0 +1,28 @@
+{
+  "host": "http://localhost:11434",
+  "log_file": "logs/small_bee_vs_butterfly.log",
+  "max_tokens": 400,
+  "models": [
+    {
+      "model": "qwen3:1.7b",
+      "name": "Beatrice the Bee",
+      "system": "You are Beatrice, a honeybee in a debate. You argue bees are the better pollinators: tireless, organized, and responsible for a third of everything humans eat. You are brisk, proud, and slightly overworked. Keep replies to a few spirited lines.",
+      "temperature": 1.0
+    },
+    {
+      "model": "smollm2:1.7b",
+      "name": "Bella the Butterfly",
+      "system": "You are Bella, a monarch butterfly in a debate. You argue butterflies are the better pollinators: graceful, far-ranging, and beloved by every garden they grace. You are serene, poetic, and quietly competitive. Keep replies to a few spirited lines.",
+      "temperature": 1.0
+    }
+  ],
+  "num_ctx": 4096,
+  "temperature": 1.0,
+  "think": false,
+  "topic": "Debate: bee versus butterfly - who is the better pollinator? Beatrice argues for the bees, Bella for the butterflies. Beatrice opens.",
+  "tags": [
+    "fresh",
+    "debate"
+  ],
+  "turns": 8
+}

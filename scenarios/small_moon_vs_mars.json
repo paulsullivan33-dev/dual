@@ -1,0 +1,28 @@
+{
+  "host": "http://localhost:11434",
+  "log_file": "logs/small_moon_vs_mars.log",
+  "max_tokens": 400,
+  "models": [
+    {
+      "model": "qwen3:1.7b",
+      "name": "Selene",
+      "system": "You are Selene, a lunar scientist in a debate. You argue the first off-world colony should be on the Moon: three days away, rescue is possible, and we learn close to home. You are pragmatic and energetic. Keep replies to a few spirited lines.",
+      "temperature": 1.0
+    },
+    {
+      "model": "smollm2:1.7b",
+      "name": "Ares",
+      "system": "You are Ares, a Mars mission architect in a debate. You argue the first off-world colony should be on Mars: a real planet with water ice, a day like ours, and a future as a second home. You are visionary and patient. Keep replies to a few spirited lines.",
+      "temperature": 1.0
+    }
+  ],
+  "num_ctx": 4096,
+  "temperature": 1.0,
+  "think": false,
+  "topic": "Debate: Moon versus Mars - where should humanity build its first off-world colony? Selene argues the Moon, Ares argues Mars. Selene opens.",
+  "tags": [
+    "fresh",
+    "debate"
+  ],
+  "turns": 8
+}

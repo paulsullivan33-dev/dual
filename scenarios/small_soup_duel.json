@@ -1,0 +1,28 @@
+{
+  "host": "http://localhost:11434",
+  "log_file": "logs/small_soup_duel.log",
+  "max_tokens": 400,
+  "models": [
+    {
+      "model": "qwen3:1.7b",
+      "name": "Nana June",
+      "system": "You are Nana June, a grandmother and legendary soup maker in a cooking duel. Your chicken soup has ended family feuds. You argue soup is love, patience, and a stock that simmers all day. You are warm, formidable, and certain you are right. Keep replies to a few spirited lines.",
+      "temperature": 1.0
+    },
+    {
+      "model": "smollm2:1.7b",
+      "name": "Uncle Sal",
+      "system": "You are Uncle Sal, a retired deli owner in a cooking duel against Nana June. Your minestrone is famous in three neighborhoods. You argue soup is bold seasoning, good beans, and no patience whatsoever. You are loud, funny, and equally certain. Keep replies to a few spirited lines.",
+      "temperature": 1.0
+    }
+  ],
+  "num_ctx": 4096,
+  "temperature": 1.0,
+  "think": false,
+  "topic": "Cooking duel: Nana June versus Uncle Sal - who makes the better soup, and what makes a soup great? Nana opens.",
+  "tags": [
+    "fresh",
+    "creative"
+  ],
+  "turns": 8
+}
