@@ -257,6 +257,24 @@ class ParseWinnerTests(unittest.TestCase):
         self.assertEqual(
             ollama_judge.parse_winner("WINNER: **Bob**"), "Bob")
 
+    def test_markdown_bold_title_case_winner_parses(self):
+        self.assertEqual(
+            ollama_judge.parse_winner(
+                "Reasoning here.\n**Winner:** Beatrice the Bee"),
+            "Beatrice the Bee")
+
+    def test_title_case_winner_parses(self):
+        self.assertEqual(
+            ollama_judge.parse_winner("Alice argued better.\nWinner: Alice"),
+            "Alice")
+
+    def test_lower_case_winner_parses(self):
+        self.assertEqual(ollama_judge.parse_winner("winner: draw"), "draw")
+
+    def test_mid_line_winner_mention_returns_none(self):
+        self.assertIsNone(
+            ollama_judge.parse_winner("The winner: nobody, really."))
+
 
 class JudgeContextTests(unittest.TestCase):
     def test_automatic_window_boundaries(self):

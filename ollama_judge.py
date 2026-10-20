@@ -58,7 +58,7 @@ DEFAULT_JUDGE_PROMPT = (
     "where <name> is one of: {a}, {b}, or draw."
 )
 
-WINNER_RE = re.compile(r"^WINNER:\s*(.+?)\s*$", re.MULTILINE)
+WINNER_RE = re.compile(r"^WINNER:\s*(.+?)\s*$", re.MULTILINE | re.IGNORECASE)
 
 
 class JudgeContextExceeded(Exception):
