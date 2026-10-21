@@ -364,9 +364,12 @@ with a tally, `Code runs: 6 ok, 2 failed, 0 timed out, …`, which also goes
 into the `run_results.log` entry and the ntfy notice.
 
 Off unless the scenario sets `"run_code": true` or you pass `--run-code`;
-profiles can't turn it on. **Not a sandbox:** the code runs with your
-permissions and can touch files and the network, so only use it for code
-you're comfortable running.
+profiles can't turn it on. Code execution now requires Docker and a trusted
+local Python image (`python:3.12-slim`, or `DUAL_RUN_CODE_IMAGE`). No image is
+pulled automatically and there is no host execution fallback. The container
+has no host mounts or network, runs unprivileged, and has memory/CPU/PID,
+temporary-storage and retained-output limits. Use a disposable VM/host for
+adversarial programs; containers share a kernel. See the README for details.
 
 ### Have a third model judge the duel
 
@@ -583,7 +586,7 @@ entry (that speaker only, overriding the top level).
 | `max_temp` | top | 80 | Pause the duel at this CPU °C |
 | `resume_temp` | top | 70 | Resume once cooled to this CPU °C |
 | `temp_guard` | top | true | Thermal pause guard on/off |
-| `run_code` | top | false | Run each reply's last Python block and show the result to both speakers (not a sandbox) |
+| `run_code` | top | false | Run each reply's last Python block and show the result to both speakers (isolated Docker runner required) |
 | `run_code_args` | top | none | Arguments for each run, e.g. `["--test"]` |
 | `run_code_timeout` | top | 30 | Seconds before a run is stopped |
 

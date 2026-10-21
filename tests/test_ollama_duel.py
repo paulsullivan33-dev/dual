@@ -1706,8 +1706,19 @@ class HistoryTurnsTests(unittest.TestCase):
 
 
 class RunCodeTests(unittest.TestCase):
-    """Opt-in running of each reply's Python block, with the result logged
-    and shown to both speakers on later turns."""
+    """Opt-in code execution, with the result logged for both speakers."""
+
+    def setUp(self):
+        # Trusted fixed test fixtures only; production never uses this command.
+        from unittest.mock import patch
+        cr = __import__("ollama_coderun")
+        self.command = patch.object(cr, '_container_command',
+            side_effect=lambda name, args: [sys.executable, '-I', '-u', '-c', cr._BOOTSTRAP, *args])
+        self.cleanup = patch.object(__import__("ollama_coderun"), '_remove_container', return_value=True)
+        self.command.start()
+        self.cleanup.start()
+        self.addCleanup(self.command.stop)
+        self.addCleanup(self.cleanup.stop)
 
     PROGRAM_REPLY = "Here it is:\n```python\nimport sys\nprint('RAN-OK', sys.argv[1:])\n```"
 
