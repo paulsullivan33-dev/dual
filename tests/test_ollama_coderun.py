@@ -44,6 +44,17 @@ class ExtractProgramTests(unittest.TestCase):
 
 
 class RunProgramTests(unittest.TestCase):
+    def setUp(self):
+        # Trusted fixed test fixtures only; production never uses this command.
+        from unittest.mock import patch
+        self.command = patch.object(cr, '_container_command',
+            side_effect=lambda name, args: [sys.executable, '-I', '-u', '-c', cr._BOOTSTRAP, *args])
+        self.cleanup = patch.object(cr, '_remove_container', return_value=True)
+        self.command.start()
+        self.cleanup.start()
+        self.addCleanup(self.command.stop)
+        self.addCleanup(self.cleanup.stop)
+
     def test_success_captures_output(self):
         r = cr.run_program("print('hello from the duel')")
         self.assertEqual(r["status"], "ok")
@@ -76,11 +87,10 @@ class RunProgramTests(unittest.TestCase):
         r = cr.run_program("import sys\nprint(sys.argv[1:])", args=["--test", "x"])
         self.assertIn("['--test', 'x']", r["output"])
 
-    def test_runs_in_a_temporary_folder_that_is_removed(self):
-        r = cr.run_program("import os\nopen('made.txt', 'w').close()\nprint(os.getcwd())")
-        folder = r["output"].strip().splitlines()[-1]
-        self.assertNotEqual(os.path.normcase(folder), os.path.normcase(os.getcwd()))
-        self.assertFalse(os.path.exists(folder))
+    def test_source_is_supplied_on_stdin_and_input_stays_at_eof(self):
+        r = cr.run_program("import sys; print(sys.stdin.read() == '')")
+        self.assertIn('True', r['output'])
+        self.assertEqual(r['status'], 'ok')
 
     def test_long_output_keeps_the_end(self):
         r = cr.run_program("for i in range(5000):\n    print('line', i)")

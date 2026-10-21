@@ -1,26 +1,18 @@
-"""ollama_coderun.py -- optionally run the Python program in each duel reply.
+"""Optionally run reply code in a disposable, restricted Docker container.
 
-Off unless a scenario sets "run_code": true or the run passes --run-code.
-After each reply, the last Python code block is saved in a fresh temporary
-folder and run with this same Python interpreter, a timeout, and no
-keyboard input (input() sees end-of-file instead of hanging). The result is
-written to the log and shown to both speakers on their next turns, so a
-program that crashes gets noticed and fixed instead of drifting along.
-
-This is NOT a sandbox: the program runs with your user's permissions and
-can read and write files and use the network like any script you run.
-Two things narrow the blast radius: the program gets a minimal set of
-environment variables (so API keys and tokens in your shell are not
-handed to model-written code), with HOME pointed at its throwaway folder,
-and on timeout its whole process tree is killed, not just the top process.
+Requires Docker and a locally provisioned Python image (no implicit pulls).
+The container has no network or host mounts, a read-only root, a bounded
+temporary directory, and CPU/memory/PID limits. Output is streamed into a
+bounded tail. No fallback ever executes generated code on the host.
 """
 
 import os
 import re
+import math
 import shutil
-import signal
 import subprocess
-import sys
+import threading
+import uuid
 import tempfile
 import time
 
@@ -69,80 +61,93 @@ def _as_text(data):
     return data or ""
 
 
-# Variables a Python program needs to start and behave normally. Anything
-# else in the caller's environment (tokens, keys, credentials) is withheld.
-_PASSTHROUGH_ENV = (
-    "PATH", "LANG", "LC_ALL", "LC_CTYPE", "TZ", "TERM",
-    # Windows: the interpreter and sockets fail to start without these.
-    "SYSTEMROOT", "SYSTEMDRIVE", "COMSPEC", "PATHEXT", "WINDIR",
-    "NUMBER_OF_PROCESSORS", "PROCESSOR_ARCHITECTURE",
-)
+# A provisioned image is required. Operators may select a trusted digest.
+DEFAULT_RUN_IMAGE = "python:3.12-slim"
+MAX_OUTPUT_BYTES = 8192
+MAX_CODE_BYTES = 256 * 1024
+_BOOTSTRAP = ("import sys; source=sys.stdin.read(); "
+              "sys.argv[0]='program.py'; exec(compile(source,'program.py','exec'))")
 
 
-def _program_env(folder):
-    """Minimal environment for a generated program run in `folder`."""
-    env = {k: os.environ[k] for k in _PASSTHROUGH_ENV if k in os.environ}
-    env.update(PYTHONIOENCODING="utf-8", HOME=folder, USERPROFILE=folder,
-               TMPDIR=folder, TEMP=folder, TMP=folder)
-    return env
+def _container_command(name, args):
+    docker = shutil.which("docker")
+    if not docker:
+        raise OSError("Docker is required for code execution; use --no-run-code to skip it")
+    image = os.environ.get("DUAL_RUN_CODE_IMAGE", DEFAULT_RUN_IMAGE)
+    if not image or image.startswith("-"):
+        raise ValueError("DUAL_RUN_CODE_IMAGE must name a trusted, locally provisioned image")
+    return [docker, "run", "--name", name, "--rm", "--pull=never",
+            "--network", "none", "--read-only", "--cap-drop", "ALL",
+            "--security-opt", "no-new-privileges", "--pids-limit", "64",
+            "--memory", "128m", "--memory-swap", "128m", "--cpus", "1",
+            "--user", "65534:65534", "--tmpfs", "/tmp:rw,nosuid,nodev,noexec,size=16m",
+            "--workdir", "/tmp", "--log-driver", "none", "-i", image,
+            "python", "-I", "-u", "-c", _BOOTSTRAP, *args]
 
 
-def _kill_tree(proc):
-    """Kill the program and anything it started (best effort)."""
+def _remove_container(docker, name):
+    # Killing the client alone does not kill its container or descendants.
     try:
-        if os.name == "nt":
-            subprocess.run(["taskkill", "/F", "/T", "/PID", str(proc.pid)],
-                           stdout=subprocess.DEVNULL,
-                           stderr=subprocess.DEVNULL, check=False)
-        else:
-            os.killpg(proc.pid, signal.SIGKILL)
-    except OSError:  # includes ProcessLookupError: already gone
-        pass
-    try:
-        proc.kill()
-    except OSError:
-        pass
+        result = subprocess.run([docker, "rm", "--force", name],
+                                stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                                stderr=subprocess.DEVNULL, timeout=5, check=False)
+        return result.returncode == 0
+    except (OSError, subprocess.TimeoutExpired):
+        return False
 
 
 def run_program(code, args=(), timeout=DEFAULT_RUN_TIMEOUT):
-    """Run `code` as program.py in a new temporary folder and clean up.
-
-    Returns a dict: status ("ok", "failed" or "timeout"), exit_code (None
-    on timeout), seconds, and output (stdout and stderr combined, trimmed
-    to the last MAX_OUTPUT_CHARS characters).
-    """
-    folder = tempfile.mkdtemp(prefix="duel_run_")
+    """Run code only in a restricted container; return a bounded result."""
+    if not math.isfinite(timeout) or timeout <= 0:
+        raise ValueError("code timeout must be finite and positive")
+    if not isinstance(code, str) or len(code.encode("utf-8")) > MAX_CODE_BYTES:
+        raise ValueError("code must be text of at most 256 KiB")
+    started = time.monotonic()
+    name = "duel-run-" + uuid.uuid4().hex
+    status, exit_code, output = "failed", 127, ""
+    process, reader, command = None, None, None
+    tail = bytearray()
+    def drain():
+        while True:
+            chunk = process.stdout.read(4096)
+            if not chunk:
+                return
+            tail.extend(chunk)
+            if len(tail) > MAX_OUTPUT_BYTES:
+                del tail[:-MAX_OUTPUT_BYTES]
     try:
-        path = os.path.join(folder, "program.py")
-        with open(path, "w", encoding="utf-8") as f:
-            f.write(code)
-        start = time.monotonic()
-        # Its own process group/session, so a timeout can kill everything
-        # the program spawned, not just the program itself.
-        group = ({"creationflags": getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)}
-                 if os.name == "nt" else {"start_new_session": True})
-        with subprocess.Popen(
-                [sys.executable, path, *args], cwd=folder,
-                stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT, env=_program_env(folder),
-                **group) as proc:
+        command = _container_command(name, args)
+        # A pipe/file supplies the source bytes, never a bind mount or host path.
+        # The container consumes stdin to EOF before executing the program.
+        with tempfile.TemporaryFile() as source:
+            source.write(code.encode("utf-8"))
+            source.seek(0)
+            process = subprocess.Popen(command, stdin=source, stdout=subprocess.PIPE,
+                                       stderr=subprocess.STDOUT)
+            reader = threading.Thread(target=drain, daemon=True)
+            reader.start()
             try:
-                out, _ = proc.communicate(timeout=timeout)
-                status = "ok" if proc.returncode == 0 else "failed"
-                exit_code, output = proc.returncode, _as_text(out)
+                exit_code = process.wait(timeout=timeout)
+                status = "ok" if exit_code == 0 else "failed"
             except subprocess.TimeoutExpired:
-                _kill_tree(proc)
-                try:
-                    out, _ = proc.communicate(timeout=5)
-                except subprocess.TimeoutExpired:
-                    out = b""
-                status, exit_code, output = "timeout", None, _as_text(out)
-        seconds = time.monotonic() - start
+                status, exit_code = "timeout", None
+                process.kill()
+                process.wait(timeout=5)
+    except (OSError, subprocess.TimeoutExpired) as error:
+        output = "Isolated code runner unavailable: " + str(error)
     finally:
-        # Best-effort: on Windows a lingering child can hold a file open.
-        shutil.rmtree(folder, ignore_errors=True)
-    return {"status": status, "exit_code": exit_code, "seconds": seconds,
-            "output": _tail(output), "timeout": timeout}
+        if command is not None:
+            cleaned = _remove_container(command[0], name)
+            if status == "timeout" and not cleaned:
+                output += "\nContainer cleanup was not acknowledged; inspect " + name
+        if reader is not None:
+            reader.join(timeout=2)
+        if process is not None and process.stdout is not None and not (reader and reader.is_alive()):
+            process.stdout.close()
+    output = _tail(tail.decode("utf-8", errors="replace")) + output
+    return {"status": status, "exit_code": exit_code,
+            "seconds": time.monotonic() - started, "output": output,
+            "timeout": timeout}
 
 
 def describe_run(result, author):
