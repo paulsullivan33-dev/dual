@@ -1,4 +1,4 @@
-"""Production code must fail closed and never mount or execute on the host."""
+"""Docker selection is explicit, restricted, and never silently downgraded."""
 import os
 import unittest
 from unittest.mock import patch
@@ -25,10 +25,10 @@ class ContainerPolicyTests(unittest.TestCase):
 
     def test_missing_docker_does_not_attempt_host_execution(self):
         with patch.object(cr.shutil, 'which', return_value=None), patch.object(cr.subprocess, 'Popen') as popen:
-            result = cr.run_program('raise AssertionError("must not execute")')
+            result = cr.run_program('raise AssertionError("must not execute")', backend="docker")
         popen.assert_not_called()
         self.assertEqual(result['status'], 'failed')
-        self.assertIn('Docker is required', result['output'])
+        self.assertIn('Docker runner selected', result['output'])
 
     def test_cleanup_uses_named_container_not_host_pids(self):
         with patch.object(cr.subprocess, 'run') as run:

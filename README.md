@@ -205,6 +205,8 @@ The JSON must be an object with exactly two entries in `models`. Each entry requ
 | `run_code` | Top level | Run the last Python code block of every reply after it arrives and show the result to both speakers; defaults to false. See [Running each reply's code](#running-each-replys-code) |
 | `run_code_args` | Top level | Command-line arguments for those runs, as a list of strings, e.g. `["--test"]` |
 | `run_code_timeout` | Top level | Seconds each run may take before it's stopped; defaults to 30 |
+| `run_code_backend` | Top level | `native` (default) or explicitly `docker`; does not itself enable execution |
+| `run_code_memory_mb` | Top level | Memory budget in MiB, default 128, minimum 32; Linux native per-process address space or Docker container limit |
 | `tags` | Top level | Optional list of topic tags, e.g. `["game", "code"]`; batch runs can select scenarios with `--tag` |
 | `judge` | Top level | Optional third model that scores the finished duel: a model name like `"qwen3:8b"`, or a dict with `model` plus optional `prompt`, `temperature`, `max_tokens`, `think`, `num_ctx`. The verdict is printed into the log, appended to the run summary, and its `WINNER:` line goes into the ntfy notice. A judge failure is noted but never fails the duel; `--no-judge` skips it for one run |
 | `display` | Top level | Show live duel stats on the Arduino Uno Q's built-in 8x13 LED matrix; defaults to false. Needs the Router Bridge setup described below. The script runs headless with a warning anywhere the matrix is unreachable |
@@ -347,11 +349,47 @@ python ollama_duel.py scenarios/factorial.json --run-code
 python ollama_duel.py scenarios/tic_tac_toe_game.json --run-code
 ```
 
-After each reply, the last fenced Python block is supplied on stdin to a disposable Python Docker container. Execution requires Docker and a trusted local image (`python:3.12-slim` by default, or `DUAL_RUN_CODE_IMAGE` set to a locally provisioned image/digest). Images are never pulled automatically. No Docker/image means a failed-run report, with no host execution fallback. The time limit is `run_code_timeout` (default 30 seconds); `run_code_args` still supplies arguments and keyboard input sees EOF.
+By default, enabled code execution uses **native Python**, with no Docker
+lookup or daemon startup. This suits the trusted small programs in the Arduino
+Uno Q scenarios. The program runs in a disposable working directory, with no
+keyboard input, a wall timeout (`run_code_timeout`, default 30 seconds), and a
+bounded output tail. Native code still has your account's file/network access;
+the temporary directory is not a sandbox.
+
+On Linux, the child receives per-process address-space and CPU-time limits
+before executing generated code. The memory budget defaults to 128 MiB and CPU
+time is capped at the rounded-up wall timeout. These limits do not alter the
+duel/LLM parent, reserve RAM for inference, or cap the aggregate memory of a
+process tree. Ordinary POSIX descendants are killed when a run ends, including
+when the main program exits early. Deliberate process-group escapes are outside
+native mode's trust boundary. Windows retains timeout/output bounds and
+best-effort timeout tree cleanup, but has no native memory/CPU cap; select Docker
+when those guarantees are needed.
+
+For larger or less-trusted scenarios, explicitly select **Docker**:
+
+```shell
+python ollama_duel.py scenarios/factorial.json --run-code --code-runner native
+python ollama_duel.py scenarios/program_writing.json --run-code --code-runner docker --code-memory-mb 512
+```
+
+Scenarios may set `"run_code_backend": "native"` or `"docker"`, and
+`"run_code_memory_mb": 512`. The default backend is native; the default budget is
+128 MiB and the minimum is 32 MiB. CLI options override scenario values, but
+selecting a runner never enables code execution by itself. `--no-run-code`
+still disables execution regardless of scenario or runner. No change to the
+existing Arduino profile is required. Adjust memory only after allowing room
+for the operating system and the resident model.
+
+Docker mode requires Docker and a trusted locally provisioned Python image
+(`python:3.12-slim` by default, or `DUAL_RUN_CODE_IMAGE` set to an image/digest).
+It never pulls an image automatically and never falls back to native execution
+if Docker is missing or unavailable. `run_code_args` continues to supply
+program arguments in either mode.
 
 The exit code and output (the last 2000 characters) go into the log, and both speakers see the result after that reply on their next turns. The log ends with a tally such as `Code runs: 6 ok, 2 failed, 0 timed out, 0 replies without a Python code block`, and the same line goes into the duel's `run_results.log` entry and its ntfy notice, so an overnight batch shows which programming duels ended with working code without opening each log. A dry run shows whether running code is on but never runs anything.
 
-**Isolation:** containers receive no host mounts or forwarded environment variables, have no network, run as an unprivileged user with no capabilities, and use a read-only root plus a 16 MiB temporary workspace. Memory/swap, CPU, process count and retained output are bounded. Timeout cleanup removes the named container and its descendants. Provision a trusted image separately and prefer a digest. Containers share the host kernel: for adversarial workloads use a dedicated disposable VM/host as an additional boundary.
+**Docker isolation:** containers receive no host mounts or forwarded environment variables, have no network, run as an unprivileged user with no capabilities, and use a read-only root plus a 16 MiB temporary workspace. Memory/swap, CPU, process count and retained output are bounded. Timeout cleanup removes the named container and its descendants. Provision a trusted image separately and prefer a digest. Containers share the host kernel: for adversarial workloads use a dedicated disposable VM/host as an additional boundary.
 
 ### Machine profiles
 
@@ -547,7 +585,7 @@ See [RAG_DEMO.md](RAG_DEMO.md) for interactive questions and indexing options. T
 ## Practical limits
 
 - **Context capacity:** history is not summarized automatically. Participant window warnings use Ollama's counts and a rough character-based estimate, and require an explicit `num_ctx`. Before judging, Dual estimates the complete request (instructions, topic, transcript, and code-run reports) at roughly four characters per token plus message overhead, adds a 20% input safety margin, and reserves the judge's `max_tokens` (default 500) for its verdict. It chooses 8192 context tokens when that fits, otherwise 16384. Requests above the automatic cap are skipped with a `JUDGE SKIPPED` explanation, without failing the duel. An explicit judge `num_ctx` stays fixed and can override the automatic cap; requests estimated to exceed that fixed window are also skipped. Estimates are approximate, especially for code and non-English text, and cannot guarantee a fit. Larger windows use resources on the judge's host; only configure windows supported by its model and available memory.
-- **Code execution:** requires the isolated Docker runner described above. No host fallback or automatic image download is provided. Use `--no-run-code` when you only want to inspect generated programs; container isolation is not a guarantee against kernel vulnerabilities.
+- **Code execution:** native is the default for trusted scenario programs, with bounded output/time and Linux per-process resource limits. It retains user-account file/network access. Choose `--code-runner docker` for isolation; Docker failure never falls back to native. Use `--no-run-code` for conversation-only runs.
 - **Output paths:** relative generated paths normally go under `output/` in the current working directory. Absolute paths are honored, and `..` components can escape that folder; it is an organizational convention rather than a filesystem boundary.
 - **Remote services:** prompts go to the configured Ollama host. A separately configured judge receives the transcript, and an enabled ntfy endpoint receives completion summaries. Choose endpoints appropriate for the data in your scenarios and documents.
 

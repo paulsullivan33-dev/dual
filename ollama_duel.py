@@ -65,7 +65,7 @@ from ollama_common import (
 )
 from ollama_reporting import (append_run_summary, format_duel_stats, format_run_summary,
                               load_default_ntfy_url, notify_duel_done, ntfy_post)
-from ollama_coderun import (DEFAULT_RUN_TIMEOUT, count_runs, describe_run,
+from ollama_coderun import (DEFAULT_RUN_TIMEOUT, DEFAULT_MEMORY_MB, count_runs, describe_run,
                             extract_program, run_program)
 from ollama_judge import JudgeContextExceeded, normalize_judge, run_judge
 from ollama_profiles import apply_profile, load_profile, profile_scenarios
@@ -78,6 +78,7 @@ TOP_LEVEL_KEYS = {
     "history_turns", "log_file", "save_json", "timeout",
     "display", "dedup_guard", "results_log", "ntfy_url", "models",
     "run_code", "run_code_args", "run_code_timeout", "tags", "judge",
+    "run_code_backend", "run_code_memory_mb",
     "max_temp", "resume_temp", "temp_guard",
 }
 MODEL_KEYS = {"model", "name", "system", "think", "max_tokens", "temperature",
@@ -201,6 +202,10 @@ def load_config(path, profile=None):
     _validate_field(cfg, "display", "bool", "top level")
     _validate_field(cfg, "run_code", "bool", "top level")
     _validate_field(cfg, "run_code_timeout", "number", "top level", minimum=1)
+    _validate_field(cfg, "run_code_backend", "str", "top level")
+    if cfg.get("run_code_backend", "native") not in ("native", "docker"):
+        sys.exit('"run_code_backend" must be "native" or "docker".')
+    _validate_field(cfg, "run_code_memory_mb", "int", "top level", minimum=32)
     run_args = cfg.get("run_code_args")
     if run_args is not None and not (
             isinstance(run_args, list) and all(isinstance(a, str) for a in run_args)):
@@ -633,7 +638,9 @@ def _run_reply_code(reply, author, run_code, run_reports, index):
         print("--- CODE RUN: no Python code block in this reply ---")
         print()
         return "no_code"
-    result = run_program(program, run_code["args"], run_code["timeout"])
+    result = run_program(program, run_code["args"], run_code["timeout"],
+                         backend=run_code.get("backend", "native"),
+                         memory_mb=run_code.get("memory_mb", DEFAULT_MEMORY_MB))
     report = describe_run(result, author)
     run_reports[index] = report
     print("--- CODE RUN ---")
@@ -785,9 +792,13 @@ def main():
     ap.add_argument("--run-code", dest="run_code", action="store_true", default=None,
                     help="run the last Python code block of each reply (timeout, "
                          "no keyboard input) and show the result to both speakers. "
-                         "Not a sandbox: the code runs with your permissions")
+                         "Native is the default; select --code-runner docker for isolation")
     ap.add_argument("--no-run-code", dest="run_code", action="store_false",
                     help="never run reply code, even if the scenario turns it on")
+    ap.add_argument("--code-runner", choices=("native", "docker"), default=None,
+                    help="runner for enabled code execution: native (default, trusted code) or Docker isolation")
+    ap.add_argument("--code-memory-mb", type=int, default=None,
+                    help="code memory limit in MiB (minimum 32; default 128); Linux native or Docker")
     ap.add_argument("--tag", dest="tags", action="append", default=None,
                     metavar="TAG",
                     help="in a batch run (directory or glob), only run "
@@ -876,9 +887,14 @@ def main():
     # Running model-written code is strictly opt-in: the scenario's run_code
     # or --run-code; --no-run-code always wins. Profiles can't turn it on.
     run_code = None
+    code_memory = first_not_none(args.code_memory_mb, cfg.get("run_code_memory_mb"), DEFAULT_MEMORY_MB)
+    if code_memory < 32:
+        ap.error("--code-memory-mb must be at least 32")
     if first_not_none(args.run_code, cfg.get("run_code"), False):
         run_code = {"args": cfg.get("run_code_args") or [],
-                    "timeout": cfg.get("run_code_timeout") or DEFAULT_RUN_TIMEOUT}
+                    "timeout": cfg.get("run_code_timeout") or DEFAULT_RUN_TIMEOUT,
+                    "backend": first_not_none(args.code_runner, cfg.get("run_code_backend"), "native"),
+                    "memory_mb": code_memory}
     # Run summary file: appended after every duel with the date/time and
     # either the stats table (success) or the error (early stop). Defaults
     # to output/run_results.log; --no-results-log (or a false-y CLI value)
@@ -981,8 +997,12 @@ def main():
     if run_code is not None:
         extra = f", arguments {' '.join(run_code['args'])}" if run_code["args"] else ""
         print(f"Code running: ON -- each reply's last Python block runs with a "
-              f"{run_code['timeout']:g}s timeout{extra}. This runs model-written "
-              f"code on this machine with your permissions.")
+              f"{run_code['timeout']:g}s timeout{extra}. Runner: {run_code['backend']}; "
+              f"memory budget {run_code['memory_mb']} MiB.")
+        if run_code['backend'] == 'native':
+            print("Native code has your file/network permissions; Linux per-process limits are not a sandbox.")
+            if not sys.platform.startswith('linux'):
+                print("Native memory/CPU limits are unavailable here; timeout and output limits still apply.")
         print()
     if args.dry_run:
         # Show exactly what the opening turn would send, then stop before

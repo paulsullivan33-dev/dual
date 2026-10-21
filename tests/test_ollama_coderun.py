@@ -41,17 +41,6 @@ class ExtractProgramTests(unittest.TestCase):
 
 
 class RunProgramTests(unittest.TestCase):
-    def setUp(self):
-        # Trusted fixed test fixtures only; production never uses this command.
-        from unittest.mock import patch
-        self.command = patch.object(cr, '_container_command',
-            side_effect=lambda name, args: [sys.executable, '-I', '-u', '-c', cr._BOOTSTRAP, *args])
-        self.cleanup = patch.object(cr, '_remove_container', return_value=True)
-        self.command.start()
-        self.cleanup.start()
-        self.addCleanup(self.command.stop)
-        self.addCleanup(self.cleanup.stop)
-
     def test_success_captures_output(self):
         r = cr.run_program("print('hello from the duel')")
         self.assertEqual(r["status"], "ok")

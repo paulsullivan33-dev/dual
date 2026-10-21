@@ -13,7 +13,7 @@ import ollama_coderun as cr
 @unittest.skipUnless(os.environ.get('DUAL_TEST_DOCKER') == '1', 'Dedicated Docker test job only')
 class DockerIntegrationTests(unittest.TestCase):
     def test_success_and_arguments(self):
-        result = cr.run_program("import sys; print(sys.argv[1:])", args=['--test'])
+        result = cr.run_program("import sys; print(sys.argv[1:])", args=['--test'], backend='docker')
         self.assertEqual(result['status'], 'ok', result['output'])
         self.assertIn("['--test']", result['output'])
 
@@ -28,12 +28,12 @@ class DockerIntegrationTests(unittest.TestCase):
                     "assert set(os.listdir('/sys/class/net')) == {'lo'}; "
                     "print('isolated')")
             with patch.dict(os.environ, {'DUAL_TEST_SECRET': 'test-fixture-secret'}):
-                result = cr.run_program(code)
+                result = cr.run_program(code, backend="docker")
         self.assertEqual(result['status'], 'ok', result['output'])
         self.assertIn('isolated', result['output'])
 
     def test_output_flood_keeps_a_bounded_tail(self):
-        result = cr.run_program("print('x' * 2000000); print('final-marker')")
+        result = cr.run_program("print('x' * 2000000); print('final-marker')", backend="docker")
         self.assertEqual(result['status'], 'ok', result['output'])
         self.assertLessEqual(len(result['output']), cr.MAX_OUTPUT_CHARS + 50)
         self.assertIn('final-marker', result['output'])
@@ -43,7 +43,7 @@ class DockerIntegrationTests(unittest.TestCase):
             result = cr.run_program(
                 "import subprocess,sys,time; "
                 "subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)']); "
-                "time.sleep(60)", timeout=2)
+                "time.sleep(60)", timeout=2, backend="docker")
         self.assertEqual(result['status'], 'timeout', result['output'])
         name = cleanup.call_args.args[1]
         inspected = subprocess.run([shutil.which('docker'), 'container', 'inspect', name],
