@@ -1,14 +1,15 @@
-"""Optionally run reply code in a disposable, restricted Docker container.
+"""Run trusted reply code natively by default, or opt into Docker isolation.
 
-Requires Docker and a locally provisioned Python image (no implicit pulls).
-The container has no network or host mounts, a read-only root, a bounded
-temporary directory, and CPU/memory/PID limits. Output is streamed into a
-bounded tail. No fallback ever executes generated code on the host.
+Both runners bound elapsed time and captured output. Native Linux runs also
+bound per-process address space and CPU time; they still have user-account
+file/network access. Docker is optional and never falls back to native.
 """
 
 import os
 import re
 import math
+import signal
+import sys
 import shutil
 import subprocess
 import threading
@@ -63,23 +64,30 @@ def _as_text(data):
 
 # A provisioned image is required. Operators may select a trusted digest.
 DEFAULT_RUN_IMAGE = "python:3.12-slim"
+DEFAULT_MEMORY_MB = 128
 MAX_OUTPUT_BYTES = 8192
 MAX_CODE_BYTES = 256 * 1024
 _BOOTSTRAP = ("import sys; source=sys.stdin.read(); "
               "sys.argv[0]='program.py'; exec(compile(source,'program.py','exec'))")
+_NATIVE_BOOTSTRAP = (
+    "import runpy; sys.stdout.reconfigure(encoding='utf-8', errors='replace'); "
+    "sys.stderr.reconfigure(encoding='utf-8', errors='replace'); "
+    "sys.argv[0]='program.py'; sys.path.insert(0, '.'); "
+    "runpy.run_path('program.py', run_name='__main__')"
+)
 
 
-def _container_command(name, args):
+def _container_command(name, args, memory_mb=DEFAULT_MEMORY_MB):
     docker = shutil.which("docker")
     if not docker:
-        raise OSError("Docker is required for code execution; use --no-run-code to skip it")
+        raise OSError("Docker runner selected but Docker is unavailable; select native or use --no-run-code")
     image = os.environ.get("DUAL_RUN_CODE_IMAGE", DEFAULT_RUN_IMAGE)
     if not image or image.startswith("-"):
         raise ValueError("DUAL_RUN_CODE_IMAGE must name a trusted, locally provisioned image")
     return [docker, "run", "--name", name, "--rm", "--pull=never",
             "--network", "none", "--read-only", "--cap-drop", "ALL",
             "--security-opt", "no-new-privileges", "--pids-limit", "64",
-            "--memory", "128m", "--memory-swap", "128m", "--cpus", "1",
+            "--memory", f"{memory_mb}m", "--memory-swap", f"{memory_mb}m", "--cpus", "1",
             "--user", "65534:65534", "--tmpfs", "/tmp:rw,nosuid,nodev,noexec,size=16m",
             "--workdir", "/tmp", "--log-driver", "none", "-i", image,
             "python", "-I", "-u", "-c", _BOOTSTRAP, *args]
@@ -96,10 +104,51 @@ def _remove_container(docker, name):
         return False
 
 
-def run_program(code, args=(), timeout=DEFAULT_RUN_TIMEOUT):
-    """Run code only in a restricted container; return a bounded result."""
-    if not math.isfinite(timeout) or timeout <= 0:
+def _native_command(args, timeout, memory_mb):
+    # Apply limits in the child, never in the LLM/duel parent and never via
+    # preexec_fn (unsafe with the runner's output-reader threads).
+    limits = (
+        "import sys\n"
+        "if sys.platform.startswith('linux'):\n"
+        " import resource\n"
+        f" for kind, requested in ((resource.RLIMIT_AS, {memory_mb * 1024 * 1024}), "
+        f"(resource.RLIMIT_CPU, {max(1, math.ceil(timeout))})):\n"
+        "  _, hard = resource.getrlimit(kind)\n"
+        "  bound = requested if hard == resource.RLIM_INFINITY else min(requested, hard)\n"
+        "  resource.setrlimit(kind, (bound, bound))\n"
+    )
+    return [sys.executable, "-I", "-u", "-c", limits + _NATIVE_BOOTSTRAP, *args]
+
+
+def _stop_native(process):
+    """Reap ordinary descendants on POSIX; best-effort tree cleanup on Windows."""
+    if os.name == "posix":
+        try:
+            # POSIX-only members are absent from Windows lint environments.
+            os.killpg(process.pid, signal.SIGKILL)  # pylint: disable=no-member
+        except ProcessLookupError:
+            pass
+    elif process.poll() is None:
+        try:
+            subprocess.run(["taskkill", "/PID", str(process.pid), "/T", "/F"],
+                           stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                           stderr=subprocess.DEVNULL, timeout=5, check=False)
+        except (OSError, subprocess.TimeoutExpired):
+            pass
+    if process.poll() is None:
+        process.kill()
+    process.wait(timeout=5)
+
+
+def run_program(code, args=(), timeout=DEFAULT_RUN_TIMEOUT,
+                backend="native", memory_mb=DEFAULT_MEMORY_MB):
+    """Native is for trusted scenarios; Docker adds explicit isolation."""
+    if isinstance(timeout, bool) or not isinstance(timeout, (int, float)) or not math.isfinite(timeout) or timeout <= 0:
         raise ValueError("code timeout must be finite and positive")
+    if backend not in ("native", "docker"):
+        raise ValueError("code runner must be native or docker")
+    if isinstance(memory_mb, bool) or not isinstance(memory_mb, int) or memory_mb < 32:
+        raise ValueError("code memory limit must be an integer of at least 32 MiB")
     if not isinstance(code, str) or len(code.encode("utf-8")) > MAX_CODE_BYTES:
         raise ValueError("code must be text of at most 256 KiB")
     started = time.monotonic()
@@ -116,34 +165,49 @@ def run_program(code, args=(), timeout=DEFAULT_RUN_TIMEOUT):
             if len(tail) > MAX_OUTPUT_BYTES:
                 del tail[:-MAX_OUTPUT_BYTES]
     try:
-        command = _container_command(name, args)
-        # A pipe/file supplies the source bytes, never a bind mount or host path.
-        # The container consumes stdin to EOF before executing the program.
-        with tempfile.TemporaryFile() as source:
-            source.write(code.encode("utf-8"))
-            source.seek(0)
-            process = subprocess.Popen(command, stdin=source, stdout=subprocess.PIPE,
-                                       stderr=subprocess.STDOUT)
+        command = (_container_command(name, args, memory_mb) if backend == "docker"
+                   else _native_command(args, timeout, memory_mb))
+        # Native code gets a disposable working directory, not filesystem
+        # isolation. Docker receives source over stdin and no host mounts.
+        with tempfile.TemporaryDirectory(prefix="duel_run_") as folder, tempfile.TemporaryFile() as source:
+            if backend == "native":
+                with open(os.path.join(folder, "program.py"), "w", encoding="utf-8") as program:
+                    program.write(code)
+                standard_input = subprocess.DEVNULL
+            else:
+                source.write(code.encode("utf-8"))
+                source.seek(0)
+                standard_input = source
+            options = {"start_new_session": True} if os.name == "posix" else {}
+            process = subprocess.Popen(command, stdin=standard_input, stdout=subprocess.PIPE,
+                                       stderr=subprocess.STDOUT, cwd=folder, **options)
             reader = threading.Thread(target=drain, daemon=True)
             reader.start()
             try:
-                exit_code = process.wait(timeout=timeout)
-                status = "ok" if exit_code == 0 else "failed"
-            except subprocess.TimeoutExpired:
-                status, exit_code = "timeout", None
-                process.kill()
-                process.wait(timeout=5)
+                try:
+                    exit_code = process.wait(timeout=timeout)
+                    status = "ok" if exit_code == 0 else "failed"
+                except subprocess.TimeoutExpired:
+                    status, exit_code = "timeout", None
+            finally:
+                # Also clean up on KeyboardInterrupt and when the parent exits
+                # while an ordinary child is still holding its output pipe.
+                if backend == "native":
+                    _stop_native(process)
+                else:
+                    cleaned = _remove_container(command[0], name)
+                    if status == "timeout" and not cleaned:
+                        output += "\nContainer cleanup was not acknowledged; inspect " + name
+                    if process.poll() is None:
+                        process.kill()
+                    process.wait(timeout=5)
+                if reader is not None:
+                    reader.join(timeout=2)
+                if process.stdout is not None and not reader.is_alive():
+                    process.stdout.close()
     except (OSError, subprocess.TimeoutExpired) as error:
-        output = "Isolated code runner unavailable: " + str(error)
-    finally:
-        if command is not None:
-            cleaned = _remove_container(command[0], name)
-            if status == "timeout" and not cleaned:
-                output += "\nContainer cleanup was not acknowledged; inspect " + name
-        if reader is not None:
-            reader.join(timeout=2)
-        if process is not None and process.stdout is not None and not (reader and reader.is_alive()):
-            process.stdout.close()
+        status, exit_code = "failed", 127
+        output += f"{backend} code runner unavailable: {error}"
     output = _tail(tail.decode("utf-8", errors="replace")) + output
     return {"status": status, "exit_code": exit_code,
             "seconds": time.monotonic() - started, "output": output,

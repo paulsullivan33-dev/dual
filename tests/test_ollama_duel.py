@@ -1775,18 +1775,6 @@ class HistoryTurnsTests(unittest.TestCase):
 class RunCodeTests(unittest.TestCase):
     """Opt-in code execution, with the result logged for both speakers."""
 
-    def setUp(self):
-        # Trusted fixed test fixtures only; production never uses this command.
-        from unittest.mock import patch
-        cr = __import__("ollama_coderun")
-        self.command = patch.object(cr, '_container_command',
-            side_effect=lambda name, args: [sys.executable, '-I', '-u', '-c', cr._BOOTSTRAP, *args])
-        self.cleanup = patch.object(__import__("ollama_coderun"), '_remove_container', return_value=True)
-        self.command.start()
-        self.cleanup.start()
-        self.addCleanup(self.command.stop)
-        self.addCleanup(self.cleanup.stop)
-
     PROGRAM_REPLY = "Here it is:\n```python\nimport sys\nprint('RAN-OK', sys.argv[1:])\n```"
 
     def _duel(self, cfg, extra_args=(), reply=PROGRAM_REPLY):
@@ -2500,6 +2488,38 @@ class CpuTempTest(unittest.TestCase):
             with mock.patch("sys.stdout", new=io.StringIO()) as out:
                 self.assertEqual(cpu_temp.main(), 0)
             self.assertIn("testbox: CPU temp 54.2C", out.getvalue())
+
+
+
+
+class RunnerSelectionTests(unittest.TestCase):
+    PROGRAM_REPLY = RunCodeTests.PROGRAM_REPLY
+    _duel = RunCodeTests._duel
+
+    def test_scenario_selects_docker_and_cli_can_select_native(self):
+        result = {'status': 'ok', 'exit_code': 0, 'seconds': 0.01, 'output': 'fixture', 'timeout': 30}
+        cfg = minimal_config(turns=1, run_code=True, run_code_backend='docker', run_code_memory_mb=512)
+        with mock.patch.object(ollama_duel, 'run_program', return_value=result) as run:
+            _, out = self._duel(cfg)
+        self.assertEqual(run.call_args.kwargs, {'backend': 'docker', 'memory_mb': 512})
+        self.assertIn('Runner: docker', out)
+        with mock.patch.object(ollama_duel, 'run_program', return_value=result) as run:
+            _, out = self._duel(cfg, extra_args=['--code-runner', 'native', '--code-memory-mb', '64'])
+        self.assertEqual(run.call_args.kwargs, {'backend': 'native', 'memory_mb': 64})
+        self.assertIn('Runner: native', out)
+
+    def test_runner_flags_do_not_enable_disabled_code_execution(self):
+        with mock.patch.object(ollama_duel, 'run_program') as run:
+            self._duel(minimal_config(turns=1), extra_args=['--code-runner', 'docker'])
+        run.assert_not_called()
+
+    def test_invalid_scenario_runner_settings_are_rejected(self):
+        for change in ({'run_code_backend': 'unsafe'}, {'run_code_memory_mb': 0},
+                       {'run_code_memory_mb': True}, {'run_code_memory_mb': 32.5}):
+            with self.subTest(change=change), tempfile.TemporaryDirectory() as directory:
+                path = write_json(directory, 'cfg.json', minimal_config(**change))
+                with self.assertRaises(SystemExit):
+                    ollama_duel.load_config(path)
 
 
 if __name__ == "__main__":

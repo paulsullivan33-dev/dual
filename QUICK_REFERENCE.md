@@ -364,12 +364,17 @@ with a tally, `Code runs: 6 ok, 2 failed, 0 timed out, …`, which also goes
 into the `run_results.log` entry and the ntfy notice.
 
 Off unless the scenario sets `"run_code": true` or you pass `--run-code`;
-profiles can't turn it on. Code execution now requires Docker and a trusted
-local Python image (`python:3.12-slim`, or `DUAL_RUN_CODE_IMAGE`). No image is
-pulled automatically and there is no host execution fallback. The container
-has no host mounts or network, runs unprivileged, and has memory/CPU/PID,
-temporary-storage and retained-output limits. Use a disposable VM/host for
-adversarial programs; containers share a kernel. See the README for details.
+profiles can't turn it on. **Native Python is the default**, including on the
+Arduino Uno Q: no Docker is needed. Native runs have bounded output/time and,
+on Linux, per-process memory/CPU limits (128 MiB by default). Native code still
+has your file/network permissions; Windows has no native memory/CPU cap.
+
+For a larger or less-trusted workload, choose `--code-runner docker` and, for
+example, `--code-memory-mb 512`. Scenario equivalents are
+`"run_code_backend": "docker"` and `"run_code_memory_mb": 512`; CLI values win.
+Docker requires a trusted local Python image and never silently falls back to
+native mode or pulls an image automatically. See the README for isolation and
+platform limits.
 
 ### Have a third model judge the duel
 
@@ -586,9 +591,11 @@ entry (that speaker only, overriding the top level).
 | `max_temp` | top | 80 | Pause the duel at this CPU °C |
 | `resume_temp` | top | 70 | Resume once cooled to this CPU °C |
 | `temp_guard` | top | true | Thermal pause guard on/off |
-| `run_code` | top | false | Run each reply's last Python block and show the result to both speakers (isolated Docker runner required) |
+| `run_code` | top | false | Run each reply's last Python block and show the result to both speakers (native default; Docker optional) |
 | `run_code_args` | top | none | Arguments for each run, e.g. `["--test"]` |
 | `run_code_timeout` | top | 30 | Seconds before a run is stopped |
+| `run_code_backend` | top | native | `native` or `docker`; CLI: `--code-runner` |
+| `run_code_memory_mb` | top | 128 | MiB budget, minimum 32; CLI: `--code-memory-mb` |
 
 Unknown keys, wrong types and out-of-range values are rejected before any
 model is called, so a typo like `"temprature"` fails loudly.
