@@ -1,12 +1,52 @@
-"""Tests for ollama_reporting.ntfy_post (generic best-effort notifier)."""
+"""Tests for ollama_reporting: the ntfy_post notifier and the
+duration formatting used by the run summary and completion notice."""
 import os
 import sys
 import unittest
+from datetime import datetime, timedelta
 from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from ollama_reporting import ntfy_post
+from ollama_reporting import (format_duration, format_run_summary,
+                              notify_duel_done, ntfy_post)
+
+
+class FormatDurationTest(unittest.TestCase):
+    def test_under_a_minute_is_seconds_only(self):
+        self.assertEqual(format_duration(0), "0s")
+        self.assertEqual(format_duration(45.4), "45s")
+        self.assertEqual(format_duration(59.6), "60s (1m 00s)")
+
+    def test_minutes_get_a_parenthetical(self):
+        self.assertEqual(format_duration(1865), "1865s (31m 05s)")
+        self.assertEqual(format_duration(600), "600s (10m 00s)")
+
+    def test_hours_get_a_parenthetical(self):
+        self.assertEqual(format_duration(15403), "15403s (4h 16m 43s)")
+        self.assertEqual(format_duration(3600), "3600s (1h 00m 00s)")
+
+
+PARTICIPANTS = [{"model": "m1", "name": "One"}, {"model": "m2", "name": "Two"}]
+
+
+class TurnsLineDurationTest(unittest.TestCase):
+    """Both places a duel reports its elapsed time -- the run_results
+    summary block and the ntfy notice -- show minutes next to seconds."""
+
+    def test_run_summary_turns_line(self):
+        started = datetime.now() - timedelta(seconds=1865)
+        summary = format_run_summary(started, "scen.json", PARTICIPANTS, 8,
+                                     [object()] * 8, {}, None)
+        self.assertIn("Turns: 8/8 (8 replies) in 1865s (31m 05s)", summary)
+
+    def test_ntfy_notice_turns_line(self):
+        started = datetime.now() - timedelta(seconds=1865)
+        with mock.patch("ollama_reporting.ntfy_post") as post:
+            notify_duel_done("https://ntfy.sh/x", "scen.json", PARTICIPANTS,
+                             8, [object()] * 8, started, None, False)
+        body = post.call_args[0][2]
+        self.assertIn("8/8 turns in 1865s (31m 05s)", body)
 
 
 class NtfyPostTest(unittest.TestCase):

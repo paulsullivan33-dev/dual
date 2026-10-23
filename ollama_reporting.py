@@ -14,6 +14,23 @@ from datetime import datetime
 from ollama_common import wrap_text
 
 
+def format_duration(duration_s):
+    """Elapsed seconds for report lines: the raw seconds plus, once a run
+    passes a minute, a minutes (or hours) reading in parentheses, e.g.
+    '1865s (31m 05s)' or '15403s (4h 16m 43s)'. Under a minute the
+    seconds alone read fine and the parenthetical is omitted."""
+    total = int(round(duration_s))
+    if total < 60:
+        return f"{total}s"
+    hours, rem = divmod(total, 3600)
+    minutes, seconds = divmod(rem, 60)
+    if hours:
+        human = f"{hours}h {minutes:02d}m {seconds:02d}s"
+    else:
+        human = f"{minutes}m {seconds:02d}s"
+    return f"{total}s ({human})"
+
+
 def participant_stats(model_stats):
     """Ordered speaker records; position distinguishes even identical names."""
     return sorted((speaker for model in model_stats.values()
@@ -107,7 +124,7 @@ def format_run_summary(run_started, config_path, participants, turns,
         *([f"Log: {log_path}"] if log_path else []),
         f"Models: {a['model']} ({a['name']}) vs {b['model']} ({b['name']})",
         f"Turns: {len(transcript)}/{turns} "
-        f"({len(transcript)} replies) in {duration_s:.0f}s",
+        f"({len(transcript)} replies) in {format_duration(duration_s)}",
     ]
     if code_runs:
         lines.append(code_runs)
@@ -226,7 +243,7 @@ def notify_duel_done(url, config_path, participants, turns, transcript,
     body = "\n".join([
         f"{scenario}: {result}",
         f"{a['model']} ({a['name']}) vs {b['model']} ({b['name']})",
-        f"{len(transcript)}/{turns} turns in {duration_s:.0f}s",
+        f"{len(transcript)}/{turns} turns in {format_duration(duration_s)}",
         *([f"Log: {log_path}"] if log_path else []),
     ])
     stats_line = format_token_stats_line(model_stats)
