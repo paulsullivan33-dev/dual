@@ -1545,6 +1545,73 @@ class ProfileTests(unittest.TestCase):
                     with self.assertRaises(SystemExit):
                         ollama_duel.load_profile(path)
 
+    def test_extends_inherits_and_overrides(self):
+        with tempfile.TemporaryDirectory() as d:
+            self._profile(d, {"description": "base", "models": ["a", "b"],
+                              "settings": {"num_ctx": 4096, "think": False,
+                                           "judge": "judge-model"},
+                              "scenarios": ["factorial.json"]}, name="base")
+            child = self._profile(d, {"extends": "base.json", "models": ["b", "a"],
+                                      "settings": {"num_ctx": 8192}}, name="child")
+            profile = ollama_duel.load_profile(child)
+        self.assertEqual(profile["models"], ["b", "a"])          # replaced
+        self.assertEqual(profile["scenarios"], ["factorial.json"])  # inherited
+        self.assertEqual(profile["settings"]["num_ctx"], 8192)   # overridden
+        self.assertIs(profile["settings"]["think"], False)       # inherited
+        self.assertEqual(profile["settings"]["judge"]["model"], "judge-model")
+        self.assertNotIn("extends", profile)
+
+    def test_extends_null_setting_removes_inherited_value(self):
+        with tempfile.TemporaryDirectory() as d:
+            self._profile(d, {"settings": {"judge": "judge-model", "timeout": 60}},
+                          name="base")
+            child = self._profile(d, {"extends": "base.json",
+                                      "settings": {"judge": None}}, name="child")
+            settings = ollama_duel.load_profile(child)["settings"]
+        self.assertNotIn("judge", settings)
+        self.assertEqual(settings["timeout"], 60)
+
+    def test_extends_chains_through_several_profiles(self):
+        with tempfile.TemporaryDirectory() as d:
+            self._profile(d, {"models": ["a", "b"], "settings": {"num_ctx": 4096}},
+                          name="one")
+            self._profile(d, {"extends": "one.json", "settings": {"think": False}},
+                          name="two")
+            three = self._profile(d, {"extends": "two.json", "scenarios": ["x.json"]},
+                                  name="three")
+            profile = ollama_duel.load_profile(three)
+        self.assertEqual(profile["models"], ["a", "b"])
+        self.assertEqual(profile["settings"], {"num_ctx": 4096, "think": False})
+
+    def test_extends_loop_and_missing_parent_exit(self):
+        with tempfile.TemporaryDirectory() as d:
+            self._profile(d, {"extends": "b.json"}, name="a")
+            loop = self._profile(d, {"extends": "a.json"}, name="b")
+            missing = self._profile(d, {"extends": "nowhere.json"}, name="orphan")
+            with self.assertRaises(SystemExit) as ctx:
+                ollama_duel.load_profile(loop)
+            self.assertIn("extends itself", str(ctx.exception.code))
+            with self.assertRaises(SystemExit) as ctx:
+                ollama_duel.load_profile(missing)
+            self.assertIn("not found", str(ctx.exception.code))
+
+    def test_shipped_variant_profiles_match_their_experiments(self):
+        load = ollama_profiles.load_profile
+        base, swapped = load("arduino_q"), load("arduino_q_swapped")
+        self.assertEqual(swapped["models"], list(reversed(base["models"])))
+        self.assertEqual(swapped["settings"], base["settings"])
+        self.assertEqual(swapped["scenarios"], base["scenarios"])
+        ethics, ethics_8b = load("laptop_ethics"), load("laptop_ethics_8b")
+        self.assertNotIn("judge", ethics["settings"])  # scenario judges apply
+        self.assertEqual(ethics_8b["settings"], ethics["settings"])
+        self.assertNotEqual(ethics_8b["models"], ethics["models"])
+        remaining = load("arduino_q_remaining")["settings"]
+        self.assertNotIn("judge", remaining)
+        self.assertNotIn("timeout", remaining)
+        chunk1 = load("speedrun1")["settings"]
+        for n in range(2, 6):
+            self.assertEqual(load(f"speedrun{n}")["settings"], chunk1)
+
     def test_missing_profile_exits(self):
         with self.assertRaises(SystemExit) as ctx:
             ollama_duel.load_profile("no_such_profile_here")

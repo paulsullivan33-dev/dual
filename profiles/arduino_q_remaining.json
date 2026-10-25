@@ -1,17 +1,9 @@
 {
-  "description": "Companion to arduino_q: the 35 remaining scenarios, with no overlap. Uses the same small-board models, 4096-token context, last 4 replies, thinking disabled, LED display, and thermal pauses at 80C with resume at 70C.",
-  "models": [
-    "qwen3:1.7b",
-    "smollm2:1.7b"
-  ],
+  "description": "Companion to arduino_q: the 35 remaining scenarios, with no overlap. Uses the same small-board models, 4096-token context, last 4 replies, thinking disabled, LED display, and thermal pauses at 80C with resume at 70C. Unlike arduino_q it sets no profile judge or timeout, so each scenario's own judge and timeout apply.",
+  "extends": "arduino_q",
   "settings": {
-    "num_ctx": 4096,
-    "think": false,
-    "history_turns": 4,
-    "display": true,
-    "temp_guard": true,
-    "max_temp": 80,
-    "resume_temp": 70
+    "judge": null,
+    "timeout": null
   },
   "scenarios": [
     "brutal_code_review.json",

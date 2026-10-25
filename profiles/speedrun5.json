@@ -1,20 +1,6 @@
 {
   "description": "Laptop speed-run chunk 5 of 5 (9 scenarios, tic_tac_toe_game.json through worldbuilding_duo.json, alphabetical). 3B models on both sides for fast turns on the iGPU, thinking off, an 8192-token context window, and only the last 4 replies sent each turn. Judged remotely by llama3.1:8b on the ProDesk.",
-  "models": [
-    "qwen2.5:3b",
-    "llama3.2:3b"
-  ],
-  "settings": {
-    "num_ctx": 8192,
-    "think": false,
-    "history_turns": 4,
-    "timeout": 1800,
-    "judge": {
-      "model": "llama3.1:8b",
-      "host": "http://192.168.1.236:11434",
-      "temperature": 0.2
-    }
-  },
+  "extends": "speedrun1",
   "scenarios": [
     "tic_tac_toe_game.json",
     "time_traveler_1988.json",

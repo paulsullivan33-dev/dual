@@ -371,9 +371,22 @@ A profile is a JSON object with any of these keys:
 | Key | Meaning |
 | --- | --- |
 | `description` | Free text for people reading the file |
+| `extends` | Name (or path) of another profile to build on. The parent's values apply unless this profile states its own: `models`, `scenarios` and `description` replace the parent's, `settings` are merged key by key, and a setting set to `null` removes the inherited value |
 | `models` | Exactly two model names: the first replaces the first participant's model, the second the second's |
 | `settings` | Values for `num_ctx`, `think`, `max_tokens`, `temperature`, `repeat_penalty`, `history_turns`, `host`, `timeout`, `display`, `temp_guard`, `max_temp`, `resume_temp`, or `judge`. Profile settings replace scenario values and remove corresponding per-model overrides |
 | `scenarios` | Scenario file names in `scenarios/` to run when no scenario is given |
+
+Variant profiles use `extends` so each file holds only what its experiment changes. For example, `arduino_q_swapped.json` is just the base profile with the two models in swapped seats:
+
+```json
+{
+  "description": "Seat-swap variant of arduino_q ...",
+  "extends": "arduino_q",
+  "models": ["smollm2:1.7b", "qwen3:1.7b"]
+}
+```
+
+The shipped variants follow the same pattern: `arduino_q_swapped` and `arduino_q_remaining` extend `arduino_q`; `laptop_judge`, `laptop_judge_qwen`, `laptop_ethics` and `speedrun1` extend `laptop`; `laptop_ethics_8b` extends `laptop_ethics`; and `speedrun2` to `speedrun5` extend `speedrun1`.
 
 `--profile` also accepts a path to a profile file elsewhere. The console header and log show `Profile: <name>` when one is used.
 

@@ -1,1 +1,8 @@
-{"description":"Ethics pack for the Windows laptop at 8B scale (laptop 8b; Intel Lunar Lake + Arc iGPU, Ollama, local judge): the 8B cross-family pair decides the same six dilemmas as the 3B laptop_ethics run, so the two runs compare like for like -- colony caretaking, triage, rescue dispatch, confidentiality vs safety, generation-ship policy, and whistleblowing. Each scenario carries its own local qwen3:8b judge with criteria tailored to its dilemma, grading the decision record: consistency as the price rises, honesty about costs, engagement. The profile supplies the contestants and duel settings only, so the scenarios' judges survive; settings match laptop_ethics exactly so contestant scale is the only changed variable.","models":["qwen3:8b","llama3.1:8b"],"scenarios":["colony_caretakers.json","triage_protocol.json","rescue_dispatch.json","promise_vs_safety.json","generation_ship.json","the_whistleblower.json"],"settings":{"history_turns":4,"num_ctx":8192,"think":false,"timeout":1800}}
+{
+  "description": "Ethics pack for the Windows laptop at 8B scale (laptop 8b; Intel Lunar Lake + Arc iGPU, Ollama, local judge): the 8B cross-family pair decides the same six dilemmas as the 3B laptop_ethics run, so the two runs compare like for like -- colony caretaking, triage, rescue dispatch, confidentiality vs safety, generation-ship policy, and whistleblowing. Each scenario carries its own local qwen3:8b judge with criteria tailored to its dilemma, grading the decision record: consistency as the price rises, honesty about costs, engagement. The profile supplies the contestants and duel settings only, so the scenarios' judges survive; settings match laptop_ethics exactly so contestant scale is the only changed variable.",
+  "extends": "laptop_ethics",
+  "models": [
+    "qwen3:8b",
+    "llama3.1:8b"
+  ]
+}

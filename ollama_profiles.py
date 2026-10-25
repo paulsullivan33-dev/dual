@@ -5,6 +5,12 @@ scenario to one machine: it swaps the two speakers' models by position and
 forces generation settings, keeping the topic, roles and prompts. It can
 also list the scenarios that make up that machine's set, which run as a
 batch when no scenario is given.
+
+A profile can build on another with "extends": it starts from the named
+profile and overrides only what it states. "models", "scenarios" and
+"description" replace the parent's; "settings" are merged key by key, and a
+setting given as null removes the inherited value (e.g. "judge": null lets
+each scenario's own judge apply).
 """
 
 import json
@@ -16,7 +22,7 @@ from ollama_judge import normalize_judge
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
-PROFILE_KEYS = {"description", "models", "settings", "scenarios"}
+PROFILE_KEYS = {"description", "extends", "models", "settings", "scenarios"}
 PROFILE_SETTING_KINDS = {
     "think": ("bool", None), "max_tokens": ("int", 1),
     "temperature": ("number", 0), "num_ctx": ("int", 1),
@@ -39,14 +45,27 @@ def profile_path(name):
     return os.path.join(SCRIPT_DIR, "profiles", name + ".json")
 
 
-def load_profile(name):
-    """Read and validate a machine profile, exiting with a clear message
-    on any problem -- before a duel starts, like load_config."""
+def _read_profile(name, base_dir=None, chain=()):
+    """Read a profile file and resolve its "extends" chain into one dict.
+
+    A relative path in "extends" is taken from the extending profile's
+    folder; a bare name is looked up in profiles/ as usual.
+    """
     path = profile_path(name)
+    # profile_path returns a path argument unchanged; when that path is
+    # relative and came from "extends", read it from the extender's folder.
+    if base_dir and path == name and not os.path.isabs(name):
+        path = os.path.join(base_dir, name)
+    key = os.path.normcase(os.path.realpath(path))
+    if key in chain:
+        sys.exit(f'Profile "{name}" extends itself (through {len(chain)} '
+                 f"profile(s)); remove the loop.")
     try:
         with open(path, encoding="utf-8") as f:
             profile = json.load(f)
     except FileNotFoundError:
+        if chain:
+            sys.exit(f'Profile extends a profile that was not found: {path}')
         sys.exit(f"Profile not found: {path}")
     except (UnicodeDecodeError, json.JSONDecodeError) as e:
         sys.exit(f"Invalid profile {path}: {e}")
@@ -54,6 +73,31 @@ def load_profile(name):
     if not isinstance(profile, dict):
         sys.exit(f"{label} must be a JSON object.")
     check_unknown_keys(profile, PROFILE_KEYS, label)
+    if not isinstance(profile.get("settings", {}), dict):
+        sys.exit(f'"settings" in {label} must be a JSON object.')
+    parent_name = profile.pop("extends", None)
+    if parent_name is None:
+        merged = profile
+    else:
+        if not isinstance(parent_name, str) or not parent_name.strip():
+            sys.exit(f'"extends" in {label} must be a profile name.')
+        merged = _read_profile(parent_name, os.path.dirname(path), chain + (key,))
+        settings = dict(merged.get("settings", {}))
+        settings.update(profile.pop("settings", {}))
+        merged.update(profile)
+        merged["settings"] = settings
+    # A null setting means "not set": it removes an inherited value.
+    if "settings" in merged:
+        merged["settings"] = {k: v for k, v in merged["settings"].items()
+                              if v is not None}
+    return merged
+
+
+def load_profile(name):
+    """Read and validate a machine profile, exiting with a clear message
+    on any problem -- before a duel starts, like load_config."""
+    profile = _read_profile(name)
+    label = f'profile "{name}"'
     models = profile.get("models")
     if models is not None and (
             not isinstance(models, list) or len(models) != 2

@@ -1,1 +1,18 @@
-{"description":"Judge vetting on the iGPU laptop (Intel Arc): the laptop profile's 3B contestants, but the judge runs on the laptop itself instead of borrowing the ProDesk. The judge is llama3.1:8b (bigger than both contestants) with NO num_ctx set, so the judge transcript auto-sizer (8192 / 16384 / skip) is the behavior under test; run judge_context_audit.py over the results afterwards to see which window each duel needed. The scenario set exercises each judge path: a plain debate, two code duels whose run reports the judge must weigh, a code game, the 40-turn game whose own scenario judge the profile judge overrides, and a 20-turn long-form story for the largest transcripts. Pull the judge first: ollama pull llama3.1:8b.","models":["qwen2.5:3b","llama3.2:3b"],"scenarios":["trolley_problem_ethics.json","factorial.json","program_writing.json","tic_tac_toe_game.json","twenty_questions.json","slow_crime.json"],"settings":{"history_turns":4,"judge":{"model":"llama3.1:8b","temperature":0.2},"num_ctx":8192,"think":false,"timeout":1800}}
+{
+  "description": "Judge vetting on the iGPU laptop (Intel Arc): the laptop profile's 3B contestants, but the judge runs on the laptop itself instead of borrowing the ProDesk. The judge is llama3.1:8b (bigger than both contestants) with NO num_ctx set, so the judge transcript auto-sizer (8192 / 16384 / skip) is the behavior under test; run judge_context_audit.py over the results afterwards to see which window each duel needed. The scenario set exercises each judge path: a plain debate, two code duels whose run reports the judge must weigh, a code game, the 40-turn game whose own scenario judge the profile judge overrides, and a 20-turn long-form story for the largest transcripts. Pull the judge first: ollama pull llama3.1:8b.",
+  "extends": "laptop",
+  "settings": {
+    "judge": {
+      "model": "llama3.1:8b",
+      "temperature": 0.2
+    }
+  },
+  "scenarios": [
+    "trolley_problem_ethics.json",
+    "factorial.json",
+    "program_writing.json",
+    "tic_tac_toe_game.json",
+    "twenty_questions.json",
+    "slow_crime.json"
+  ]
+}
