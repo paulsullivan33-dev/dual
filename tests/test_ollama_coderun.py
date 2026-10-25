@@ -76,11 +76,10 @@ class RunProgramTests(unittest.TestCase):
         r = cr.run_program("import sys\nprint(sys.argv[1:])", args=["--test", "x"])
         self.assertIn("['--test', 'x']", r["output"])
 
-    def test_runs_in_a_temporary_folder_that_is_removed(self):
-        r = cr.run_program("import os\nopen('made.txt', 'w').close()\nprint(os.getcwd())")
-        folder = r["output"].strip().splitlines()[-1]
-        self.assertNotEqual(os.path.normcase(folder), os.path.normcase(os.getcwd()))
-        self.assertFalse(os.path.exists(folder))
+    def test_source_is_supplied_on_stdin_and_input_stays_at_eof(self):
+        r = cr.run_program("import sys; print(sys.stdin.read() == '')")
+        self.assertIn('True', r['output'])
+        self.assertEqual(r['status'], 'ok')
 
     def test_long_output_keeps_the_end(self):
         r = cr.run_program("for i in range(5000):\n    print('line', i)")

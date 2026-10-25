@@ -1,4 +1,4 @@
-"""ollama_coderun.py -- optionally run the Python program in each duel reply.
+"""Run trusted reply code natively by default, or opt into Docker isolation.
 
 Off unless a scenario sets "run_code": true or the run passes --run-code.
 After each reply, the last Python code block is saved in a fresh temporary
@@ -7,20 +7,27 @@ keyboard input (input() sees end-of-file instead of hanging). The result is
 written to the log and shown to both speakers on their next turns, so a
 program that crashes gets noticed and fixed instead of drifting along.
 
-This is NOT a sandbox: the program runs with your user's permissions and
-can read and write files and use the network like any script you run.
-Two things narrow the blast radius: the program gets a minimal set of
+This is NOT a sandbox: the native runner executes with your user's
+permissions and can read and write files and use the network like any
+script you run. Both runners bound elapsed time and captured output, and
+native Linux runs also bound per-process address space and CPU time. Two
+things narrow the blast radius: the program gets a minimal set of
 environment variables (so API keys and tokens in your shell are not
 handed to model-written code), with HOME pointed at its throwaway folder,
 and on timeout its whole process tree is killed, not just the top process.
+Docker is an explicit option for larger or less-trusted scenarios and
+never falls back to native.
 """
 
 import os
 import re
-import shutil
+import math
 import signal
-import subprocess
 import sys
+import shutil
+import subprocess
+import threading
+import uuid
 import tempfile
 import time
 
@@ -69,6 +76,20 @@ def _as_text(data):
     return data or ""
 
 
+# A provisioned image is required. Operators may select a trusted digest.
+DEFAULT_RUN_IMAGE = "python:3.12-slim"
+DEFAULT_MEMORY_MB = 128
+MAX_OUTPUT_BYTES = 8192
+MAX_CODE_BYTES = 256 * 1024
+_BOOTSTRAP = ("import sys; source=sys.stdin.read(); "
+              "sys.argv[0]='program.py'; exec(compile(source,'program.py','exec'))")
+_NATIVE_BOOTSTRAP = (
+    "import runpy; sys.stdout.reconfigure(encoding='utf-8', errors='replace'); "
+    "sys.stderr.reconfigure(encoding='utf-8', errors='replace'); "
+    "sys.argv[0]='program.py'; sys.path.insert(0, '.'); "
+    "runpy.run_path('program.py', run_name='__main__')"
+)
+
 # Variables a Python program needs to start and behave normally. Anything
 # else in the caller's environment (tokens, keys, credentials) is withheld.
 _PASSTHROUGH_ENV = (
@@ -87,62 +108,146 @@ def _program_env(folder):
     return env
 
 
-def _kill_tree(proc):
-    """Kill the program and anything it started (best effort)."""
-    try:
-        if os.name == "nt":
-            subprocess.run(["taskkill", "/F", "/T", "/PID", str(proc.pid)],
-                           stdout=subprocess.DEVNULL,
-                           stderr=subprocess.DEVNULL, check=False)
-        else:
-            os.killpg(proc.pid, signal.SIGKILL)
-    except OSError:  # includes ProcessLookupError: already gone
-        pass
-    try:
-        proc.kill()
-    except OSError:
-        pass
+def _container_command(name, args, memory_mb=DEFAULT_MEMORY_MB):
+    docker = shutil.which("docker")
+    if not docker:
+        raise OSError("Docker runner selected but Docker is unavailable; select native or use --no-run-code")
+    image = os.environ.get("DUAL_RUN_CODE_IMAGE", DEFAULT_RUN_IMAGE)
+    if not image or image.startswith("-"):
+        raise ValueError("DUAL_RUN_CODE_IMAGE must name a trusted, locally provisioned image")
+    return [docker, "run", "--name", name, "--rm", "--pull=never",
+            "--network", "none", "--read-only", "--cap-drop", "ALL",
+            "--security-opt", "no-new-privileges", "--pids-limit", "64",
+            "--memory", f"{memory_mb}m", "--memory-swap", f"{memory_mb}m", "--cpus", "1",
+            "--user", "65534:65534", "--tmpfs", "/tmp:rw,nosuid,nodev,noexec,size=16m",
+            "--workdir", "/tmp", "--log-driver", "none", "-i", image,
+            "python", "-I", "-u", "-c", _BOOTSTRAP, *args]
 
 
-def run_program(code, args=(), timeout=DEFAULT_RUN_TIMEOUT):
-    """Run `code` as program.py in a new temporary folder and clean up.
-
-    Returns a dict: status ("ok", "failed" or "timeout"), exit_code (None
-    on timeout), seconds, and output (stdout and stderr combined, trimmed
-    to the last MAX_OUTPUT_CHARS characters).
-    """
-    folder = tempfile.mkdtemp(prefix="duel_run_")
+def _remove_container(docker, name):
+    # Killing the client alone does not kill its container or descendants.
     try:
-        path = os.path.join(folder, "program.py")
-        with open(path, "w", encoding="utf-8") as f:
-            f.write(code)
-        start = time.monotonic()
-        # Its own process group/session, so a timeout can kill everything
-        # the program spawned, not just the program itself.
-        group = ({"creationflags": getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)}
-                 if os.name == "nt" else {"start_new_session": True})
-        with subprocess.Popen(
-                [sys.executable, path, *args], cwd=folder,
-                stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT, env=_program_env(folder),
-                **group) as proc:
+        result = subprocess.run([docker, "rm", "--force", name],
+                                stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                                stderr=subprocess.DEVNULL, timeout=5, check=False)
+        return result.returncode == 0
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+
+
+def _native_command(args, timeout, memory_mb):
+    # Apply limits in the child, never in the LLM/duel parent and never via
+    # preexec_fn (unsafe with the runner's output-reader threads).
+    limits = (
+        "import sys\n"
+        "if sys.platform.startswith('linux'):\n"
+        " import resource\n"
+        f" for kind, requested in ((resource.RLIMIT_AS, {memory_mb * 1024 * 1024}), "
+        f"(resource.RLIMIT_CPU, {max(1, math.ceil(timeout))})):\n"
+        "  _, hard = resource.getrlimit(kind)\n"
+        "  bound = requested if hard == resource.RLIM_INFINITY else min(requested, hard)\n"
+        "  resource.setrlimit(kind, (bound, bound))\n"
+    )
+    return [sys.executable, "-I", "-u", "-c", limits + _NATIVE_BOOTSTRAP, *args]
+
+
+def _stop_native(process):
+    """Reap ordinary descendants on POSIX; best-effort tree cleanup on Windows."""
+    if os.name == "posix":
+        try:
+            # POSIX-only members are absent from Windows lint environments.
+            os.killpg(process.pid, signal.SIGKILL)  # pylint: disable=no-member
+        except ProcessLookupError:
+            pass
+    elif process.poll() is None:
+        try:
+            subprocess.run(["taskkill", "/PID", str(process.pid), "/T", "/F"],
+                           stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                           stderr=subprocess.DEVNULL, timeout=5, check=False)
+        except (OSError, subprocess.TimeoutExpired):
+            pass
+    if process.poll() is None:
+        process.kill()
+    process.wait(timeout=5)
+
+
+def run_program(code, args=(), timeout=DEFAULT_RUN_TIMEOUT,
+                backend="native", memory_mb=DEFAULT_MEMORY_MB):
+    """Native is for trusted scenarios; Docker adds explicit isolation."""
+    if isinstance(timeout, bool) or not isinstance(timeout, (int, float)) or not math.isfinite(timeout) or timeout <= 0:
+        raise ValueError("code timeout must be finite and positive")
+    if backend not in ("native", "docker"):
+        raise ValueError("code runner must be native or docker")
+    if isinstance(memory_mb, bool) or not isinstance(memory_mb, int) or memory_mb < 32:
+        raise ValueError("code memory limit must be an integer of at least 32 MiB")
+    if not isinstance(code, str) or len(code.encode("utf-8")) > MAX_CODE_BYTES:
+        raise ValueError("code must be text of at most 256 KiB")
+    started = time.monotonic()
+    name = "duel-run-" + uuid.uuid4().hex
+    status, exit_code, output = "failed", 127, ""
+    process, reader, command = None, None, None
+    tail = bytearray()
+    def drain():
+        while True:
+            chunk = process.stdout.read(4096)
+            if not chunk:
+                return
+            tail.extend(chunk)
+            if len(tail) > MAX_OUTPUT_BYTES:
+                del tail[:-MAX_OUTPUT_BYTES]
+    try:
+        command = (_container_command(name, args, memory_mb) if backend == "docker"
+                   else _native_command(args, timeout, memory_mb))
+        # Native code gets a disposable working directory, not filesystem
+        # isolation. Docker receives source over stdin and no host mounts.
+        with tempfile.TemporaryDirectory(prefix="duel_run_") as folder, tempfile.TemporaryFile() as source:
+            if backend == "native":
+                with open(os.path.join(folder, "program.py"), "w", encoding="utf-8") as program:
+                    program.write(code)
+                standard_input = subprocess.DEVNULL
+            else:
+                source.write(code.encode("utf-8"))
+                source.seek(0)
+                standard_input = source
+            options = {"start_new_session": True} if os.name == "posix" else {}
+            # Native runs get the minimal environment (no shell secrets,
+            # HOME inside the throwaway folder); a container is isolated
+            # already and receives no host environment.
+            env = _program_env(folder) if backend == "native" else None
+            process = subprocess.Popen(command, stdin=standard_input, stdout=subprocess.PIPE,
+                                       stderr=subprocess.STDOUT, cwd=folder, env=env,
+                                       **options)
+            reader = threading.Thread(target=drain, daemon=True)
+            reader.start()
             try:
-                out, _ = proc.communicate(timeout=timeout)
-                status = "ok" if proc.returncode == 0 else "failed"
-                exit_code, output = proc.returncode, _as_text(out)
-            except subprocess.TimeoutExpired:
-                _kill_tree(proc)
                 try:
-                    out, _ = proc.communicate(timeout=5)
+                    exit_code = process.wait(timeout=timeout)
+                    status = "ok" if exit_code == 0 else "failed"
                 except subprocess.TimeoutExpired:
-                    out = b""
-                status, exit_code, output = "timeout", None, _as_text(out)
-        seconds = time.monotonic() - start
-    finally:
-        # Best-effort: on Windows a lingering child can hold a file open.
-        shutil.rmtree(folder, ignore_errors=True)
-    return {"status": status, "exit_code": exit_code, "seconds": seconds,
-            "output": _tail(output), "timeout": timeout}
+                    status, exit_code = "timeout", None
+            finally:
+                # Also clean up on KeyboardInterrupt and when the parent exits
+                # while an ordinary child is still holding its output pipe.
+                if backend == "native":
+                    _stop_native(process)
+                else:
+                    cleaned = _remove_container(command[0], name)
+                    if status == "timeout" and not cleaned:
+                        output += "\nContainer cleanup was not acknowledged; inspect " + name
+                    if process.poll() is None:
+                        process.kill()
+                    process.wait(timeout=5)
+                if reader is not None:
+                    reader.join(timeout=2)
+                if process.stdout is not None and not reader.is_alive():
+                    process.stdout.close()
+    except (OSError, subprocess.TimeoutExpired) as error:
+        status, exit_code = "failed", 127
+        output += f"{backend} code runner unavailable: {error}"
+    output = _tail(tail.decode("utf-8", errors="replace")) + output
+    return {"status": status, "exit_code": exit_code,
+            "seconds": time.monotonic() - started, "output": output,
+            "timeout": timeout}
 
 
 def describe_run(result, author):
