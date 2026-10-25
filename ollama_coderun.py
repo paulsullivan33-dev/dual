@@ -1,8 +1,22 @@
 """Run trusted reply code natively by default, or opt into Docker isolation.
 
-Both runners bound elapsed time and captured output. Native Linux runs also
-bound per-process address space and CPU time; they still have user-account
-file/network access. Docker is optional and never falls back to native.
+Off unless a scenario sets "run_code": true or the run passes --run-code.
+After each reply, the last Python code block is saved in a fresh temporary
+folder and run with this same Python interpreter, a timeout, and no
+keyboard input (input() sees end-of-file instead of hanging). The result is
+written to the log and shown to both speakers on their next turns, so a
+program that crashes gets noticed and fixed instead of drifting along.
+
+This is NOT a sandbox: the native runner executes with your user's
+permissions and can read and write files and use the network like any
+script you run. Both runners bound elapsed time and captured output, and
+native Linux runs also bound per-process address space and CPU time. Two
+things narrow the blast radius: the program gets a minimal set of
+environment variables (so API keys and tokens in your shell are not
+handed to model-written code), with HOME pointed at its throwaway folder,
+and on timeout its whole process tree is killed, not just the top process.
+Docker is an explicit option for larger or less-trusted scenarios and
+never falls back to native.
 """
 
 import os
@@ -75,6 +89,23 @@ _NATIVE_BOOTSTRAP = (
     "sys.argv[0]='program.py'; sys.path.insert(0, '.'); "
     "runpy.run_path('program.py', run_name='__main__')"
 )
+
+# Variables a Python program needs to start and behave normally. Anything
+# else in the caller's environment (tokens, keys, credentials) is withheld.
+_PASSTHROUGH_ENV = (
+    "PATH", "LANG", "LC_ALL", "LC_CTYPE", "TZ", "TERM",
+    # Windows: the interpreter and sockets fail to start without these.
+    "SYSTEMROOT", "SYSTEMDRIVE", "COMSPEC", "PATHEXT", "WINDIR",
+    "NUMBER_OF_PROCESSORS", "PROCESSOR_ARCHITECTURE",
+)
+
+
+def _program_env(folder):
+    """Minimal environment for a generated program run in `folder`."""
+    env = {k: os.environ[k] for k in _PASSTHROUGH_ENV if k in os.environ}
+    env.update(PYTHONIOENCODING="utf-8", HOME=folder, USERPROFILE=folder,
+               TMPDIR=folder, TEMP=folder, TMP=folder)
+    return env
 
 
 def _container_command(name, args, memory_mb=DEFAULT_MEMORY_MB):
@@ -179,8 +210,13 @@ def run_program(code, args=(), timeout=DEFAULT_RUN_TIMEOUT,
                 source.seek(0)
                 standard_input = source
             options = {"start_new_session": True} if os.name == "posix" else {}
+            # Native runs get the minimal environment (no shell secrets,
+            # HOME inside the throwaway folder); a container is isolated
+            # already and receives no host environment.
+            env = _program_env(folder) if backend == "native" else None
             process = subprocess.Popen(command, stdin=standard_input, stdout=subprocess.PIPE,
-                                       stderr=subprocess.STDOUT, cwd=folder, **options)
+                                       stderr=subprocess.STDOUT, cwd=folder, env=env,
+                                       **options)
             reader = threading.Thread(target=drain, daemon=True)
             reader.start()
             try:
