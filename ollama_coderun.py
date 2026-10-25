@@ -9,11 +9,16 @@ program that crashes gets noticed and fixed instead of drifting along.
 
 This is NOT a sandbox: the program runs with your user's permissions and
 can read and write files and use the network like any script you run.
+Two things narrow the blast radius: the program gets a minimal set of
+environment variables (so API keys and tokens in your shell are not
+handed to model-written code), with HOME pointed at its throwaway folder,
+and on timeout its whole process tree is killed, not just the top process.
 """
 
 import os
 import re
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -64,6 +69,41 @@ def _as_text(data):
     return data or ""
 
 
+# Variables a Python program needs to start and behave normally. Anything
+# else in the caller's environment (tokens, keys, credentials) is withheld.
+_PASSTHROUGH_ENV = (
+    "PATH", "LANG", "LC_ALL", "LC_CTYPE", "TZ", "TERM",
+    # Windows: the interpreter and sockets fail to start without these.
+    "SYSTEMROOT", "SYSTEMDRIVE", "COMSPEC", "PATHEXT", "WINDIR",
+    "NUMBER_OF_PROCESSORS", "PROCESSOR_ARCHITECTURE",
+)
+
+
+def _program_env(folder):
+    """Minimal environment for a generated program run in `folder`."""
+    env = {k: os.environ[k] for k in _PASSTHROUGH_ENV if k in os.environ}
+    env.update(PYTHONIOENCODING="utf-8", HOME=folder, USERPROFILE=folder,
+               TMPDIR=folder, TEMP=folder, TMP=folder)
+    return env
+
+
+def _kill_tree(proc):
+    """Kill the program and anything it started (best effort)."""
+    try:
+        if os.name == "nt":
+            subprocess.run(["taskkill", "/F", "/T", "/PID", str(proc.pid)],
+                           stdout=subprocess.DEVNULL,
+                           stderr=subprocess.DEVNULL, check=False)
+        else:
+            os.killpg(proc.pid, signal.SIGKILL)
+    except OSError:  # includes ProcessLookupError: already gone
+        pass
+    try:
+        proc.kill()
+    except OSError:
+        pass
+
+
 def run_program(code, args=(), timeout=DEFAULT_RUN_TIMEOUT):
     """Run `code` as program.py in a new temporary folder and clean up.
 
@@ -77,16 +117,26 @@ def run_program(code, args=(), timeout=DEFAULT_RUN_TIMEOUT):
         with open(path, "w", encoding="utf-8") as f:
             f.write(code)
         start = time.monotonic()
-        try:
-            proc = subprocess.run(
+        # Its own process group/session, so a timeout can kill everything
+        # the program spawned, not just the program itself.
+        group = ({"creationflags": getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)}
+                 if os.name == "nt" else {"start_new_session": True})
+        with subprocess.Popen(
                 [sys.executable, path, *args], cwd=folder,
                 stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT, timeout=timeout, check=False,
-                env=dict(os.environ, PYTHONIOENCODING="utf-8"))
-            status = "ok" if proc.returncode == 0 else "failed"
-            exit_code, output = proc.returncode, _as_text(proc.stdout)
-        except subprocess.TimeoutExpired as e:
-            status, exit_code, output = "timeout", None, _as_text(e.output)
+                stderr=subprocess.STDOUT, env=_program_env(folder),
+                **group) as proc:
+            try:
+                out, _ = proc.communicate(timeout=timeout)
+                status = "ok" if proc.returncode == 0 else "failed"
+                exit_code, output = proc.returncode, _as_text(out)
+            except subprocess.TimeoutExpired:
+                _kill_tree(proc)
+                try:
+                    out, _ = proc.communicate(timeout=5)
+                except subprocess.TimeoutExpired:
+                    out = b""
+                status, exit_code, output = "timeout", None, _as_text(out)
         seconds = time.monotonic() - start
     finally:
         # Best-effort: on Windows a lingering child can hold a file open.

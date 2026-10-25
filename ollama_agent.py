@@ -130,11 +130,13 @@ def resolve_path(output_dir, rel_path):
 
     Returns None for absolute paths, ".." escapes, or anything that would
     land outside the project directory -- those writes are refused.
+    Symlinks are resolved first, so a link inside the project that points
+    elsewhere cannot be used to write outside it.
     """
     if os.path.isabs(rel_path):
         return None
-    base = os.path.abspath(output_dir)
-    target = os.path.abspath(os.path.join(base, rel_path))
+    base = os.path.realpath(output_dir)
+    target = os.path.realpath(os.path.join(base, rel_path))
     if target != base and target.startswith(base + os.sep):
         return target
     return None

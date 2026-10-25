@@ -353,6 +353,8 @@ The exit code and output (the last 2000 characters) go into the log, and both sp
 
 **This is not a sandbox.** The program runs with your user account's permissions and can read and write files and use the network, like any script you run yourself. Turn it on only for scenarios whose output you're comfortable running, ideally on a machine or account with nothing sensitive on it.
 
+Two safeguards narrow the risk. The program gets only the handful of environment variables Python needs to start (such as `PATH`), so API keys and tokens in your shell are not passed to it, and `HOME` points at its temporary folder rather than yours. When the time limit is reached, everything the program started is stopped too, not just the program itself. Neither safeguard stops it from reading files your account can read.
+
 ### Machine profiles
 
 A machine profile adapts any scenario to one machine without copying it: it swaps the two participants' models by position and forces a few generation settings, while the topic, personas and prompts stay as they are. Profiles live in `profiles/`; pass one with `--profile`:
@@ -609,3 +611,7 @@ is using the same display.
 No check runs without explicit selection. When both are selected, a failure
 in one still allows the other to run. Exit status is 0 when all selected
 checks pass, 1 for a failed check, and 2 for invalid arguments.
+
+## License
+
+MIT. See [LICENSE](LICENSE).

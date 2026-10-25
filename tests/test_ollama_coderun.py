@@ -5,7 +5,10 @@ These run real (tiny) Python programs in temporary folders.
 
 import os
 import sys
+import tempfile
+import time
 import unittest
+from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -84,6 +87,31 @@ class RunProgramTests(unittest.TestCase):
         self.assertLessEqual(len(r["output"]), cr.MAX_OUTPUT_CHARS + 50)
         self.assertIn("line 4999", r["output"])
         self.assertTrue(r["output"].startswith("...(earlier output cut)..."))
+
+    def test_secrets_in_the_environment_are_not_passed_on(self):
+        with mock.patch.dict(os.environ, {"DUEL_TEST_SECRET": "hunter2"}):
+            r = cr.run_program("import os\nprint(os.environ.get('DUEL_TEST_SECRET'))")
+        self.assertEqual(r["status"], "ok")
+        self.assertIn("None", r["output"])
+        self.assertNotIn("hunter2", r["output"])
+
+    def test_home_points_at_the_throwaway_folder(self):
+        r = cr.run_program("import os\nprint(os.path.expanduser('~') == os.getcwd())")
+        self.assertIn("True", r["output"])
+
+    def test_timeout_also_kills_spawned_processes(self):
+        with tempfile.TemporaryDirectory() as d:
+            marker = os.path.join(d, "survived.txt")
+            child = ("import time\ntime.sleep(3)\n"
+                     f"open({marker!r}, 'w').close()\n")
+            code = ("import subprocess, sys, time\n"
+                    f"subprocess.Popen([sys.executable, '-c', {child!r}])\n"
+                    "time.sleep(30)\n")
+            r = cr.run_program(code, timeout=1)
+            self.assertEqual(r["status"], "timeout")
+            time.sleep(4)
+            self.assertFalse(os.path.exists(marker),
+                             "a process started by the program outlived the timeout")
 
 
 class ReportTests(unittest.TestCase):

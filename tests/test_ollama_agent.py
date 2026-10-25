@@ -46,7 +46,7 @@ class ResolvePathTests(unittest.TestCase):
     def test_simple_relative_ok(self):
         with tempfile.TemporaryDirectory() as d:
             target = ollama_agent.resolve_path(d, "hello.py")
-            self.assertEqual(target, os.path.join(os.path.abspath(d), "hello.py"))
+            self.assertEqual(target, os.path.join(os.path.realpath(d), "hello.py"))
 
     def test_nested_relative_ok(self):
         with tempfile.TemporaryDirectory() as d:
@@ -64,6 +64,16 @@ class ResolvePathTests(unittest.TestCase):
     def test_absolute_path_rejected(self):
         with tempfile.TemporaryDirectory() as d:
             self.assertIsNone(ollama_agent.resolve_path(d, "/tmp/evil.py"))
+
+    @unittest.skipUnless(hasattr(os, "symlink"), "needs symlinks")
+    def test_symlink_escape_rejected(self):
+        with tempfile.TemporaryDirectory() as d, tempfile.TemporaryDirectory() as outside:
+            link = os.path.join(d, "link")
+            try:
+                os.symlink(outside, link, target_is_directory=True)
+            except (OSError, NotImplementedError):
+                self.skipTest("symlinks not permitted here")
+            self.assertIsNone(ollama_agent.resolve_path(d, "link/evil.py"))
 
 
 class WriteFilesTests(unittest.TestCase):
