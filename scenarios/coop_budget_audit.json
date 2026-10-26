@@ -1,0 +1,37 @@
+{
+ "host": "http://localhost:11434",
+ "log_file": "logs/coop_budget_audit.log",
+ "max_tokens": 1200,
+ "num_ctx": 8192,
+ "think": false,
+ "temperature": 0.5,
+ "turns": 8,
+ "tags": [
+  "roleplay",
+  "fresh"
+ ],
+ "run_code": false,
+ "topic": "Together AUDIT one shared expense budget and produce ONE corrected budget. The submitted table reads: Venue hire $240; Catering 30 people x $9 = $270; Printing $85; Supplies $63 + $47 = $100; Transport 4 trips x $18 = $80; Insurance $95; stated subtotal $870; contingency 10% of subtotal = $87; stated total $957, against a hard budget cap of $950, so the submission claims to be under cap. Do not trust any stated line, subtotal or total: recompute everything. The Auditor takes the first three lines, the Checker the last three, and you must agree the corrected subtotal, contingency and total between you before finishing. The final reply is authoritative: every line with its corrected value, a list of each error found and what it should have been, the corrected subtotal, contingency and total, and a clear verdict on the $950 cap.",
+ "models": [
+  {
+   "model": "qwen3:4b",
+   "name": "Auditor",
+   "system": "You are the Auditor re-checking a submitted budget with a Checker. Your half: venue hire, catering, printing. Recompute each line from its own inputs (for catering, 30 people x $9), publish your corrected figures plainly, and do not accept the stated subtotal or total until both halves are recomputed. Keep every reply under 150 words: state figures and lists directly, do the arithmetic silently and give results only \u2014 never narrate your working or re-read the problem aloud. Every reply must end with a one-line contribution ledger: what you added or corrected this turn, in your own words. Never claim the other participant agreed when they did not, and do not abandon your assigned half of the facts \u2014 your partner does not have them. FORMAT \u2014 this overrides everything above: your reply may contain ONLY (1) short lines, one fact, figure or draft item per line, and (2) the closing ledger line. No sentences of explanation, no thinking aloud, no re-reading the problem back. Do all arithmetic silently before you write and state results only.",
+   "first_turn_prompt": "Publish your recomputed figures for your three lines and state what the subtotal cannot be settled until your partner's half is checked.",
+   "turn_prompt": "Combine {other}'s corrected lines with yours, recompute subtotal, 10% contingency and total from scratch, and publish the updated corrected budget."
+  },
+  {
+   "model": "qwen3:4b",
+   "name": "Checker",
+   "system": "You are the Checker re-checking a submitted budget with an Auditor. Your half: supplies, transport, insurance. Recompute each line from its own inputs (supplies $63 + $47; transport 4 trips x $18), publish your corrected figures plainly, and challenge any stated figure that does not survive recomputation, including the claim that the budget is under its $950 cap. Keep every reply under 150 words: state figures and lists directly, do the arithmetic silently and give results only \u2014 never narrate your working or re-read the problem aloud. Every reply must end with a one-line contribution ledger: what you added or corrected this turn, in your own words. Never claim the other participant agreed when they did not, and do not abandon your assigned half of the facts \u2014 your partner does not have them. FORMAT \u2014 this overrides everything above: your reply may contain ONLY (1) short lines, one fact, figure or draft item per line, and (2) the closing ledger line. No sentences of explanation, no thinking aloud, no re-reading the problem back. Do all arithmetic silently before you write and state results only.",
+   "first_turn_prompt": "Publish your recomputed figures for your three lines and flag anything in the submitted table that already looks wrong.",
+   "turn_prompt": "Audit {other}'s combined budget, recompute subtotal, contingency and total independently, then publish the complete corrected budget. Treat this as the authoritative version if the conversation ends here."
+  }
+ ],
+ "judge": {
+  "model": "qwen3:4b",
+  "prompt": "Evaluate the final corrected budget against the exact requirements in this topic: {topic}. The submitted table contains these errors: supplies $63 + $47 = $110, not $100; transport 4 x $18 = $72, not $80; venue $240, catering $270 and printing $85 and insurance $95 are correct. Corrected subtotal is $872, not $870; correct contingency is $87.20, not $87; correct total is $959.20, not $957 \u2014 so the budget is OVER its $950 cap by $9.20, the opposite of the submission's claim. Score artifact correctness 0-10 and collaboration 0-10, and report how many of the errors the pair caught (two line errors, plus the derived subtotal, contingency, total and cap verdict). From the contribution ledgers, report whether the work was genuinely shared or whether one participant merely agreed (subordinate collapse). End with exactly WINNER: draw.",
+  "max_tokens": 600,
+  "temperature": 0.2
+ }
+}

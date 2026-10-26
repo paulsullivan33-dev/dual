@@ -1,0 +1,37 @@
+{
+ "host": "http://localhost:11434",
+ "log_file": "logs/coop_packing_manifest.log",
+ "max_tokens": 1200,
+ "num_ctx": 8192,
+ "think": false,
+ "temperature": 0.5,
+ "turns": 8,
+ "tags": [
+  "roleplay",
+  "fresh"
+ ],
+ "run_code": false,
+ "topic": "Together produce ONE packing manifest for a hiking group's shared emergency kit. Required quantities are exact: 4 water pouches, 6 energy bars, 2 foil blankets, 1 whistle, 1 first-aid pouch, 2 headlamps, 1 paracord bundle, 2 rain ponchos. Limits: total weight at most 5000 g and total cost at most $90. Catalog facts are split: the Planner holds the first four items' weights and prices, the Checker holds the last four items'. Neither of you has the full catalog, so the manifest is impossible without pooling both halves. The final reply is the authoritative manifest: every item with quantity, unit weight, line weight, unit price, line cost, plus total weight, total cost, and a pass/fail line for the weight and cost limits.",
+ "models": [
+  {
+   "model": "qwen3:4b",
+   "name": "Planner",
+   "system": "You are the Planner assembling a shared emergency-kit manifest with a Checker. Your catalog half: water pouch 250 g, $3 each; energy bar 60 g, $1.50 each; foil blanket 120 g, $6 each; whistle 20 g, $2 each. Publish these facts plainly so your partner can use them, build the manifest from both halves, and check the arithmetic. Keep every reply under 150 words: state figures and lists directly, do the arithmetic silently and give results only \u2014 never narrate your working or re-read the problem aloud. Every reply must end with a one-line contribution ledger: what you added or corrected this turn, in your own words. Never claim the other participant agreed when they did not, and do not abandon your assigned half of the facts \u2014 your partner does not have them. FORMAT \u2014 this overrides everything above: your reply may contain ONLY (1) short lines, one fact, figure or draft item per line, and (2) the closing ledger line. No sentences of explanation, no thinking aloud, no re-reading the problem back. Do all arithmetic silently before you write and state results only.",
+   "first_turn_prompt": "Publish your catalog half, then draft the manifest lines for the items you can already price and weigh, leaving clear slots for the Checker's half.",
+   "turn_prompt": "Fold in {other}'s catalog facts and corrections, and publish the updated complete manifest with line and total weights and costs."
+  },
+  {
+   "model": "qwen3:4b",
+   "name": "Checker",
+   "system": "You are the Checker completing a shared emergency-kit manifest with a Planner. Your catalog half: first-aid pouch 300 g, $12 each; headlamp 90 g, $9 each; paracord bundle 150 g, $5 each; rain poncho 180 g, $7 each. Publish these facts plainly, independently verify every line and total in the Planner's draft, and correct mistakes directly rather than merely criticising. Keep every reply under 150 words: state figures and lists directly, do the arithmetic silently and give results only \u2014 never narrate your working or re-read the problem aloud. Every reply must end with a one-line contribution ledger: what you added or corrected this turn, in your own words. Never claim the other participant agreed when they did not, and do not abandon your assigned half of the facts \u2014 your partner does not have them. FORMAT \u2014 this overrides everything above: your reply may contain ONLY (1) short lines, one fact, figure or draft item per line, and (2) the closing ledger line. No sentences of explanation, no thinking aloud, no re-reading the problem back. Do all arithmetic silently before you write and state results only.",
+   "first_turn_prompt": "Publish your catalog half and state exactly which lines of the manifest you can already verify or complete.",
+   "turn_prompt": "Audit {other}'s manifest line by line, correct any error, then publish the complete consolidated manifest. Treat this as the authoritative version if the conversation ends here."
+  }
+ ],
+ "judge": {
+  "model": "qwen3:4b",
+  "prompt": "Evaluate the final manifest against the exact requirements in this topic: {topic}. Verify the arithmetic independently \u2014 the correct manifest is: water 4x250 g/$3 = 1000 g/$12; bars 6x60 g/$1.50 = 360 g/$9; blankets 2x120 g/$6 = 240 g/$12; whistle 1x20 g/$2 = 20 g/$2; first-aid 1x300 g/$12 = 300 g/$12; headlamps 2x90 g/$9 = 180 g/$18; paracord 1x150 g/$5 = 150 g/$5; ponchos 2x180 g/$7 = 360 g/$14. Totals: 2610 g and $84, within both limits. Score artifact correctness 0-10 and collaboration 0-10. From the contribution ledgers, report whether the work was genuinely shared or whether one participant merely agreed with the other (subordinate collapse). Name every wrong or missing line; do not reward confident unsupported claims. End with exactly WINNER: draw.",
+  "max_tokens": 600,
+  "temperature": 0.2
+ }
+}

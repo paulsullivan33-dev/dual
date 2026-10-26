@@ -1,0 +1,37 @@
+{
+ "host": "http://localhost:11434",
+ "log_file": "logs/coop_day_itinerary.log",
+ "max_tokens": 1200,
+ "num_ctx": 8192,
+ "think": false,
+ "temperature": 0.5,
+ "turns": 8,
+ "tags": [
+  "roleplay",
+  "fresh"
+ ],
+ "run_code": false,
+ "topic": "Together produce ONE timed itinerary for a single day in a fictional city, starting at the hotel at 09:00 and back at the hotel by 18:00. Four visits are required: the Museum, the Market, the Library exhibition and the Tower (the Garden is optional). Every move between places takes exactly 30 minutes, including leaving the hotel and returning. Lunch takes exactly 1 hour and must fall between 12:00 and 14:00. Visit facts are split: the Planner knows the Museum and Market hours and durations; the Checker knows the Library and Tower hours and durations. The final reply is the authoritative itinerary: a timed schedule from 09:00 to return, with every visit inside its opening hours, every move shown as 30 minutes, and a pass/fail checklist for the four required visits, lunch window and the 18:00 return.",
+ "models": [
+  {
+   "model": "qwen3:4b",
+   "name": "Planner",
+   "system": "You are the Planner drafting a one-day city itinerary with a Checker. Facts you hold: Museum open 09:00-13:00, visit takes 2 hours; Market open 10:00-16:00, visit takes 1 hour. Publish these facts plainly, draft the parts of the day they determine, and leave clear slots for the visits whose facts you do not hold. Keep every reply under 150 words: state figures and lists directly, do the arithmetic silently and give results only \u2014 never narrate your working or re-read the problem aloud. Every reply must end with a one-line contribution ledger: what you added or corrected this turn, in your own words. Never claim the other participant agreed when they did not, and do not abandon your assigned half of the facts \u2014 your partner does not have them. FORMAT \u2014 this overrides everything above: your reply may contain ONLY (1) short lines, one fact, figure or draft item per line, and (2) the closing ledger line. No sentences of explanation, no thinking aloud, no re-reading the problem back. Do all arithmetic silently before you write and state results only.",
+   "first_turn_prompt": "Publish your venue facts, then draft a timed skeleton for the morning and midday, marking where the Checker's venues must fit.",
+   "turn_prompt": "Fold in {other}'s venue facts and corrections and publish the updated complete timed itinerary with the pass/fail checklist."
+  },
+  {
+   "model": "qwen3:4b",
+   "name": "Checker",
+   "system": "You are the Checker completing a one-day city itinerary with a Planner. Facts you hold: Library exhibition open 09:00-12:00 and 14:00-17:00, visit takes 1 hour; Tower open 13:00-18:00, visit takes 1 hour. Publish these facts plainly, verify every proposed time against opening hours and the 30-minute move rule, and fix violations directly rather than merely criticising. Keep every reply under 150 words: state figures and lists directly, do the arithmetic silently and give results only \u2014 never narrate your working or re-read the problem aloud. Every reply must end with a one-line contribution ledger: what you added or corrected this turn, in your own words. Never claim the other participant agreed when they did not, and do not abandon your assigned half of the facts \u2014 your partner does not have them. FORMAT \u2014 this overrides everything above: your reply may contain ONLY (1) short lines, one fact, figure or draft item per line, and (2) the closing ledger line. No sentences of explanation, no thinking aloud, no re-reading the problem back. Do all arithmetic silently before you write and state results only.",
+   "first_turn_prompt": "Publish your venue facts and state which parts of the day they constrain (especially the Library's midday closure and the Tower's 13:00 opening).",
+   "turn_prompt": "Audit {other}'s itinerary time by time, correct any violation, then publish the complete consolidated itinerary. Treat this as the authoritative version if the conversation ends here."
+  }
+ ],
+ "judge": {
+  "model": "qwen3:4b",
+  "prompt": "Evaluate the final itinerary against the exact requirements in this topic: {topic}. Verify independently: Museum 09:00-13:00/2 h, Market 10:00-16:00/1 h, Library 09:00-12:00 and 14:00-17:00/1 h, Tower 13:00-18:00/1 h, every move exactly 30 minutes, lunch exactly 1 hour within 12:00-14:00, return by 18:00. One valid schedule is: leave 09:00, Museum 09:30-11:30, move, Market 12:00-13:00, lunch 13:00-14:00, move, Library 14:30-15:30, move, Tower 16:00-17:00, move, hotel 17:30. Other schedules are acceptable only if they satisfy every constraint. Score artifact correctness 0-10 and collaboration 0-10. From the contribution ledgers, report whether the work was genuinely shared or whether one participant merely agreed (subordinate collapse). Name every violated constraint; do not reward confident unsupported claims. End with exactly WINNER: draw.",
+  "max_tokens": 600,
+  "temperature": 0.2
+ }
+}

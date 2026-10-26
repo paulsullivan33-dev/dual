@@ -1,0 +1,37 @@
+{
+ "host": "http://localhost:11434",
+ "log_file": "logs/coop_closing_protocol.log",
+ "max_tokens": 1200,
+ "num_ctx": 8192,
+ "think": false,
+ "temperature": 0.5,
+ "turns": 8,
+ "tags": [
+  "roleplay",
+  "fresh"
+ ],
+ "run_code": false,
+ "topic": "Together produce ONE ordered closing checklist for a community workshop space: ten steps, in a single sequence, that respects every ordering rule. The steps are split: the Closer holds steps A, C, E, G and I with their rules; the Checker holds steps B, D, F, H and J with theirs. Neither of you can order the full list alone. The final reply is the authoritative checklist: all ten steps numbered in order, followed by a pass/fail check of every ordering rule named by either participant.",
+ "models": [
+  {
+   "model": "qwen3:4b",
+   "name": "Closer",
+   "system": "You are the Closer assembling a ten-step closing checklist with a Checker. Your steps and rules: A Photograph the whiteboard; C Switch off the heater, which must come before the final walkthrough; E Lock the tool cage, which must come before the alarm is set; G Set the alarm, which must come after the tool cage is locked and after the final walkthrough, and before the front door is locked; I Sign the closing log, which must come after the front door is locked. Publish these plainly and draft the partial order they determine. Keep every reply under 150 words: state figures and lists directly, do the arithmetic silently and give results only \u2014 never narrate your working or re-read the problem aloud. Every reply must end with a one-line contribution ledger: what you added or corrected this turn, in your own words. Never claim the other participant agreed when they did not, and do not abandon your assigned half of the facts \u2014 your partner does not have them. FORMAT \u2014 this overrides everything above: your reply may contain ONLY (1) short lines, one fact, figure or draft item per line, and (2) the closing ledger line. No sentences of explanation, no thinking aloud, no re-reading the problem back. Do all arithmetic silently before you write and state results only.",
+   "first_turn_prompt": "Publish your five steps and their ordering rules, and draft the partial sequence they force, marking where the Checker's steps must slot in.",
+   "turn_prompt": "Fold in {other}'s steps and rules and publish the updated complete numbered checklist with the rule-by-rule pass/fail check."
+  },
+  {
+   "model": "qwen3:4b",
+   "name": "Checker",
+   "system": "You are the Checker completing a ten-step closing checklist with a Closer. Your steps and rules: B Erase the whiteboard, which must come after it is photographed; D Empty the bins, which must come before the final walkthrough; F Do the final walkthrough, which must come after the heater is off and the bins are emptied, and before the alarm is set; H Lock the front door, which must come after the alarm is set; J Text the keyholder 'closed', which must come after the closing log is signed. Publish these plainly and check any proposed order against every rule, fixing violations directly. Keep every reply under 150 words: state figures and lists directly, do the arithmetic silently and give results only \u2014 never narrate your working or re-read the problem aloud. Every reply must end with a one-line contribution ledger: what you added or corrected this turn, in your own words. Never claim the other participant agreed when they did not, and do not abandon your assigned half of the facts \u2014 your partner does not have them. FORMAT \u2014 this overrides everything above: your reply may contain ONLY (1) short lines, one fact, figure or draft item per line, and (2) the closing ledger line. No sentences of explanation, no thinking aloud, no re-reading the problem back. Do all arithmetic silently before you write and state results only.",
+   "first_turn_prompt": "Publish your five steps and their ordering rules, and state which of the Closer's partial orderings your rules confirm or rule out.",
+   "turn_prompt": "Audit {other}'s checklist against every ordering rule from both halves, fix any violation, then publish the complete consolidated checklist. Treat this as the authoritative version if the conversation ends here."
+  }
+ ],
+ "judge": {
+  "model": "qwen3:4b",
+  "prompt": "Evaluate the final checklist against the exact requirements in this topic: {topic}. Verify every precedence rule: B after A; C before F; D before F; F after C and D and before G; E before G; G after E and F and before H; H after G; I after H; J after I. One valid order is A, B, C, D, E, F, G, H, I, J \u2014 any order satisfying all ten rules is acceptable. Score artifact correctness 0-10 and collaboration 0-10. From the contribution ledgers, report whether the work was genuinely shared or whether one participant merely agreed (subordinate collapse). Name every violated rule; do not reward confident unsupported claims. End with exactly WINNER: draw.",
+  "max_tokens": 600,
+  "temperature": 0.2
+ }
+}

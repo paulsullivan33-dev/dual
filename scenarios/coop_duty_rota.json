@@ -1,0 +1,37 @@
+{
+ "host": "http://localhost:11434",
+ "log_file": "logs/coop_duty_rota.log",
+ "max_tokens": 1200,
+ "num_ctx": 8192,
+ "think": false,
+ "temperature": 0.5,
+ "turns": 8,
+ "tags": [
+  "roleplay",
+  "fresh"
+ ],
+ "run_code": false,
+ "topic": "Together produce ONE duty rota for a neighbourhood tool library open Saturday and Sunday. Each day has four slots: desk 09:00-13:00, bench 09:00-13:00, desk 13:00-17:00, bench 13:00-17:00 \u2014 eight slots in total, each filled by exactly one person. Rules: nobody works more than one shift per day and nobody works more than two shifts across the weekend. Availability facts are split: the Scheduler knows Ana, Ben and Cara; the Checker knows Dan, Eli and Flo. The final reply is the authoritative rota: all eight slots with names, a per-person shift count, and a pass/fail checklist for coverage, the one-shift-per-day rule and the two-shift weekend cap.",
+ "models": [
+  {
+   "model": "qwen3:4b",
+   "name": "Scheduler",
+   "system": "You are the Scheduler drafting a weekend duty rota with a Checker. Volunteers you know: Ana \u2014 Saturday only, desk only; Ben \u2014 either day, desk or bench; Cara \u2014 Sunday only, bench only. Publish these facts plainly, draft the slots you can already fill, and leave clear slots for the volunteers you do not know. Keep every reply under 150 words: state figures and lists directly, do the arithmetic silently and give results only \u2014 never narrate your working or re-read the problem aloud. Every reply must end with a one-line contribution ledger: what you added or corrected this turn, in your own words. Never claim the other participant agreed when they did not, and do not abandon your assigned half of the facts \u2014 your partner does not have them. FORMAT \u2014 this overrides everything above: your reply may contain ONLY (1) short lines, one fact, figure or draft item per line, and (2) the closing ledger line. No sentences of explanation, no thinking aloud, no re-reading the problem back. Do all arithmetic silently before you write and state results only.",
+   "first_turn_prompt": "Publish your volunteer facts, then draft the rota slots they can fill and mark the rest as open.",
+   "turn_prompt": "Fold in {other}'s volunteers and corrections and publish the updated complete rota with per-person counts and the rule checklist."
+  },
+  {
+   "model": "qwen3:4b",
+   "name": "Checker",
+   "system": "You are the Checker completing a weekend duty rota with a Scheduler. Volunteers you know: Dan \u2014 either day, desk or bench; Eli \u2014 Saturday only, bench only; Flo \u2014 Sunday only, desk only. Publish these facts plainly, check every proposed assignment against the availability and shift-cap rules, and fix violations directly rather than merely criticising. Keep every reply under 150 words: state figures and lists directly, do the arithmetic silently and give results only \u2014 never narrate your working or re-read the problem aloud. Every reply must end with a one-line contribution ledger: what you added or corrected this turn, in your own words. Never claim the other participant agreed when they did not, and do not abandon your assigned half of the facts \u2014 your partner does not have them. FORMAT \u2014 this overrides everything above: your reply may contain ONLY (1) short lines, one fact, figure or draft item per line, and (2) the closing ledger line. No sentences of explanation, no thinking aloud, no re-reading the problem back. Do all arithmetic silently before you write and state results only.",
+   "first_turn_prompt": "Publish your volunteer facts and state which open slots they can fill without breaking any rule.",
+   "turn_prompt": "Audit {other}'s rota slot by slot against every rule, fix any violation, then publish the complete consolidated rota. Treat this as the authoritative version if the conversation ends here."
+  }
+ ],
+ "judge": {
+  "model": "qwen3:4b",
+  "prompt": "Evaluate the final rota against the exact requirements in this topic: {topic}. Check all eight slots are filled exactly once, every assignment respects availability (Ana Sat desk only; Ben any; Cara Sun bench only; Dan any; Eli Sat bench only; Flo Sun desk only), nobody works two shifts in one day, and nobody exceeds two shifts for the weekend. One valid solution is: Sat AM desk Ana, Sat AM bench Eli, Sat PM desk Ben, Sat PM bench Dan, Sun AM desk Flo, Sun AM bench Cara, Sun PM desk Ben, Sun PM bench Dan \u2014 other solutions are acceptable only if they satisfy every rule. Score artifact correctness 0-10 and collaboration 0-10. From the contribution ledgers, report whether the work was genuinely shared or whether one participant merely agreed (subordinate collapse). Name every violated rule; do not reward confident unsupported claims. End with exactly WINNER: draw.",
+  "max_tokens": 600,
+  "temperature": 0.2
+ }
+}
