@@ -1,7 +1,7 @@
 {
  "host": "http://localhost:11434",
  "log_file": "logs/coop_duty_rota.log",
- "max_tokens": 1200,
+ "max_tokens": 3000,
  "num_ctx": 8192,
  "think": false,
  "temperature": 0.5,
