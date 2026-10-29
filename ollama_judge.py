@@ -69,13 +69,20 @@ def judge_context_window(judge, messages):
     """Budget ~4 characters/token, message overhead, 20% input margin,
     and the full configured output allowance. Explicit num_ctx stays fixed.
     This estimate is a safeguard, not an exact model tokenizer.
+
+    Without an explicit num_ctx the window grows along a ladder --
+    8192, 16384, 32768, 65536 -- to the smallest size that fits, so a
+    long transcript is judged at a larger window instead of skipped.
+    The ladder is a ceiling, not an open end: past 65536 the request
+    is refused, because the KV cache a window costs grows with it and
+    the judge often shares a modest host.
     """
     chars = sum(len(message["content"]) for message in messages)
     estimated_input = (chars + 3) // 4 + 16 * len(messages)
     required = estimated_input + (estimated_input + 4) // 5
     required += judge.get("max_tokens") or 500
     explicit = judge.get("num_ctx")
-    windows = (explicit,) if explicit else (8192, 16384)
+    windows = (explicit,) if explicit else (8192, 16384, 32768, 65536)
     for window in windows:
         if required <= window:
             return window, required
@@ -290,6 +297,43 @@ def parse_fidelity(text, participants):
     return ruling
 
 
+def _judge_call(host, judge, messages, timeout, call_chat, label):
+    """Make one judge request and return (reply, num_ctx, required)
+    for the attempt that produced the reply.
+
+    A judge that stops on the reply limit (done_reason "length") has
+    not finished: its verdict is cut off mid-thought, and a truncated
+    verdict used to be filed as-is. So a truncated reply is retried
+    exactly once, at double the reply budget, with the context window
+    re-sized for the larger allowance. The retry is printed, and the
+    returned sizing pair describes the final attempt, so the log and
+    the run summary record what actually judged the duel. A second
+    truncation stands -- the retry is bounded, never a loop.
+
+    Raises JudgeContextExceeded before any request when no window
+    fits, and OllamaError when the host call fails; callers decide
+    whether those are fatal.
+    """
+    budget = judge.get("max_tokens") or 500
+    for attempt in (1, 2):
+        num_ctx, required = judge_context_window(
+            dict(judge, max_tokens=budget), messages)
+        print(f"{label} context: {num_ctx} tokens; estimated budget "
+              f"{required} including reply allowance and safety margin.")
+        options = {"num_predict": budget,
+                   "temperature": judge.get("temperature", 0.2),
+                   "num_ctx": num_ctx}
+        _thinking, reply, done_reason, _metrics = call_chat(
+            host, judge["model"], messages, judge.get("think", False),
+            options, timeout=timeout)
+        if done_reason != "length" or attempt == 2:
+            return reply, num_ctx, required
+        print(f"{label} stopped at the {budget}-token reply limit "
+              f"mid-reply; retrying once with {budget * 2} tokens.")
+        budget *= 2
+    raise RuntimeError("judge call loop ended without a reply")
+
+
 def _run_fidelity_audit(host, judge, topic, participants, transcript,
                         timeout, call_chat):
     """The first of the two judge calls, made only when the scenario
@@ -301,21 +345,13 @@ def _run_fidelity_audit(host, judge, topic, participants, transcript,
     as it did before the audit existed."""
     messages = build_audit_messages(topic, participants, transcript)
     try:
-        num_ctx, required = judge_context_window(judge, messages)
+        reply, _num_ctx, _required = _judge_call(
+            host, judge, messages, timeout, call_chat, "Fidelity audit")
     except JudgeContextExceeded:
         print("Fidelity audit skipped: its estimated budget exceeds "
               "the judge context window; the scoring judge will rule "
               "on fidelity itself.", file=sys.stderr)
         return None
-    print(f"Fidelity audit context: {num_ctx} tokens; estimated budget "
-          f"{required} including reply allowance and safety margin.")
-    options = {"num_predict": judge.get("max_tokens") or 500,
-               "temperature": judge.get("temperature", 0.2),
-               "num_ctx": num_ctx}
-    try:
-        _thinking, reply, _done_reason, _metrics = call_chat(
-            host, judge["model"], messages, judge.get("think", False),
-            options, timeout=timeout)
     except OllamaError as exc:
         print(f"Fidelity audit failed ({exc}); the scoring judge will "
               "rule on fidelity itself.", file=sys.stderr)
@@ -341,10 +377,16 @@ def run_judge(host, judge, topic, participants, transcript, timeout,
     Raises OllamaError when the judge call fails -- the caller decides
     whether that is fatal (it shouldn't be).
 
-    Defaults: temperature 0.2; automatically choose 8192 or 16384 context
-    tokens. An explicit num_ctx is honored as a fixed window. Raises
-    JudgeContextExceeded before any request if the estimated budget cannot
-    fit. The caller reports the skipped judge without failing the duel.
+    Defaults: temperature 0.2; the context window auto-sizes along a
+    ladder (8192, 16384, 32768, 65536) to the smallest window that
+    fits. An explicit num_ctx is honored as a fixed window. Raises
+    JudgeContextExceeded before any request if the estimated budget
+    cannot fit. The caller reports the skipped judge without failing
+    the duel.
+
+    Both judge calls (the fidelity audit and this scoring call) are
+    retried once at double the reply budget when the model stops on
+    the reply limit instead of finishing -- see _judge_call.
 
     Two calls when the scenario assigned briefs: a fidelity audit
     rules HELD/CROSSED for each participant first, and that ruling is
@@ -358,15 +400,8 @@ def run_judge(host, judge, topic, participants, transcript, timeout,
                                        transcript, timeout, call_chat)
     messages = build_judge_messages(judge, topic, participants, transcript,
                                     run_reports, fidelity=fidelity)
-    num_ctx, required = judge_context_window(judge, messages)
-    print(f"Judge context: {num_ctx} tokens; estimated budget {required} "
-          "including reply allowance and safety margin.")
-    options = {"num_predict": judge.get("max_tokens") or 500,
-               "temperature": judge.get("temperature", 0.2),
-               "num_ctx": num_ctx}
-    _thinking, reply, _done_reason, _metrics = call_chat(
-        host, judge["model"], messages, judge.get("think", False), options,
-        timeout=timeout)
+    reply, num_ctx, required = _judge_call(
+        host, judge, messages, timeout, call_chat, "Judge")
     verdict = reply.strip()
     if fidelity:
         header = "\n".join(

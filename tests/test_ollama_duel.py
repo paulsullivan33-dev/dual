@@ -2203,7 +2203,7 @@ class JudgeWiringTests(unittest.TestCase):
     def test_oversized_judge_request_skips_without_failing_duel(self):
         calls, out = run_duel_capturing(
             minimal_config(turns=1, judge={"model": "judge-model",
-                                           "prompt": "x" * 60000}))
+                                           "prompt": "x" * 300000}))
         self.assertEqual(len(calls), 1)
         self.assertIn("JUDGE SKIPPED", out)
         self.assertIn("automatic cap", out)
@@ -2228,7 +2228,7 @@ class JudgeWiringTests(unittest.TestCase):
 
     def test_skipped_judge_is_noted_in_results_log(self):
         entry = self._run_with_results_log(minimal_config(
-            turns=1, judge={"model": "judge-model", "prompt": "x" * 60000}))
+            turns=1, judge={"model": "judge-model", "prompt": "x" * 300000}))
         self.assertIn("Judge: SKIPPED (judge-model @ ", entry)
         self.assertNotIn("Verdict:", entry)
 

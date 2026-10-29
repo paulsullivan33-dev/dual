@@ -417,13 +417,17 @@ not by what its author claimed.
 
 Before the request, Dual estimates the full judging input at about four
 characters per token plus message overhead, adds a 20% input margin, and
-reserves `max_tokens` (default 500) for the verdict. It chooses an 8192-token
-window, growing to 16384 only when needed. If the estimate exceeds that cap,
-it prints `JUDGE SKIPPED` and the duel completes without a verdict. An
-explicit judge `num_ctx` is a fixed window, including values above 16384;
+reserves `max_tokens` (default 500) for the verdict. It chooses the smallest
+window that fits from a ladder — 8192, 16384, 32768, 65536 — so a long
+transcript is judged at a larger window instead of skipped. If the estimate
+exceeds the top of the ladder, it prints `JUDGE SKIPPED` and the duel
+completes without a verdict. An explicit judge `num_ctx` is a fixed window;
 oversized requests are skipped rather than silently increasing it. The
 estimate is approximate, so a fit is not guaranteed. The selected window
-and estimated budget are printed before the judge call.
+and estimated budget are printed before the judge call. If the judge stops
+at the reply limit mid-verdict, the call is retried once at double the
+reply budget (the fidelity audit call gets the same retry); the retry and
+the final window and budget are printed with the verdict.
 
 ### Logs, summaries and transcripts
 

@@ -10,7 +10,9 @@ for a default judge (no explicit num_ctx, max_tokens default 500):
   8192   fits the small window
   16384  needs the large window (the OLD code would have run this at a
          fixed 8192 and silently truncated the transcript)
-  SKIP   exceeds even 16384: the judge is skipped loudly
+  32768+ the auto-sizer's ladder grows (32768, then 65536) for long
+         transcripts instead of skipping
+  SKIP   exceeds even 65536: the judge is skipped loudly
 
 It also flags, per transcript, whether the estimated judge input
 alone exceeded the old fixed window's usable input budget

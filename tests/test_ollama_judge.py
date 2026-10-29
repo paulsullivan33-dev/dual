@@ -290,6 +290,22 @@ class JudgeContextTests(unittest.TestCase):
         self.assertEqual(ollama_judge.judge_context_window(judge, messages),
                          (16384, 16384))
         messages[0]["content"] += "x"
+        # One char past 16384 no longer refuses: the ladder grows.
+        self.assertEqual(ollama_judge.judge_context_window(judge, messages)[0],
+                         32768)
+
+    def test_automatic_window_ladder_extends_to_65536(self):
+        judge = {"max_tokens": 500}
+        # ~18.5K required: past the old 16384 cap, fits the 32768 rung.
+        messages = [{"content": "x" * 60000}]
+        self.assertEqual(ollama_judge.judge_context_window(judge, messages)[0],
+                         32768)
+        # ~45.5K required: fits only the top rung.
+        messages = [{"content": "x" * 150000}]
+        self.assertEqual(ollama_judge.judge_context_window(judge, messages)[0],
+                         65536)
+        # ~90.5K required: past the ladder's ceiling -- still refused.
+        messages = [{"content": "x" * 300000}]
         with self.assertRaises(ollama_judge.JudgeContextExceeded):
             ollama_judge.judge_context_window(judge, messages)
 
@@ -311,8 +327,8 @@ class JudgeContextTests(unittest.TestCase):
     def test_instructions_and_code_reports_count_and_skip_before_request(self):
         call = mock.Mock()
         participants = [{"name": "A"}, {"name": "B"}]
-        for judge, reports in [({"model": "j", "prompt": "x" * 60000}, None),
-                               ({"model": "j"}, {0: "x" * 60000})]:
+        for judge, reports in [({"model": "j", "prompt": "x" * 300000}, None),
+                               ({"model": "j"}, {0: "x" * 300000})]:
             with self.subTest(judge=judge["model"], reports=reports is not None):
                 with self.assertRaises(ollama_judge.JudgeContextExceeded):
                     ollama_judge.run_judge(
@@ -451,6 +467,89 @@ class RunJudgeTests(unittest.TestCase):
         scoring = calls[1][1]["content"]
         self.assertIn("decided before any scoring", scoring)
         self.assertFalse(verdict.startswith("Fidelity audit:"))
+
+
+class JudgeRetryTests(unittest.TestCase):
+    """A judge reply cut off at the reply limit (done_reason "length")
+    is retried once at double the budget; a finished reply is not."""
+
+    PARTICIPANTS = [{"name": "A", "model": "m1"},
+                    {"name": "B", "model": "m2"}]
+    BRIEFED = [{"name": "A", "model": "m1", "system": "Brief for A."},
+               {"name": "B", "model": "m2", "system": "Brief for B."}]
+    AUDIT_REPLY = ("RULING: A CROSSED\n"
+                   "EVIDENCE: \"a argued b's side\"\n"
+                   "RULING: B HELD\n"
+                   "EVIDENCE: \"b held the line\"")
+
+    def test_truncated_verdict_retried_once_at_double_budget(self):
+        calls = []
+
+        def fake_call_chat(host, model, messages, think, options,
+                           timeout=None):
+            calls.append(options)
+            if len(calls) == 1:
+                return "", "Reasoning that never finis", "length", {}
+            return "", "Full verdict.\nWINNER: B", "stop", {}
+
+        verdict, num_ctx, _budget = ollama_judge.run_judge(
+            "http://x", {"model": "j", "max_tokens": 100}, "topic",
+            self.PARTICIPANTS, [(0, "hi")], 30, fake_call_chat)
+        self.assertEqual(verdict, "Full verdict.\nWINNER: B")
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(calls[0]["num_predict"], 100)
+        self.assertEqual(calls[1]["num_predict"], 200)
+        # The reported window is the final attempt's, not the first's.
+        self.assertEqual(num_ctx, calls[1]["num_ctx"])
+
+    def test_finished_verdict_is_not_retried(self):
+        calls = []
+
+        def fake_call_chat(host, model, messages, think, options,
+                           timeout=None):
+            calls.append(options)
+            return "", "Done.\nWINNER: draw", "stop", {}
+
+        ollama_judge.run_judge(
+            "http://x", {"model": "j"}, "topic", self.PARTICIPANTS,
+            [(0, "hi")], 30, fake_call_chat)
+        self.assertEqual(len(calls), 1)
+
+    def test_second_truncation_stands(self):
+        calls = []
+
+        def fake_call_chat(host, model, messages, think, options,
+                           timeout=None):
+            calls.append(options)
+            return "", f"attempt {len(calls)} cut off", "length", {}
+
+        verdict, _n, _b = ollama_judge.run_judge(
+            "http://x", {"model": "j", "max_tokens": 100}, "topic",
+            self.PARTICIPANTS, [(0, "hi")], 30, fake_call_chat)
+        # Bounded: exactly one retry, and its reply is what stands.
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(verdict, "attempt 2 cut off")
+
+    def test_truncated_audit_retried_then_scoring_uses_ruling(self):
+        calls = []
+
+        def fake_call_chat(host, model, messages, think, options,
+                           timeout=None):
+            calls.append((messages, options))
+            if "fidelity auditor" in messages[0]["content"]:
+                if len(calls) == 1:
+                    return "", "RULING: A CRO", "length", {}
+                return "", self.AUDIT_REPLY, "stop", {}
+            return "", "Scored.\nWINNER: B", "stop", {}
+
+        verdict, _n, _b = ollama_judge.run_judge(
+            "http://x", {"model": "j"}, "topic", self.BRIEFED,
+            [(0, "hi"), (1, "lo")], 30, fake_call_chat)
+        self.assertEqual(len(calls), 3)  # audit, audit retry, scoring
+        self.assertEqual(calls[0][1]["num_predict"], 500)   # the default
+        self.assertEqual(calls[1][1]["num_predict"], 1000)  # doubled
+        self.assertTrue(verdict.startswith("Fidelity audit: A CROSSED"))
+        self.assertIn("WINNER: B", verdict)
 
 
 if __name__ == "__main__":
