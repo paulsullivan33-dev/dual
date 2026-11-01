@@ -26,6 +26,17 @@ Usage:
       scenarios/colony_caretakers.json output/logs/20261017-....log
   python3 rejudge.py --model qwen3:14b --logs-dir output/logs-2026-10-17
   python3 rejudge.py --model qwen3:14b --dry-run SCENARIO.json TRANSCRIPT
+  python3 rejudge.py --model llama3.1:8b --audit-only SCENARIO.json T.log
+  python3 rejudge.py --model llama3.1:8b --swap-audit SCENARIO.json T.log
+
+Audit-only mode (--audit-only, or --swap-audit which implies it) runs
+just the fidelity audit -- no scoring call -- and writes a sibling
+<transcript stem>.audit-<model>.txt (or .audit-swap-<model>.txt),
+so the audit can be re-run on its own. --swap-audit presents the
+assigned briefs in reverse seat order: each name stays on its own
+brief, the transcript keeps its true turn order, and the rulings are
+recorded by name in true seat order, so the two arms of the
+audit-presentation control tally side by side.
 
 With --logs-dir, each *.log in the directory is matched to a scenario by
 filename (<timestamp>-<scenario>.log) under --scenarios-dir (default
@@ -42,9 +53,10 @@ import sys
 from datetime import datetime
 
 from ollama_common import OllamaError, call_chat
-from ollama_judge import (JudgeContextExceeded, build_judge_messages,
-                          judge_context_window, normalize_judge,
-                          parse_winner, run_judge)
+from ollama_judge import (JudgeContextExceeded, build_audit_messages,
+                          build_judge_messages, judge_context_window,
+                          normalize_judge, parse_winner,
+                          run_fidelity_audit, run_judge)
 
 TURN_HEADER_RE = re.compile(r"^\[(?P<model>.+?) as (?P<name>.+?)\]"
                             r"\s+\(turn \d+\)\s*$")
@@ -164,6 +176,12 @@ def rejudge_output_path(transcript_path, model):
     return f"{stem}.rejudge-{model_tag(model)}.txt"
 
 
+def reaudit_output_path(transcript_path, model, swap_order=False):
+    stem = os.path.splitext(transcript_path)[0]
+    arm = "audit-swap" if swap_order else "audit"
+    return f"{stem}.{arm}-{model_tag(model)}.txt"
+
+
 def rejudge_one(scenario_path, transcript_path, model, judge_host=None,
                 timeout=1800, dry_run=False, chat=call_chat):
     """Rejudge one transcript. Returns a status string:
@@ -225,6 +243,75 @@ def rejudge_one(scenario_path, transcript_path, model, judge_host=None,
     return "OK"
 
 
+def reaudit_one(scenario_path, transcript_path, model, judge_host=None,
+                timeout=1800, dry_run=False, swap_order=False,
+                chat=call_chat):
+    """Re-run only the fidelity audit for one transcript. Returns a
+    status string: "OK", "SKIPPED", "FAILED", "NO JUDGE" (scenario
+    has none), or "NO BRIEFS" (the scenario assigned none, so an
+    audit has nothing to rule on). Prints what it did; the ruling
+    lands in a sibling .txt file named for the arm that produced it,
+    with the rulings listed in true seat order."""
+    topic, participants, raw_judge = load_scenario(scenario_path)
+    if raw_judge is None:
+        print(f"{transcript_path}: scenario {scenario_path} has no "
+              f"judge configured -- nothing to re-run.")
+        return "NO JUDGE"
+    if not any(isinstance(p.get("system"), str) and p.get("system").strip()
+               for p in participants):
+        print(f"{transcript_path}: scenario {scenario_path} assigned "
+              f"no briefs -- a fidelity audit has nothing to rule on.")
+        return "NO BRIEFS"
+    judge = normalize_judge(raw_judge)
+    original_model = judge["model"]
+    judge["model"] = model
+    if judge_host:
+        judge["host"] = judge_host
+    host = judge.get("host") or "http://localhost:11434"
+    transcript, _reports = load_transcript(transcript_path, participants)
+    arm = "swapped" if swap_order else "normal"
+    if dry_run:
+        messages = build_audit_messages(topic, participants, transcript,
+                                        swap_order=swap_order)
+        try:
+            window, required = judge_context_window(judge, messages)
+        except JudgeContextExceeded as exc:
+            print(f"{transcript_path}: would SKIP ({exc})")
+            return "SKIPPED"
+        print(f"{transcript_path}: would audit ({arm} presentation) "
+              f"with {model} @ {host} (context {window}, est. budget "
+              f"{required}, {len(transcript)} replies)")
+        return "OK"
+    ruling = run_fidelity_audit(host, judge, topic, participants,
+                                transcript, timeout, chat,
+                                swap_order=swap_order)
+    if ruling is None:
+        print(f"{transcript_path}: FAILED ({model} @ {host}): the "
+              f"audit produced no ruling; see the note above.")
+        return "FAILED"
+    out_path = reaudit_output_path(transcript_path, model, swap_order)
+    lines = [
+        f"Reaudit of: {transcript_path}",
+        f"Scenario: {scenario_path}",
+        f"Judge: {model} @ {host} (original judge: {original_model})",
+        f"Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+        f"Audit presentation: {arm}",
+        "",
+        "=== Fidelity ruling (true seat order) ===",
+    ]
+    for seat, participant in enumerate(participants, start=1):
+        entry = ruling[participant["name"]]
+        lines.append(f"Seat {seat}: RULING: {participant['name']} "
+                     f"{entry['status']}")
+        if entry["evidence"]:
+            lines.append(f"EVIDENCE: {entry['evidence']}")
+    with open(out_path, "w", encoding="utf-8") as fh:
+        fh.write("\n".join(lines) + "\n")
+    print(f"{transcript_path}: audited ({arm} presentation) by "
+          f"{model} @ {host} -> {out_path}")
+    return "OK"
+
+
 def scenario_for_log(log_path, scenarios_dir):
     """Match a batch log filename to its scenario file, or None.
 
@@ -253,6 +340,14 @@ def main(argv=None):
     parser.add_argument("--dry-run", action="store_true",
                         help="build the judge request and report the "
                              "context window, but call nothing")
+    parser.add_argument("--audit-only", action="store_true",
+                        help="run only the fidelity audit, no scoring "
+                             "call, writing an .audit-<model>.txt file")
+    parser.add_argument("--swap-audit", action="store_true",
+                        help="audit-only with the assigned briefs "
+                             "presented in reverse seat order (the "
+                             "audit-presentation control); implies "
+                             "--audit-only")
     parser.add_argument("--logs-dir", default=None,
                         help="rejudge every *.log in this directory, "
                              "matching scenarios by filename")
@@ -283,9 +378,16 @@ def main(argv=None):
                          "or use --logs-dir")
         jobs = [(args.scenario, path) for path in args.transcripts]
 
-    statuses = [rejudge_one(scenario, transcript, args.model,
-                            args.judge_host, args.timeout, args.dry_run)
-                for scenario, transcript in jobs]
+    if args.audit_only or args.swap_audit:
+        statuses = [reaudit_one(scenario, transcript, args.model,
+                                args.judge_host, args.timeout,
+                                args.dry_run, swap_order=args.swap_audit)
+                    for scenario, transcript in jobs]
+    else:
+        statuses = [rejudge_one(scenario, transcript, args.model,
+                                args.judge_host, args.timeout,
+                                args.dry_run)
+                    for scenario, transcript in jobs]
     return 0 if all(status == "OK" for status in statuses) else 1
 
 

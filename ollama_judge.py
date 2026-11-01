@@ -233,14 +233,26 @@ def parse_winner(verdict):
     return match.group(1).strip() if match else None
 
 
-def build_audit_messages(topic, participants, transcript):
+def build_audit_messages(topic, participants, transcript,
+                         swap_order=False):
     """The messages for the fidelity audit call: the briefs and the
     transcript, with a single narrow charge -- rule HELD or CROSSED
     for each participant, with a quoted piece of evidence. The audit
     deliberately does not score and does not see code-run reports:
     fidelity is about positions, and a separate ruling is only worth
-    having if the scoring judge cannot re-open it."""
-    a, b = participants
+    having if the scoring judge cannot re-open it.
+
+    swap_order is the audit-presentation control: the briefs are
+    presented in reverse seat order (seat 2 first) and the charge
+    names them in that order. Nothing else moves -- each name stays
+    on its own brief, the transcript keeps its true turn order, and
+    parse_fidelity keys its rulings by name, so a ruling from a
+    swapped prompt still lands on the participant it describes.
+    Comparing the two arms separates a presentation effect in this
+    prompt from a real seat effect in the duels themselves."""
+    presenters = (list(reversed(participants)) if swap_order
+                  else participants)
+    a, b = presenters
     instructions = (
         f"Below are the assigned briefs for {a['name']} and {b['name']}, "
         f"then the transcript of their exchange.\n\nTopic: {topic}\n\n"
@@ -259,7 +271,7 @@ def build_audit_messages(topic, participants, transcript):
     turns = [f"--- {participants[i]['name']} ---\n{text}"
              for i, text in transcript]
     content = (instructions + "\n\nAssigned briefs:\n"
-               + "\n\n".join(_assigned_briefs(participants))
+               + "\n\n".join(_assigned_briefs(presenters))
                + "\n\nTranscript:\n" + "\n\n".join(turns))
     return [
         {"role": "system",
@@ -335,15 +347,18 @@ def _judge_call(host, judge, messages, timeout, call_chat, label):
 
 
 def _run_fidelity_audit(host, judge, topic, participants, transcript,
-                        timeout, call_chat):
+                        timeout, call_chat, swap_order=False):
     """The first of the two judge calls, made only when the scenario
     assigned briefs: the judge model rules HELD or CROSSED for each
     participant, with evidence. Returns the parsed ruling, or None
     when the audit could not be completed (host error, oversized
     transcript, unparseable reply) -- fail soft, always noted on
     stderr: the scoring call then rules on fidelity itself, exactly
-    as it did before the audit existed."""
-    messages = build_audit_messages(topic, participants, transcript)
+    as it did before the audit existed. swap_order is forwarded to
+    build_audit_messages (the presentation control); the returned
+    ruling is keyed by participant name either way."""
+    messages = build_audit_messages(topic, participants, transcript,
+                                    swap_order=swap_order)
     try:
         reply, _num_ctx, _required = _judge_call(
             host, judge, messages, timeout, call_chat, "Fidelity audit")
@@ -362,6 +377,19 @@ def _run_fidelity_audit(host, judge, topic, participants, transcript,
               "participants; the scoring judge will rule on fidelity "
               "itself.", file=sys.stderr)
     return ruling
+
+
+def run_fidelity_audit(host, judge, topic, participants, transcript,
+                       timeout, call_chat, swap_order=False):
+    """The fidelity audit on its own, for rejudge's audit-only mode:
+    the same call _run_fidelity_audit makes inside run_judge, exposed
+    so a finished duel's audit can be re-run -- in the normal seat
+    order, or with the brief presentation swapped -- without paying
+    for a scoring call. Returns the parsed ruling, or None when the
+    audit could not be completed."""
+    return _run_fidelity_audit(host, judge, topic, participants,
+                               transcript, timeout, call_chat,
+                               swap_order=swap_order)
 
 
 def run_judge(host, judge, topic, participants, transcript, timeout,
