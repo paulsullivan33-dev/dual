@@ -233,6 +233,75 @@ class ParseFidelityTests(unittest.TestCase):
             ollama_judge.parse_fidelity(None, self.PARTICIPANTS))
 
 
+class AuditPresentationSwapTests(unittest.TestCase):
+    """The swap_order control on the fidelity audit: only the brief
+    presentation order may change -- names stay on their own briefs,
+    the transcript is untouched, and rulings still land by name."""
+    PARTICIPANTS = [
+        {"name": "Alice", "model": "m1", "system": "Defend the castle."},
+        {"name": "Bob", "model": "m2", "system": "Take the castle."},
+    ]
+    TRANSCRIPT = [(0, "I surrender the castle"), (1, "onward")]
+
+    def _body(self, swap_order=False):
+        msgs = ollama_judge.build_audit_messages(
+            "castles", self.PARTICIPANTS, self.TRANSCRIPT,
+            swap_order=swap_order)
+        return msgs[1]["content"]
+
+    def test_normal_order_names_and_presents_seat_one_first(self):
+        body = self._body()
+        self.assertIn("briefs for Alice and Bob", body)
+        self.assertLess(body.index("Alice's assigned brief"),
+                        body.index("Bob's assigned brief"))
+
+    def test_swap_names_and_presents_seat_two_first(self):
+        body = self._body(swap_order=True)
+        self.assertIn("briefs for Bob and Alice", body)
+        self.assertLess(body.index("Bob's assigned brief"),
+                        body.index("Alice's assigned brief"))
+
+    def test_swap_keeps_each_brief_on_its_own_name(self):
+        body = self._body(swap_order=True)
+        bob_block = body[body.index("Bob's assigned brief"):
+                         body.index("Alice's assigned brief")]
+        self.assertIn("Take the castle.", bob_block)
+        self.assertNotIn("Defend the castle.", bob_block)
+
+    def test_swap_leaves_the_transcript_untouched(self):
+        self.assertEqual(self._body().split("Transcript:\n", 1)[1],
+                         self._body(swap_order=True).split(
+                             "Transcript:\n", 1)[1])
+
+    def test_swapped_reply_still_parses_by_name(self):
+        # A judge answering in presentation order (Bob first) must
+        # still land each ruling on the participant it describes.
+        text = ("RULING: Bob CROSSED\n"
+                "EVIDENCE: \"onward\"\n"
+                "RULING: Alice HELD\n"
+                "EVIDENCE: \"I surrender the castle\"")
+        ruling = ollama_judge.parse_fidelity(text, self.PARTICIPANTS)
+        self.assertEqual(ruling["Bob"]["status"], "CROSSED")
+        self.assertEqual(ruling["Alice"]["status"], "HELD")
+
+    def test_run_fidelity_audit_forwards_the_swap(self):
+        calls = []
+
+        def fake_chat(host, model, messages, think, options, timeout=None):
+            calls.append(messages)
+            return "", ("RULING: Alice HELD\nEVIDENCE: \"a\"\n"
+                        "RULING: Bob HELD\nEVIDENCE: \"b\""), "stop", {}
+
+        ruling = ollama_judge.run_fidelity_audit(
+            "http://x", {"model": "j"}, "castles", self.PARTICIPANTS,
+            self.TRANSCRIPT, 60, fake_chat, swap_order=True)
+        self.assertEqual(ruling["Alice"]["status"], "HELD")
+        self.assertEqual(ruling["Bob"]["status"], "HELD")
+        body = calls[0][1]["content"]
+        self.assertLess(body.index("Bob's assigned brief"),
+                        body.index("Alice's assigned brief"))
+
+
 class ParseWinnerTests(unittest.TestCase):
     def test_extracts_name(self):
         self.assertEqual(

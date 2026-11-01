@@ -209,6 +209,100 @@ class RejudgeOneTests(unittest.TestCase):
         self.assertIn("no judge configured", out)
 
 
+class ReauditOneTests(unittest.TestCase):
+    """reaudit_one: the fidelity audit on its own, in both arms of
+    the audit-presentation control."""
+    AUDIT_REPLY = ("RULING: Alice HELD\n"
+                   "EVIDENCE: \"Alice argues first.\"\n"
+                   "RULING: Bob CROSSED\n"
+                   "EVIDENCE: \"Bob replies.\"")
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.scenario_path = os.path.join(self.tmp.name, "scenario.json")
+        with open(self.scenario_path, "w", encoding="utf-8") as fh:
+            json.dump(SCENARIO, fh)
+        self.transcript_path = os.path.join(self.tmp.name, "duel.log")
+        with open(self.transcript_path, "w", encoding="utf-8") as fh:
+            fh.write(LOG_TEXT)
+
+    def _run(self, reply=None, **kwargs):
+        record = {}
+        chat = fake_chat_factory(
+            self.AUDIT_REPLY if reply is None else reply, record)
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            status = rejudge.reaudit_one(
+                self.scenario_path, self.transcript_path, "big:14b",
+                chat=chat, **kwargs)
+        return status, record, out.getvalue()
+
+    def test_writes_sibling_ruling_in_true_seat_order(self):
+        status, record, _out = self._run()
+        self.assertEqual(status, "OK")
+        self.assertEqual(record["model"], "big:14b")
+        user = record["messages"][1]["content"]
+        self.assertIn("fidelity auditor", record["messages"][0]["content"])
+        self.assertLess(user.index("Alice's assigned brief"),
+                        user.index("Bob's assigned brief"))
+        out_path = rejudge.reaudit_output_path(self.transcript_path,
+                                               "big:14b")
+        self.assertTrue(os.path.exists(out_path))
+        with open(out_path, encoding="utf-8") as fh:
+            content = fh.read()
+        self.assertIn("Audit presentation: normal", content)
+        self.assertIn("original judge: orig:8b", content)
+        self.assertLess(content.index("Seat 1: RULING: Alice HELD"),
+                        content.index("Seat 2: RULING: Bob CROSSED"))
+        self.assertIn('EVIDENCE: "Bob replies."', content)
+
+    def test_swap_arm_swaps_the_prompt_not_the_record(self):
+        status, record, _out = self._run(swap_order=True)
+        self.assertEqual(status, "OK")
+        user = record["messages"][1]["content"]
+        self.assertLess(user.index("Bob's assigned brief"),
+                        user.index("Alice's assigned brief"))
+        out_path = rejudge.reaudit_output_path(self.transcript_path,
+                                               "big:14b", swap_order=True)
+        self.assertIn("audit-swap", out_path)
+        self.assertTrue(os.path.exists(out_path))
+        with open(out_path, encoding="utf-8") as fh:
+            content = fh.read()
+        self.assertIn("Audit presentation: swapped", content)
+        # The record still lists the ruling in true seat order.
+        self.assertLess(content.index("Seat 1: RULING: Alice HELD"),
+                        content.index("Seat 2: RULING: Bob CROSSED"))
+
+    def test_scenario_without_briefs_reports_no_briefs(self):
+        bare = json.loads(json.dumps(SCENARIO))
+        for model in bare["models"]:
+            del model["system"]
+        with open(self.scenario_path, "w", encoding="utf-8") as fh:
+            json.dump(bare, fh)
+        status, record, out = self._run()
+        self.assertEqual(status, "NO BRIEFS")
+        self.assertEqual(record, {})
+        self.assertIn("no briefs", out)
+        self.assertFalse(os.path.exists(
+            rejudge.reaudit_output_path(self.transcript_path, "big:14b")))
+
+    def test_unparseable_audit_reply_fails_without_writing(self):
+        status, _record, _out = self._run(reply="no rulings here")
+        self.assertEqual(status, "FAILED")
+        self.assertFalse(os.path.exists(
+            rejudge.reaudit_output_path(self.transcript_path, "big:14b")))
+
+    def test_dry_run_calls_nothing_and_writes_nothing(self):
+        status, record, out = self._run(dry_run=True)
+        self.assertEqual(status, "OK")
+        self.assertEqual(record, {})
+        self.assertFalse(os.path.exists(
+            rejudge.reaudit_output_path(self.transcript_path, "big:14b")))
+        self.assertIn("would audit (normal presentation)",
+                      out)
+
+
 class ScenarioForLogTests(unittest.TestCase):
     def test_timestamped_and_plain_names(self):
         with tempfile.TemporaryDirectory() as tmp:
