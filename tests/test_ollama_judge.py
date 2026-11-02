@@ -494,8 +494,8 @@ class RunJudgeTests(unittest.TestCase):
             "http://x", {"model": "j"}, "topic", self.BRIEFED,
             [(0, "hi"), (1, "lo")], 30,
             self._two_call_fake(calls, audit_reply=self.AUDIT_REPLY))
-        self.assertEqual(len(calls), 2)  # audit call, then scoring call
-        scoring = calls[1][1]["content"]
+        self.assertEqual(len(calls), 3)  # two audit arms, then scoring
+        scoring = calls[2][1]["content"]
         self.assertIn("Fidelity ruling (settled by audit):", scoring)
         self.assertIn("A: CROSSED", scoring)
         self.assertIn("B: HELD", scoring)
@@ -519,8 +519,8 @@ class RunJudgeTests(unittest.TestCase):
             [(0, "hi"), (1, "lo")], 30,
             self._two_call_fake(
                 calls, audit_error=OllamaError("host down")))
-        self.assertEqual(len(calls), 2)  # failed audit + scoring call
-        scoring = calls[1][1]["content"]
+        self.assertEqual(len(calls), 3)  # two failed arms + scoring call
+        scoring = calls[2][1]["content"]
         # No ruling to settle: the scoring judge rules on fidelity
         # itself (the gate wording), and the verdict carries no header.
         self.assertIn("decided before any scoring", scoring)
@@ -533,7 +533,117 @@ class RunJudgeTests(unittest.TestCase):
             "http://x", {"model": "j"}, "topic", self.BRIEFED,
             [(0, "hi"), (1, "lo")], 30,
             self._two_call_fake(calls, audit_reply="I decline to format."))
-        scoring = calls[1][1]["content"]
+        scoring = calls[-1][1]["content"]
+        self.assertIn("decided before any scoring", scoring)
+        self.assertFalse(verdict.startswith("Fidelity audit:"))
+
+
+class CounterbalancedAuditTests(unittest.TestCase):
+    """The production audit runs both presentation arms and settles
+    by agreement: a crossing counts only when the judge flags it
+    with either brief on top -- the Phase D scale run showed the
+    single-presentation audit flags the second-presented brief far
+    more readily, whatever seat it belongs to."""
+    PARTICIPANTS = [
+        {"name": "Alice", "model": "m1", "system": "Defend the castle."},
+        {"name": "Bob", "model": "m2", "system": "Take the castle."},
+    ]
+    TRANSCRIPT = [(0, "I surrender the castle"), (1, "onward")]
+    AGREE_CROSSED = ("RULING: Alice CROSSED\n"
+                     "EVIDENCE: \"I surrender the castle\"\n"
+                     "RULING: Bob HELD\n"
+                     "EVIDENCE: \"onward\"")
+
+    @staticmethod
+    def _arm(alice_status, bob_status):
+        return {"Alice": {"status": alice_status,
+                          "evidence": "ev alice"},
+                "Bob": {"status": bob_status, "evidence": "ev bob"}}
+
+    def test_merge_both_crossed_stays_crossed_with_normal_evidence(self):
+        merged = ollama_judge._merge_audit_arms(
+            self._arm("CROSSED", "HELD"), self._arm("CROSSED", "HELD"),
+            self.PARTICIPANTS)
+        self.assertEqual(merged["Alice"]["status"], "CROSSED")
+        self.assertEqual(merged["Alice"]["evidence"], "ev alice")
+        self.assertEqual(merged["Alice"]["arms"],
+                         {"normal": "CROSSED", "swapped": "CROSSED"})
+        self.assertEqual(merged["Bob"]["status"], "HELD")
+
+    def test_merge_split_settles_held_without_evidence(self):
+        for normal, swapped in (("CROSSED", "HELD"), ("HELD", "CROSSED")):
+            merged = ollama_judge._merge_audit_arms(
+                self._arm(normal, "HELD"), self._arm(swapped, "HELD"),
+                self.PARTICIPANTS)
+            self.assertEqual(merged["Alice"]["status"], "HELD")
+            self.assertEqual(merged["Alice"]["evidence"], "")
+            self.assertEqual(merged["Alice"]["arms"],
+                             {"normal": normal, "swapped": swapped})
+
+    def test_merge_missing_arm_is_no_audit(self):
+        arm = self._arm("HELD", "HELD")
+        self.assertIsNone(ollama_judge._merge_audit_arms(
+            None, arm, self.PARTICIPANTS))
+        self.assertIsNone(ollama_judge._merge_audit_arms(
+            arm, None, self.PARTICIPANTS))
+
+    def _arm_fake(self, calls, normal_reply, swapped_reply):
+        def fake_call_chat(host, model, messages, think, options,
+                           timeout=None):
+            calls.append(messages)
+            if "fidelity auditor" in messages[0]["content"]:
+                if "briefs for Bob and Alice" in messages[1]["content"]:
+                    return "", swapped_reply, "stop", {}
+                return "", normal_reply, "stop", {}
+            return "", "Scored.\nWINNER: Alice", "stop", {}
+        return fake_call_chat
+
+    def test_run_judge_audits_both_presentations_before_scoring(self):
+        calls = []
+        verdict, _n, _b = ollama_judge.run_judge(
+            "http://x", {"model": "j"}, "castles", self.PARTICIPANTS,
+            self.TRANSCRIPT, 30,
+            self._arm_fake(calls, self.AGREE_CROSSED,
+                           self.AGREE_CROSSED))
+        self.assertEqual(len(calls), 3)
+        self.assertIn("briefs for Alice and Bob",
+                      calls[0][1]["content"])
+        self.assertIn("briefs for Bob and Alice",
+                      calls[1][1]["content"])
+        scoring = calls[2][1]["content"]
+        self.assertIn("Fidelity ruling (settled by audit):", scoring)
+        self.assertIn("Alice: CROSSED", scoring)
+        self.assertTrue(verdict.startswith(
+            "Fidelity audit: Alice CROSSED"
+            " -- evidence: \"I surrender the castle\""))
+
+    def test_run_judge_split_arms_settle_held_and_say_so(self):
+        calls = []
+        swapped_reply = ("RULING: Alice HELD\n"
+                         "EVIDENCE: \"still defending\"\n"
+                         "RULING: Bob HELD\n"
+                         "EVIDENCE: \"onward\"")
+        verdict, _n, _b = ollama_judge.run_judge(
+            "http://x", {"model": "j"}, "castles", self.PARTICIPANTS,
+            self.TRANSCRIPT, 30,
+            self._arm_fake(calls, self.AGREE_CROSSED, swapped_reply))
+        self.assertIn(
+            "Fidelity audit: Alice HELD -- audit arms split "
+            "(normal: CROSSED, swapped: HELD); settled by agreement",
+            verdict)
+        scoring = calls[2][1]["content"]
+        self.assertIn("Alice: HELD", scoring)
+        self.assertNotIn("Alice: CROSSED", scoring)
+
+    def test_run_judge_one_arm_unparseable_falls_back(self):
+        calls = []
+        verdict, _n, _b = ollama_judge.run_judge(
+            "http://x", {"model": "j"}, "castles", self.PARTICIPANTS,
+            self.TRANSCRIPT, 30,
+            self._arm_fake(calls, self.AGREE_CROSSED,
+                           "I decline to format."))
+        self.assertEqual(len(calls), 3)  # good arm, bad arm, scoring
+        scoring = calls[2][1]["content"]
         self.assertIn("decided before any scoring", scoring)
         self.assertFalse(verdict.startswith("Fidelity audit:"))
 
@@ -614,7 +724,8 @@ class JudgeRetryTests(unittest.TestCase):
         verdict, _n, _b = ollama_judge.run_judge(
             "http://x", {"model": "j"}, "topic", self.BRIEFED,
             [(0, "hi"), (1, "lo")], 30, fake_call_chat)
-        self.assertEqual(len(calls), 3)  # audit, audit retry, scoring
+        # audit, its retry, the swapped audit arm, then scoring
+        self.assertEqual(len(calls), 4)
         self.assertEqual(calls[0][1]["num_predict"], 500)   # the default
         self.assertEqual(calls[1][1]["num_predict"], 1000)  # doubled
         self.assertTrue(verdict.startswith("Fidelity audit: A CROSSED"))
