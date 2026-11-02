@@ -26,10 +26,11 @@ draw"). The verdict is printed into the transcript log, appended to the
 run summary, and its winner line goes into the ntfy notice.
 
 When the scenario assigned the participants briefs (system prompts),
-judging takes two calls: a fidelity audit first rules whether each
-participant held their brief or crossed to the other side's, and the
-scoring call then applies the fidelity gate to that settled ruling
-instead of ruling on fidelity itself.
+judging takes three calls: a counterbalanced fidelity audit -- the
+same audit run under both brief presentations, settled by agreement
+-- first rules whether each participant held their brief or crossed
+to the other side's, and the scoring call then applies the fidelity
+gate to that settled ruling instead of ruling on fidelity itself.
 
 The judge is best-effort: if its call fails, the duel's result stands and
 the failure is noted, never fatal. Disable a configured judge for one run
@@ -379,11 +380,69 @@ def _run_fidelity_audit(host, judge, topic, participants, transcript,
     return ruling
 
 
+def _merge_audit_arms(normal, swapped, participants):
+    """Merge the two presentation arms of the counterbalanced audit
+    into one settled ruling. A participant is CROSSED only when both
+    arms rule CROSSED: re-auditing the 106-duel Phase D corpus under
+    both presentations (2026-11-01) showed the audit flags whichever
+    brief is presented second far more readily -- the crossed excess
+    followed the second-presented brief, not the seat -- so a
+    crossing seen from only one presentation is the prompt's
+    stacking habit, not evidence. When the arms agree, the settled
+    ruling keeps the normal arm's evidence; when they split, the
+    ruling settles HELD with no evidence, and the split itself is
+    recorded under "arms" for the verdict header. Returns None when
+    either arm is missing: half an audit is not a quieter audit, it
+    is the old single-presentation one under a new name."""
+    if normal is None or swapped is None:
+        return None
+    merged = {}
+    for participant in participants:
+        name = participant["name"]
+        arms = {"normal": normal[name]["status"],
+                "swapped": swapped[name]["status"]}
+        agreed = arms["normal"] == arms["swapped"]
+        crossed = (arms["normal"] == "CROSSED"
+                   and arms["swapped"] == "CROSSED")
+        merged[name] = {
+            "status": "CROSSED" if crossed else "HELD",
+            "evidence": normal[name]["evidence"] if agreed else "",
+            "arms": arms}
+    return merged
+
+
+def _run_counterbalanced_audit(host, judge, topic, participants,
+                               transcript, timeout, call_chat):
+    """The production fidelity audit: the same audit call made
+    twice, once with the briefs in seat order and once with the
+    presentation swapped, settled by _merge_audit_arms. Costs one
+    extra judge call per duel; buys a ruling the presentation order
+    cannot steer. When either arm cannot be completed, the whole
+    audit counts as not having happened (None, noted on stderr) and
+    the scoring call rules on fidelity itself, exactly as it did
+    before the audit existed -- never a silent fallback to the
+    single surviving arm, which would reintroduce the presentation
+    bias invisibly."""
+    normal = _run_fidelity_audit(host, judge, topic, participants,
+                                 transcript, timeout, call_chat)
+    swapped = _run_fidelity_audit(host, judge, topic, participants,
+                                  transcript, timeout, call_chat,
+                                  swap_order=True)
+    if normal is None or swapped is None:
+        missing = "normal" if normal is None else "swapped"
+        print("Counterbalanced fidelity audit incomplete: the "
+              f"{missing} presentation produced no ruling; the "
+              "scoring judge will rule on fidelity itself.",
+              file=sys.stderr)
+        return None
+    return _merge_audit_arms(normal, swapped, participants)
+
+
 def run_fidelity_audit(host, judge, topic, participants, transcript,
                        timeout, call_chat, swap_order=False):
     """The fidelity audit on its own, for rejudge's audit-only mode:
-    the same call _run_fidelity_audit makes inside run_judge, exposed
-    so a finished duel's audit can be re-run -- in the normal seat
+    one arm of the counterbalanced audit run_judge runs, exposed so
+    a finished duel's audit can be re-run -- in the normal seat
     order, or with the brief presentation swapped -- without paying
     for a scoring call. Returns the parsed ruling, or None when the
     audit could not be completed."""
@@ -416,27 +475,36 @@ def run_judge(host, judge, topic, participants, transcript, timeout,
     retried once at double the reply budget when the model stops on
     the reply limit instead of finishing -- see _judge_call.
 
-    Two calls when the scenario assigned briefs: a fidelity audit
-    rules HELD/CROSSED for each participant first, and that ruling is
-    handed to the scoring call as settled fact (see build_audit_messages
-    and _run_fidelity_audit). The returned verdict is headed with the
-    audit's ruling, so the log records what was settled before scoring.
+    Three calls when the scenario assigned briefs: a counterbalanced
+    fidelity audit rules HELD/CROSSED for each participant first, and
+    that ruling is handed to the scoring call as settled fact (see
+    build_audit_messages and _run_counterbalanced_audit). The returned
+    verdict is headed with the audit's ruling, so the log records what
+    was settled before scoring.
     """
     fidelity = None
     if _assigned_briefs(participants):
-        fidelity = _run_fidelity_audit(host, judge, topic, participants,
-                                       transcript, timeout, call_chat)
+        fidelity = _run_counterbalanced_audit(
+            host, judge, topic, participants, transcript, timeout,
+            call_chat)
     messages = build_judge_messages(judge, topic, participants, transcript,
                                     run_reports, fidelity=fidelity)
     reply, num_ctx, required = _judge_call(
         host, judge, messages, timeout, call_chat, "Judge")
     verdict = reply.strip()
     if fidelity:
-        header = "\n".join(
-            f"Fidelity audit: {participant['name']} "
-            f"{fidelity[participant['name']]['status']}"
-            + (f" -- evidence: {fidelity[participant['name']]['evidence']}"
-               if fidelity[participant["name"]]["evidence"] else "")
-            for participant in participants)
-        verdict = header + "\n\n" + verdict
+        lines = []
+        for participant in participants:
+            entry = fidelity[participant["name"]]
+            line = (f"Fidelity audit: {participant['name']} "
+                    f"{entry['status']}")
+            arms = entry.get("arms")
+            if arms and arms["normal"] != arms["swapped"]:
+                line += (f" -- audit arms split (normal: "
+                         f"{arms['normal']}, swapped: {arms['swapped']});"
+                         " settled by agreement")
+            if entry["evidence"]:
+                line += f" -- evidence: {entry['evidence']}"
+            lines.append(line)
+        verdict = "\n".join(lines) + "\n\n" + verdict
     return verdict, num_ctx, required
