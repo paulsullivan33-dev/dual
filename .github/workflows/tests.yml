@@ -15,9 +15,14 @@ jobs:
         python-version: ["3.8", "3.9", "3.10", "3.14"]
         # Python 3.8 is end-of-life and may not be available on the Ubuntu 26
         # image that ubuntu-latest moves to on 2026-10-19, so pin its job.
+        # Python 3.9 can no longer be provisioned on the current ubuntu-latest
+        # image either (setup-python fails before any test runs); Windows keeps
+        # the 3.9 coverage, so drop it from the Ubuntu leg instead of pinning.
         exclude:
         - os: ubuntu-latest
           python-version: "3.8"
+        - os: ubuntu-latest
+          python-version: "3.9"
         include:
         - os: ubuntu-24.04
           python-version: "3.8"
