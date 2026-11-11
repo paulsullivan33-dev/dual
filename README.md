@@ -467,6 +467,16 @@ When `log_file` is set, `ollama_duel.py` mirrors its standard output to a timest
 
 Separately, every duel appends a one-block summary to `output/run_results.log` (override with `results_log` or `--results-log`, disable with `--no-results-log`). Each entry carries the date/time, config file, the full path of the run's transcript log (when it kept one, so it's easy to open), models, how many of the requested turns completed, and the per-model stats table when the duel finished -- or the error message when it stopped early, so a batch of overnight runs can be scanned without opening each transcript log.
 
+### What the duel would have cost in the cloud
+
+Duels run locally and cost nothing, but the stats at the end of a duel include a yardstick for what the same work would have cost hosted: a cloud-equivalent cost line, printed under the performance table and recorded in the run summary. It prices each speaker's exact token usage (the same accumulated `prompt_eval_count` / `eval_count` totals as the stats table, so discarded replies and dedup retries are priced too -- they really did burn those tokens) at a reference rate from [Ollama Cloud's pricing page](https://ollama.com/pricing):
+
+```
+Cloud-equivalent cost at median cloud rates ($0.435 in / $2.10 out per 1M tokens): Alice ≈ $0.032, Bob ≈ $0.017, total ≈ $0.049 — actual cost $0 (local).
+```
+
+`--cloud-rate` chooses the reference rate: `median` (the default; the median across Ollama Cloud's fully-priced models) or `beam` (that model's own rate). The rates are reference constants read from the pricing page on 2026-11-11, not a live quote, and nothing is ever billed. Judge calls are not included: the judge's token usage is not part of the duel stats.
+
 The programming scenarios produce code as conversation text. Execution is disabled unless the scenario sets `run_code` or the command enables it; several supplied programming scenarios enable it. Pass `--no-run-code` to keep their output as text. See [Running each reply's code](#running-each-replys-code).
 
 ### Arduino Uno Q display

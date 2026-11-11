@@ -8,7 +8,9 @@ from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from ollama_reporting import (format_duration, format_run_summary,
+from ollama_reporting import (CLOUD_RATE_PRESETS, DEFAULT_CLOUD_RATE,
+                              cloud_cost, format_cloud_cost_line, format_cost,
+                              format_duration, format_run_summary,
                               notify_duel_done, ntfy_post)
 
 
@@ -83,6 +85,91 @@ class NtfyPostTest(unittest.TestCase):
         with mock.patch("urllib.request.urlopen",
                         side_effect=OSError("net down")):
             ntfy_post("https://ntfy.sh/x", "t", "m")  # must not raise
+
+
+def _speaker(name, model, index, prompt_tokens, gen_tokens):
+    """One participant-stats record, as record_call accumulates it."""
+    return {"name": name, "model": model, "index": index,
+            "turns": 1, "calls": 1, "retries": 0, "truncated": 0,
+            "gen_tokens": gen_tokens, "gen_s": 1.0,
+            "prompt_tokens": prompt_tokens, "prompt_s": 0.5,
+            "discarded_tokens": 0, "total_s": 1.5, "load_s": 0.0}
+
+
+class CloudCostTest(unittest.TestCase):
+    def _stats(self):
+        return {
+            "m1": {"participants": {0: _speaker("Alice", "m1", 0, 20000, 10000)}},
+            "m2": {"participants": {1: _speaker("Bob", "m2", 1, 10000, 5000)}},
+        }
+
+    def test_presets_carry_the_published_rates(self):
+        median = CLOUD_RATE_PRESETS["median"]
+        self.assertEqual((median["input"], median["output"]), (0.435, 2.10))
+        beam = CLOUD_RATE_PRESETS["beam"]
+        self.assertEqual((beam["input"], beam["output"]), (0.125, 0.40))
+        self.assertEqual(DEFAULT_CLOUD_RATE, "median")
+        self.assertIn(DEFAULT_CLOUD_RATE, CLOUD_RATE_PRESETS)
+
+    def test_cloud_cost_math(self):
+        median = CLOUD_RATE_PRESETS["median"]
+        # A million tokens each way is exactly the published rate sum.
+        self.assertAlmostEqual(cloud_cost(1_000_000, 1_000_000, median), 2.535)
+        self.assertEqual(cloud_cost(0, 0, median), 0.0)
+        # Alice's fixture usage: 20k in, 10k out.
+        self.assertAlmostEqual(cloud_cost(20000, 10000, median), 0.0297)
+
+    def test_format_cost(self):
+        self.assertEqual(format_cost(0), "$0")
+        self.assertEqual(format_cost(2.5), "$2.50")
+        self.assertEqual(format_cost(1500.0), "$1,500.00")
+        # Below a dollar: three significant figures, never $0.03-style
+        # rounding that hides a sub-cent share entirely.
+        self.assertEqual(format_cost(0.0321), "$0.0321")
+        self.assertEqual(format_cost(0.0000297), "$0.0000297")
+
+    def test_line_at_median_rates(self):
+        line = format_cloud_cost_line(self._stats())
+        self.assertTrue(line.startswith(
+            "Cloud-equivalent cost at median cloud rates "
+            "($0.435 in / $2.10 out per 1M tokens): "))
+        self.assertIn("Alice ≈ $0.0297", line)
+        self.assertIn("Bob ≈ $0.0149", line)
+        self.assertIn("total ≈ $0.0445", line)
+        self.assertTrue(line.endswith("— actual cost $0 (local)."))
+
+    def test_line_at_beam_rates(self):
+        line = format_cloud_cost_line(self._stats(), "beam")
+        self.assertIn("Beam cloud rates ($0.125 in / $0.40 out per 1M tokens)",
+                      line)
+        self.assertIn("Alice ≈ $0.00650", line)
+
+    def test_line_without_participants_falls_back_to_models(self):
+        stats = {"m1": {"turns": 1, "gen_tokens": 10000, "gen_s": 1.0,
+                        "prompt_tokens": 20000, "prompt_s": 0.5,
+                        "truncated": 0}}
+        self.assertIn("m1 ≈ $0.0297", format_cloud_cost_line(stats))
+
+    def test_shared_name_gets_seat_numbers(self):
+        stats = {"m1": {"participants": {
+            0: _speaker("Same", "m1", 0, 20000, 10000),
+            1: _speaker("Same", "m1", 1, 20000, 10000)}}}
+        line = format_cloud_cost_line(stats)
+        self.assertIn("1: Same ≈ $0.0297", line)
+        self.assertIn("2: Same ≈ $0.0297", line)
+
+    def test_empty_stats_return_empty_string(self):
+        self.assertEqual(format_cloud_cost_line({}), "")
+
+    def test_run_summary_carries_the_line_when_given_one(self):
+        line = format_cloud_cost_line(self._stats())
+        summary = format_run_summary(datetime.now(), "scen.json", PARTICIPANTS,
+                                     2, [object()] * 2, {}, None,
+                                     cloud_cost_line=line)
+        self.assertIn(line, summary)
+        plain = format_run_summary(datetime.now(), "scen.json", PARTICIPANTS,
+                                   2, [object()] * 2, {}, None)
+        self.assertNotIn("Cloud-equivalent", plain)
 
 
 if __name__ == "__main__":

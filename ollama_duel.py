@@ -63,7 +63,9 @@ from ollama_common import (
     validate_field as _validate_field,
     wrap_text,
 )
-from ollama_reporting import (append_run_summary, format_duel_stats, format_run_summary,
+from ollama_reporting import (CLOUD_RATE_PRESETS, DEFAULT_CLOUD_RATE,
+                              append_run_summary, format_cloud_cost_line,
+                              format_duel_stats, format_run_summary,
                               load_default_ntfy_url, notify_duel_done, ntfy_post)
 from ollama_coderun import (DEFAULT_RUN_TIMEOUT, DEFAULT_MEMORY_MB, count_runs, describe_run,
                             extract_program, run_program)
@@ -747,6 +749,10 @@ def main():
     ap.add_argument("--turns", type=int, default=None, help="override the config turn count")
     ap.add_argument("--max-tokens", type=int, default=None,
                     help="override the config max_tokens per turn")
+    ap.add_argument("--cloud-rate", default=None, metavar="PRESET",
+                    help="reference rate for the cloud-equivalent cost "
+                         "line printed with the duel stats: median "
+                         "(default) or beam")
     ap.add_argument("--host", default=None, help="override the config host")
     ap.add_argument("--model-a", default=None,
                     help="override the first participant's model")
@@ -873,6 +879,11 @@ def main():
         sys.exit(f'"turns" must be >= 1, got {turns}.')
     if args.max_tokens is not None and args.max_tokens < 1:
         sys.exit(f'"--max-tokens" must be >= 1, got {args.max_tokens}.')
+    cloud_rate = first_not_none(args.cloud_rate, DEFAULT_CLOUD_RATE)
+    if cloud_rate not in CLOUD_RATE_PRESETS:
+        sys.exit(f'"--cloud-rate" must be one of: '
+                 f'{", ".join(sorted(CLOUD_RATE_PRESETS))}, '
+                 f'got {args.cloud_rate}.')
     timeout = first_not_none(args.timeout, cfg.get("timeout"), DEFAULT_TIMEOUT)
     save_json_path = output_path(first_not_none(args.save_json, cfg.get("save_json")))
     want_display = first_not_none(args.display, cfg.get("display"), False)
@@ -1021,6 +1032,7 @@ def main():
     model_stats = {}  # per-model stats; stays empty if the loop never starts
     verdict = None  # the judge's verdict text, when a judge scores the duel
     judge_note = None  # one-line judge outcome for the run summary
+    cloud_cost_line = None  # cloud-equivalent cost line, once stats exist
     run_started = datetime.now()
     try:
         model_stats, matrix, stop_note = run_duel(host, topic, turns, participants, timeout,
@@ -1069,6 +1081,9 @@ def main():
         if model_stats:
             print()
             print(format_duel_stats(model_stats))
+            cloud_cost_line = format_cloud_cost_line(model_stats, cloud_rate)
+            if cloud_cost_line:
+                print(cloud_cost_line)
     finally:
         code_runs = (count_runs(run_code["results"])
                      if run_code is not None and run_code.get("results") else None)
@@ -1110,7 +1125,8 @@ def main():
                                        crash_note or stop_note,
                                        crashed=crashed, code_runs=code_runs,
                                        log_path=written_log, verdict=verdict,
-                                       judge_note=judge_note)
+                                       judge_note=judge_note,
+                                       cloud_cost_line=cloud_cost_line)
             append_run_summary(results_log_path, entry)
         if ntfy_url:
             # Completion notice: OK, stopped early, or crashed. Best-effort

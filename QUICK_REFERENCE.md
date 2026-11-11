@@ -234,6 +234,20 @@ exits: no Ollama call, no log, no summary, no notification. It's also how you
 check a new scenario file for mistakes; invalid settings are reported before
 anything else happens.
 
+### What a duel would have cost on Ollama Cloud
+
+Local duels are free; the stats at the end of a duel still price the run's
+exact token usage at a reference cloud rate and print a cloud-equivalent
+cost line under the performance table (also recorded in the run summary):
+
+```shell
+# Price the duel at Beam's cloud rate instead of the median rate
+python ollama_duel.py scenarios/duel-example.json --cloud-rate beam
+```
+
+`--cloud-rate` accepts `median` (default; the median rate across Ollama
+Cloud's priced models) or `beam`. It is a yardstick, not a bill.
+
 ### Run many scenarios (batch mode)
 
 Browse without contacting servers:

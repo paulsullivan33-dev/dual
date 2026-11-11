@@ -257,6 +257,70 @@ class MainMaxTokensValidationTests(unittest.TestCase):
             self.assertEqual(options["num_predict"], 1234)
 
 
+class MainCloudRateValidationTests(unittest.TestCase):
+    def test_cli_cloud_rate_unknown_preset_exits_and_lists_choices(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = write_json(d, "cfg.json", minimal_config())
+            with mock.patch.object(sys, "argv",
+                                   ["ollama_duel.py", path,
+                                    "--cloud-rate", "bogus"]):
+                with self.assertRaises(SystemExit) as ctx:
+                    ollama_duel.main()
+        self.assertIn("median", str(ctx.exception))
+        self.assertIn("beam", str(ctx.exception))
+
+
+class MainCloudCostLineTests(unittest.TestCase):
+    """A mocked duel run ends with the cloud-equivalent cost line,
+    on stdout (which the transcript log mirrors) and in the run
+    summary appended to the results log."""
+
+    @staticmethod
+    def _canned(*args, **kwargs):
+        metrics = {"gen_tokens": 10000, "gen_s": 1.0,
+                   "prompt_tokens": 20000, "prompt_s": 0.5}
+        return "", "canned reply", "stop", metrics
+
+    def _run(self, extra_argv=()):
+        import contextlib
+        results = {}
+        with tempfile.TemporaryDirectory() as d:
+            cfg = minimal_config(
+                turns=2, results_log=os.path.join(d, "run_results.log"))
+            with tempfile.TemporaryDirectory() as cfg_dir:
+                path = write_json(cfg_dir, "cfg.json", cfg)
+                buf = io.StringIO()
+                argv = ["ollama_duel.py", path] + list(extra_argv)
+                with mock.patch.object(sys, "argv", argv), \
+                     mock.patch.object(ollama_duel, "call_chat", self._canned), \
+                     contextlib.redirect_stdout(buf):
+                    ollama_duel.main()
+            with open(os.path.join(d, "run_results.log"),
+                      encoding="utf-8") as f:
+                results["log"] = f.read()
+        return buf.getvalue(), results["log"]
+
+    def test_stdout_line_at_default_median_rate(self):
+        out, _ = self._run()
+        self.assertIn(
+            "Cloud-equivalent cost at median cloud rates "
+            "($0.435 in / $2.10 out per 1M tokens): "
+            "m1 ≈ $0.0297, Two ≈ $0.0297, total ≈ $0.0594 "
+            "— actual cost $0 (local).", out)
+
+    def test_line_recorded_in_run_summary(self):
+        _, log = self._run()
+        self.assertIn("Cloud-equivalent cost at median cloud rates", log)
+        self.assertIn("total ≈ $0.0594", log)
+
+    def test_beam_flag_changes_the_reference_rate(self):
+        out, _ = self._run(["--cloud-rate", "beam"])
+        self.assertIn("Beam cloud rates ($0.125 in / $0.40 out per 1M tokens)",
+                      out)
+        self.assertIn("m1 ≈ $0.00650", out)
+        self.assertIn("total ≈ $0.0130", out)
+
+
 class MainModelOverrideTests(unittest.TestCase):
     def _run_duel(self, argv, cfg):
         seen = []

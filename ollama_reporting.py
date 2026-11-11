@@ -7,11 +7,52 @@ so ollama_duel.py stays a manageable size.
 """
 
 import json
+import math
 import os
 import sys
 from datetime import datetime
 
 from ollama_common import wrap_text
+
+
+# Reference rates for the cloud-equivalent cost line, in USD per 1M
+# tokens. "median" is the median across the 21 fully-priced models on
+# Ollama Cloud's pricing page and "beam" is that model's own rate;
+# both were read from https://ollama.com/pricing on 2026-11-11.
+# Reference figures only -- a local duel is never billed anything.
+CLOUD_RATE_PRESETS = {
+    "median": {"label": "median cloud rates", "input": 0.435, "output": 2.10},
+    "beam": {"label": "Beam cloud rates", "input": 0.125, "output": 0.40},
+}
+DEFAULT_CLOUD_RATE = "median"
+
+
+def cloud_cost(prompt_tokens, gen_tokens, preset):
+    """What the given token counts would cost at a CLOUD_RATE_PRESETS
+    rate, in USD. The counts are Ollama's prompt_eval_count /
+    eval_count totals, exactly as accumulated in the duel stats."""
+    return (prompt_tokens * preset["input"]
+            + gen_tokens * preset["output"]) / 1_000_000
+
+
+def format_cost(amount):
+    """USD for the cost line: dollars-and-cents at $1 and up, three
+    significant figures below that, so a three-cent share reads $0.032
+    and a sub-cent one keeps its digits instead of rounding to $0."""
+    if amount <= 0:
+        return "$0"
+    if amount >= 1:
+        return f"${amount:,.2f}"
+    decimals = 2 - math.floor(math.log10(amount))
+    return f"${amount:.{decimals}f}"
+
+
+def _format_rate(value):
+    """A preset rate the way the pricing page prints it: $0.435, $2.10."""
+    text = f"{value:.3f}"
+    while text.endswith("0") and len(text.rsplit(".", 1)[1]) > 2:
+        text = text[:-1]
+    return "$" + text
 
 
 def format_duration(duration_s):
@@ -93,10 +134,45 @@ def format_duel_stats(model_stats):
     return "\n".join(lines)
 
 
+def format_cloud_cost_line(model_stats, preset_name=DEFAULT_CLOUD_RATE):
+    """One line pricing the duel's token usage at a cloud reference
+    rate, e.g. 'Cloud-equivalent cost at median cloud rates ($0.435
+    in / $2.10 out per 1M tokens): m1 ≈ $0.032, Two ≈ $0.017,
+    total ≈ $0.049 — actual cost $0 (local).'
+
+    Built from the same per-speaker stats as the performance table,
+    so discarded replies and dedup retries are priced too -- they
+    really did burn those tokens. Speakers are named; a name shared
+    by both speakers gets its seat number, as in the participant
+    table. Returns "" when no calls completed."""
+    if not model_stats:
+        return ""
+    preset = CLOUD_RATE_PRESETS[preset_name]
+    speakers = participant_stats(model_stats)
+    if speakers:
+        names = [s["name"] for s in speakers]
+        entries = [(s["name"] if names.count(s["name"]) == 1
+                    else f"{s['index'] + 1}: {s['name']}", s)
+                   for s in speakers]
+    else:
+        entries = list(model_stats.items())
+    parts = []
+    total = 0.0
+    for label, s in entries:
+        cost = cloud_cost(s["prompt_tokens"], s["gen_tokens"], preset)
+        total += cost
+        parts.append(f"{label} ≈ {format_cost(cost)}")
+    return (f"Cloud-equivalent cost at {preset['label']} "
+            f"({_format_rate(preset['input'])} in / "
+            f"{_format_rate(preset['output'])} out per 1M tokens): "
+            f"{', '.join(parts)}, total ≈ {format_cost(total)} "
+            f"— actual cost $0 (local).")
+
+
 def format_run_summary(run_started, config_path, participants, turns,
                        transcript, model_stats, stop_note, crashed=False,
                        code_runs=None, log_path=None, verdict=None,
-                       judge_note=None):
+                       judge_note=None, cloud_cost_line=None):
     """Build the one-block summary appended to run_results.log after a duel.
 
     Always carries the date/time, config, models, and how many of the
@@ -111,7 +187,8 @@ def format_run_summary(run_started, config_path, participants, turns,
     `judge_note` is the one-line judge outcome (model/host/window on a
     scored duel, SKIPPED or FAILED with the reason otherwise); it is
     recorded whenever a judge was configured, so a missing verdict in
-    the log is never ambiguous.
+    the log is never ambiguous. `cloud_cost_line` is the optional
+    cloud-equivalent cost line from format_cloud_cost_line.
     """
     bar = "-" * 72
     stamp = run_started.strftime("%Y-%m-%d %H:%M:%S")
@@ -131,6 +208,8 @@ def format_run_summary(run_started, config_path, participants, turns,
     speakers = participant_stats(model_stats)
     if speakers:
         lines.append("Participant stats: " + json.dumps(speakers, ensure_ascii=False))
+    if cloud_cost_line:
+        lines.append(cloud_cost_line)
     if judge_note:
         lines.append(f"Judge: {judge_note}")
     if verdict:
