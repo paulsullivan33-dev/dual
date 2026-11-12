@@ -310,8 +310,11 @@ def play_match(cfg, fixture, runner=run):
         record["note"] = f"duel exited {proc.returncode}"
         return record
     duels = parse_file(results_log)
-    block = duels[-1] if duels else None
-    if not block or not block.get("participants"):
+    if not duels:
+        record["note"] = "no parseable result block for the duel"
+        return record
+    block = duels[-1]
+    if not block.get("participants"):
         record["note"] = "no parseable result block for the duel"
         return record
     models = participant_pairs(block)
