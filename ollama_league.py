@@ -274,6 +274,14 @@ def judge_match(cfg, fixture, scenario_path, transcript_path, models):
     return winner_model(name, models), f"{judge['model']}: {name or 'no verdict'}"
 
 
+def participant_pairs(block):
+    """[(name, model), ...] for a parsed results block, taken from the
+    Participant stats entries, which carry explicit name/model keys.
+    (The block's "models" list is (model, role) ordered — do not use
+    it for name mapping.)"""
+    return [(p["name"], p["model"]) for p in block["participants"]]
+
+
 def play_match(cfg, fixture, runner=run):
     """Play and judge one fixture; return its match record."""
     out_dir = cfg["output_dir"]
@@ -305,7 +313,7 @@ def play_match(cfg, fixture, runner=run):
     if not block or not block.get("participants"):
         record["note"] = "no parseable result block for the duel"
         return record
-    models = block["models"]
+    models = participant_pairs(block)
     tokens = {}
     for speaker in block["participants"]:
         tokens[speaker["model"]] = {"in": speaker.get("prompt_tokens", 0),

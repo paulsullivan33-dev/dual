@@ -18,7 +18,7 @@ import ollama_league as league
 
 BLOCK = """Run: 2026-11-11 22:14:19
 Config: scenarios/small_coffee_vs_tea.json
-Models: Barista Bruno (qwen3:4b) vs Tea Master Lin (qwen3:8b)
+Models: qwen3:4b (Barista Bruno) vs qwen3:8b (Tea Master Lin)
 Turns: 4/4 (4 replies) in 30s
 Participant stats: [{"turns": 2, "gen_tokens": 300, "gen_s": 1.0, "prompt_tokens": 1200, "prompt_s": 0.5, "truncated": 0, "calls": 2, "retries": 0, "discarded_tokens": 0, "total_s": 0.0, "load_s": 0.0, "name": "Barista Bruno", "model": "qwen3:4b", "index": 0}, {"turns": 2, "gen_tokens": 250, "gen_s": 1.0, "prompt_tokens": 1100, "prompt_s": 0.5, "truncated": 1, "calls": 2, "retries": 0, "discarded_tokens": 0, "total_s": 0.0, "load_s": 0.0, "name": "Tea Master Lin", "model": "qwen3:8b", "index": 1}]
 Result: OK
@@ -165,6 +165,25 @@ class PlayMatchTests(unittest.TestCase):
                              {"in": 1200, "out": 300})
             self.assertEqual(record["tokens"]["qwen3:8b"],
                              {"in": 1100, "out": 250})
+
+    def test_participant_pairs_come_from_stats(self):
+        # Regression: the results block's "models" list is (model, role)
+        # ordered, which once inverted the winner mapping live. Pairs
+        # must come from the Participant stats' explicit name/model.
+        from summarize_results import parse_file
+        with tempfile.NamedTemporaryFile("w", suffix=".log",
+                                         delete=False) as fh:
+            fh.write(BLOCK)
+            path = fh.name
+        try:
+            block = parse_file(path)[0]
+        finally:
+            os.unlink(path)
+        pairs = league.participant_pairs(block)
+        self.assertEqual(pairs, [("Barista Bruno", "qwen3:4b"),
+                                 ("Tea Master Lin", "qwen3:8b")])
+        self.assertEqual(league.winner_model("Barista Bruno", pairs),
+                         "qwen3:4b")
 
     def test_failed_duel_is_unplayed(self):
         with tempfile.TemporaryDirectory() as tmp:
