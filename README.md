@@ -10,6 +10,7 @@ The core scripts use only the Python standard library. They send requests to an 
 | --- | --- |
 | `ollama_chat.py` | Interactive chat and simple two-persona conversations |
 | `ollama_duel.py` | JSON scenarios, batch runs, per-participant settings, and thermal checks |
+| `ollama_league.py` | A season layer over the duel runner: round-robin fixtures, a uniform league judge, persistent standings |
 | `ollama_common.py` | Shared Ollama HTTP requests, formatting, metrics, and transcript helpers |
 | `ollama_profiles.py` | Machine-specific model and generation overrides |
 | `ollama_coderun.py` | Optional execution of generated Python with results fed back to the participants |

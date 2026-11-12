@@ -12,6 +12,7 @@ of the RAG demo, see [RAG_DEMO.md](RAG_DEMO.md).
 - [Chat with one model — `ollama_chat.py chat`](#chat-with-one-model--ollama_chatpy-chat)
 - [Quick two-model duel — `ollama_chat.py duel`](#quick-two-model-duel--ollama_chatpy-duel)
 - [Scenario duels — `ollama_duel.py`](#scenario-duels--ollama_duelpy)
+- [Duel league — `ollama_league.py`](#duel-league--ollama_leaguepy)
 - [Coding agent — `ollama_agent.py`](#coding-agent--ollama_agentpy)
 - [Ask your own documents — `rag_demo.py`](#ask-your-own-documents--rag_demopy)
 - [Benchmark model speed — `ollama_bench.py`](#benchmark-model-speed--ollama_benchpy)
@@ -633,6 +634,34 @@ model is called, so a typo like `"temprature"` fails loudly.
   for a test mode instead.
 - **"DEDUP GUARD: … repeated its previous reply"**: the guard re-rolled a
   repeated turn (see `dedup_guard`).
+
+---
+
+## Duel league — `ollama_league.py`
+
+A season over the scenario duels: the models named in a league config
+play every scenario in its battery round-robin, a single uniform judge
+(or a panel from `panels.json`) scores each saved transcript with
+`rejudge.py`, and the standings — points (3/1/0), tokens, and
+cloud-equivalent cost at the median reference rate — persist in
+`standings.json` and render to `standings.md` after every match.
+Interrupted seasons resume: fixtures already played are skipped, and a
+match whose duel or judging fails is recorded as unplayed and retried
+on the next run. See `league.example.json` for the config shape.
+
+| Task | Command |
+| --- | --- |
+| Preview a season's fixtures | `python ollama_league.py --config league.json --dry-run` |
+| Play a whole season | `python ollama_league.py --config league.json` |
+| Play only the next few matches | `python ollama_league.py --config league.json --max-matches 3` |
+| Play a longer season | `python ollama_league.py --config league.json --rounds 3` |
+| Keep results local | `python ollama_league.py --config league.json --no-sync` |
+
+Options: `--config` (required) names the league JSON; `--rounds`
+overrides the config's season length; `--max-matches` bounds how many
+new matches one run plays; `--dry-run` prints fixtures and the judge
+plan without calling any model; `--no-sync` skips the rsync to the
+config's `sync` host (results still land in the config's `output_dir`).
 
 ---
 
