@@ -21,6 +21,12 @@ import sys
 
 MEDIAN = {"input": 0.435, "output": 2.10}
 
+TABLE_LEGEND = ("Pos = position · P = played · W = won · D = drawn · "
+                "L = lost · Pts = points (3 for a win, 1 for a draw, "
+                "0 for a loss) · Tokens in = prompt tokens read · "
+                "Tokens out = tokens generated · Cloud-equiv = what "
+                "those tokens would cost at median cloud rates")
+
 _CSS = """
 body { font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial,
   sans-serif; margin: 2em auto; max-width: 920px; padding: 0 1em;
@@ -90,7 +96,8 @@ def render_html(state):
                                         row["tokens_out"]))]
         parts.append("<tr>" + "".join(f"<td>{c}</td>" for c in cells)
                      + "</tr>")
-    parts += ["</tbody>", "</table>"]
+    parts += ["</tbody>", "</table>",
+              f'<p class="meta">Legend: {esc(TABLE_LEGEND)}</p>']
     played = [m for m in state["matches"] if m.get("status") == "played"]
     parts.append(f"<h2>Matches ({len(played)} played)</h2>")
     parts.append("<ul>")

@@ -45,6 +45,16 @@ class LeagueHtmlTests(unittest.TestCase):
         self.assertIn("Matches (1 played)", page)
         self.assertIn("Unplayed (failed; retried next run)", page)
 
+    def test_legend_present_everywhere(self):
+        self.assertIn("Legend: Pos = position · P = played",
+                      league.render_standings(CFG, STATE))
+        self.assertIn("Legend: Pos = position · P = played",
+                      league.render_standings_html(CFG, STATE))
+        self.assertIn("Legend: Pos = position · P = played",
+                      standings_html.render_html(STATE))
+        self.assertEqual(league.TABLE_LEGEND,
+                         standings_html.TABLE_LEGEND)
+
     def test_converter_parity(self):
         """The standalone converter must agree with the league's own
         table order and cost figures."""
