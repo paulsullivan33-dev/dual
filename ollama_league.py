@@ -189,7 +189,7 @@ def majority(winners):
 
 def run(cmd, **kw):
     return subprocess.run(cmd, cwd=REPO_DIR, capture_output=True,
-                          text=True, **kw)
+                          text=True, check=False, **kw)
 
 
 def judging_scenario(cfg, fixture, match_dir):
@@ -226,7 +226,7 @@ def winner_model(winner_name, models):
     if not winner_name:
         return None
     for name, model in models:
-        if winner_name == name or winner_name == model:
+        if winner_name in (name, model):
             return model
     return None
 
