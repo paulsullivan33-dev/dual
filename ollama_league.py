@@ -40,6 +40,7 @@ Usage:
 
 import argparse
 import glob
+import html
 import itertools
 import json
 import os
@@ -372,6 +373,81 @@ def render_standings(cfg, state):
     return "\n".join(lines) + "\n"
 
 
+_PAGE_CSS = """
+body { font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial,
+  sans-serif; margin: 2em auto; max-width: 920px; padding: 0 1em;
+  line-height: 1.45; color: #1a1a1a; background: #fff; }
+table { border-collapse: collapse; width: 100%; margin: 1em 0; }
+th, td { border: 1px solid #ccc; padding: 0.35em 0.6em;
+  text-align: right; }
+th:first-child, td:first-child, th:nth-child(2), td:nth-child(2) {
+  text-align: left; }
+thead th { background: #f0f0f0; }
+tbody tr:nth-child(even) { background: #fafafa; }
+.meta { color: #555; }
+.winner { font-weight: bold; }
+@media (prefers-color-scheme: dark) {
+  body { color: #e6e6e6; background: #16181d; }
+  th, td { border-color: #444; }
+  thead th { background: #24262c; }
+  tbody tr:nth-child(even) { background: #1c1e24; }
+  .meta { color: #9a9a9a; } }
+"""
+
+
+def render_standings_html(cfg, state):
+    """The standings as a standalone HTML page: same data as
+    render_standings, inline CSS and no external assets, so it renders
+    in any browser served straight off the file share (no markdown
+    extension needed)."""
+    esc = html.escape
+    preset = CLOUD_RATE_PRESETS["median"]
+    judge = cfg["judge"].get("model") or cfg["judge"].get("panel", "")
+    parts = ["<!DOCTYPE html>", '<html lang="en">', "<head>",
+             '<meta charset="utf-8">',
+             f"<title>{esc(cfg['name'])} — standings</title>",
+             f"<style>{_PAGE_CSS}</style>", "</head>", "<body>",
+             f"<h1>{esc(cfg['name'])} — standings</h1>",
+             f'<p class="meta">Updated: {esc(state.get("updated") or "-")}'
+             f"<br>Judge: {esc(cfg['judge'].get('mode', 'single'))} "
+             f"{esc(judge)}<br>Cloud-equivalent cost at median rates "
+             f"(${preset['input']} in / ${preset['output']} out per 1M "
+             "tokens).</p>",
+             "<table>", "<thead><tr><th>Pos</th><th>Model</th><th>P</th>"
+             "<th>W</th><th>D</th><th>L</th><th>Pts</th><th>Tokens in</th>"
+             "<th>Tokens out</th><th>Cloud-equiv</th></tr></thead>",
+             "<tbody>"]
+    for pos, (model, row) in enumerate(sorted_table(state), 1):
+        cost = format_cost(cloud_cost(row["tokens_in"], row["tokens_out"],
+                                      preset))
+        cells = [str(pos), esc(model), str(row["played"]), str(row["won"]),
+                 str(row["drawn"]), str(row["lost"]), str(row["points"]),
+                 f"{row['tokens_in']:,}", f"{row['tokens_out']:,}", cost]
+        parts.append("<tr>" + "".join(f"<td>{c}</td>" for c in cells)
+                     + "</tr>")
+    parts += ["</tbody>", "</table>"]
+    played = [m for m in state["matches"] if m.get("status") == "played"]
+    parts.append(f"<h2>Matches ({len(played)} played)</h2>")
+    parts.append("<ul>")
+    for m in reversed(played[-25:]):
+        outcome = m["winner"] if m.get("winner") else "draw"
+        parts.append(f"<li>{esc(m['date'])} · {esc(m['scenario'])} · "
+                     f"{esc(m['a'])} vs {esc(m['b'])} → "
+                     f'<span class="winner">{esc(outcome)}</span> '
+                     f"(judge: {esc(m['judge'])})</li>")
+    parts.append("</ul>")
+    unplayed = [m for m in state["matches"] if m.get("status") != "played"]
+    if unplayed:
+        parts.append("<h2>Unplayed (failed; retried next run)</h2>")
+        parts.append("<ul>")
+        for m in unplayed[-10:]:
+            parts.append(f"<li>{esc(m['id'])}: "
+                         f"{esc(m.get('note') or 'unknown failure')}</li>")
+        parts.append("</ul>")
+    parts += ["</body>", "</html>"]
+    return "\n".join(parts) + "\n"
+
+
 def sync_results(cfg):
     sync = cfg.get("sync")
     if not sync:
@@ -438,6 +514,13 @@ def main(argv=None):
         with open(os.path.join(cfg["output_dir"], "standings.md"), "w",
                   encoding="utf-8") as fh:
             fh.write(md)
+        try:
+            page = render_standings_html(cfg, state)
+            with open(os.path.join(cfg["output_dir"], "standings.html"),
+                      "w", encoding="utf-8") as fh:
+                fh.write(page)
+        except Exception as exc:  # the .md stays the primary artifact
+            print(f"    warning: standings.html render failed: {exc}")
         if not args.no_sync:
             sync_results(cfg)
     print(f"Done: {played_now} match(es) played this run. "
