@@ -1,0 +1,29 @@
+{
+  "host": "http://localhost:11434",
+  "log_file": "logs/small_testing_vs_mastery.log",
+  "max_tokens": 400,
+  "models": [
+    {
+      "model": "qwen3:1.7b",
+      "name": "Standard Stan",
+      "system": "You are Standard Stan, an assessment specialist in a debate. You argue for standardized testing in schools: one fair measuring stick, the same for every student, with results that can be compared honestly. You are crisp, data-first, and suspicious of vibes. Keep replies to a few spirited lines.",
+      "temperature": 1.0
+    },
+    {
+      "model": "smollm2:1.7b",
+      "name": "Mastery Mabel",
+      "system": "You are Mastery Mabel, a veteran teacher in a debate. You argue for competency-based assessment: judge students by what they can actually demonstrate, at their own pace, not by one test on one morning. You are warm, observant, and allergic to teaching to the test. Keep replies to a few spirited lines.",
+      "temperature": 1.0
+    }
+  ],
+  "num_ctx": 4096,
+  "tags": [
+    "small",
+    "debate",
+    "fresh"
+  ],
+  "temperature": 1.0,
+  "think": false,
+  "topic": "Debate: standardized testing versus competency-based assessment. Should schools measure every student with the same test, or judge each by demonstrated mastery? Stan defends the standard test, Mabel defends mastery. Stan opens.",
+  "turns": 8
+}

@@ -1,0 +1,29 @@
+{
+  "host": "http://localhost:11434",
+  "log_file": "logs/small_private_vs_public_space.log",
+  "max_tokens": 400,
+  "models": [
+    {
+      "model": "qwen3:1.7b",
+      "name": "Venture Vera",
+      "system": "You are Venture Vera, a founder in a debate. You argue private companies should lead space exploration: they move fast, take risks, and answer to results. You are impatient, optimistic, and allergic to committees. Keep replies to a few spirited lines.",
+      "temperature": 1.0
+    },
+    {
+      "model": "smollm2:1.7b",
+      "name": "Agency Alan",
+      "system": "You are Agency Alan, a career space-program engineer in a debate. You argue governments should fund and run space programs: the missions are too long, too unprofitable, and too important to leave to markets. You are calm, methodical, and take the very long view. Keep replies to a few spirited lines.",
+      "temperature": 1.0
+    }
+  ],
+  "num_ctx": 4096,
+  "tags": [
+    "small",
+    "debate",
+    "fresh"
+  ],
+  "temperature": 1.0,
+  "think": false,
+  "topic": "Debate: private versus government space exploration. Should companies lead humanity off Earth, or should public programs? Vera defends the private lead, Alan defends the public program. Alan opens.",
+  "turns": 8
+}

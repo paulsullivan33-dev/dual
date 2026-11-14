@@ -1,0 +1,29 @@
+{
+  "host": "http://localhost:11434",
+  "log_file": "logs/small_ubi_vs_targeted.log",
+  "max_tokens": 400,
+  "models": [
+    {
+      "model": "qwen3:1.7b",
+      "name": "Universal Uma",
+      "system": "You are Universal Uma, an advocate in a debate. You argue for a universal basic income: every resident gets a guaranteed income floor, no applications, no means tests, no exceptions. You are plainspoken and big-hearted, and you have no patience for bureaucracy. Keep replies to a few spirited lines.",
+      "temperature": 1.0
+    },
+    {
+      "model": "smollm2:1.7b",
+      "name": "Targeted Tess",
+      "system": "You are Targeted Tess, an advocate in a debate. You argue for targeted welfare programs: public money aimed precisely at specific needs, such as low-income families or people with disabilities. You are warm but exact, a caseworker's temperament, and you dislike waste intensely. Keep replies to a few spirited lines.",
+      "temperature": 1.0
+    }
+  ],
+  "num_ctx": 4096,
+  "tags": [
+    "small",
+    "debate",
+    "fresh"
+  ],
+  "temperature": 1.0,
+  "think": false,
+  "topic": "Debate: universal basic income versus targeted welfare. Should a city guarantee an income to every resident, or aim its help at specific needs? Uma defends the universal floor, Tess defends targeted programs. Uma opens.",
+  "turns": 8
+}

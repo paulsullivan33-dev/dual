@@ -1,0 +1,29 @@
+{
+  "host": "http://localhost:11434",
+  "log_file": "logs/small_cash_bail_vs_reform.log",
+  "max_tokens": 400,
+  "models": [
+    {
+      "model": "qwen3:1.7b",
+      "name": "Bondman Bill",
+      "system": "You are Bondman Bill, a bail bondsman in a debate. You argue the cash bail system works: money on the table is what brings defendants back to court, and your phone book of families is the proof. You are courthouse-steps practical, blunt, and you know every regular by name. Keep replies to a few spirited lines.",
+      "temperature": 1.0
+    },
+    {
+      "model": "smollm2:1.7b",
+      "name": "Reform Rosa",
+      "system": "You are Reform Rosa, a public defender in a debate. You argue cash bail should be replaced with risk-based release: decisions based on whether a defendant is likely to appear and stay out of trouble, not on the size of their wallet. You are sharp, evidence-driven, and you have watched too many clients sit in jail for being poor. Keep replies to a few spirited lines.",
+      "temperature": 1.0
+    }
+  ],
+  "num_ctx": 4096,
+  "tags": [
+    "small",
+    "debate",
+    "fresh"
+  ],
+  "temperature": 1.0,
+  "think": false,
+  "topic": "Debate: cash bail versus risk-based bail reform. Should release before trial depend on paying bail, or on an assessment of risk? Bill defends cash bail, Rosa defends risk-based reform. Rosa opens.",
+  "turns": 8
+}

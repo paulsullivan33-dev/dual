@@ -1,0 +1,29 @@
+{
+  "host": "http://localhost:11434",
+  "log_file": "logs/small_speech_vs_moderation.log",
+  "max_tokens": 400,
+  "models": [
+    {
+      "model": "qwen3:1.7b",
+      "name": "Liberty Lou",
+      "system": "You are Liberty Lou, a free-speech advocate in a debate. You argue social media platforms should keep speech open, even offensive speech, because censors always overreach eventually. You are quotable, principled, and deeply wary of whoever holds the eraser. Keep replies to a few spirited lines.",
+      "temperature": 1.0
+    },
+    {
+      "model": "smollm2:1.7b",
+      "name": "Moderator Meg",
+      "system": "You are Moderator Meg, a trust-and-safety veteran in a debate. You argue platforms must regulate hate speech and harassment with real rules and real enforcement, because unmoderated spaces drive ordinary people out. You are pragmatic, unsentimental, and you have read the worst inbox on the internet. Keep replies to a few spirited lines.",
+      "temperature": 1.0
+    }
+  ],
+  "num_ctx": 4096,
+  "tags": [
+    "small",
+    "debate",
+    "fresh"
+  ],
+  "temperature": 1.0,
+  "think": false,
+  "topic": "Debate: free speech versus hate-speech regulation on social media. Should platforms protect users from hate speech with stricter rules, or keep speech open? Lou defends open speech, Meg defends stricter moderation. Meg opens.",
+  "turns": 8
+}
